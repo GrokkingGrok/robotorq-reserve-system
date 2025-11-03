@@ -14,92 +14,194 @@ An **open-source network** will coordinate funding, bidding, and execution of **
 
 ## 🏗️ Core Concept
 
-Here is an example flow for a mass production run.
+Here are example flows for the same mass production run, modeled with increasing complexity at each milestone along the projected roadmap.
 
 Similar workflows can be developed for, say, a bot that works at a banana stand.
 
-Abbreviations:
-- Proof of Initiated Work PoIw
-- Proof of Progressing Work PoPw
-- Proof of Completed Work PoCw
-- Proof of Delivered Work PoDw
-- Proof of Work Verification PoPv
+Abbreviations for Oracle Proof Types:
+- **PoFw / PoFwV** — Proof / Verification of Funded Work  
+- **PoIw / PoIwV** — Proof / Verification of Initiated Work  
+- **PoPw / PoPwV** — Proof / Verification of Progressing Work  
+- **PoCw / PoCwV** — Proof / Verification of Completed Work  
+- **PoDw / PoDwV** — Proof / Verification of Delivered Work  
+- **PoWv** — Proof of Work Verification (final aggregated proof)
 
+## v0: Basic Three Node
+
+```mermaid
+sequenceDiagram
+    participant B as 👷 Builder
+    participant M as 💎 Mint Node
+    participant O as 🧠 Oracle Node
+    participant P as 🤖 Provider
+    participant Mem as 👥 Members
+
+    B->>M: Post BRLA 1000 bot-hours → 10k toys
+    P->>M: Bid 600h
+    B->>M: Pick
+    M->>P: Pay deploy
+    P->>B: Deploy
+    B->>O: Submit final output 10k toys
+    O->>Mem: Announce PoWv needed
+    Mem->>O: Verify photo, count
+    O->>M: ≥3 signed PoVw
+    M->>M: Mint 100 RT Torq = 3
+    M->>Mem: UBD
+```
+
+---
+
+## Core Concept v0.5
+
+```mermaid
+sequenceDiagram
+    participant B as 👷 Builder
+    participant M as 💎 Mint Node
+    participant O as 🧠 Oracle Node
+    participant P as 🤖 Provider
+    participant Mem as 👥 Members
+    participant D as 📦 Distributor
+
+    B->>M: Post BRLA
+    P->>M: Bid
+    B->>M: Pick
+    M->>P: Pay deploy
+    P->>B: Deploy
+    B->>O: Daily PoPw
+    O->>Mem: Announce PoPw needed
+    Mem->>O: Verify
+    B->>D: Deliver
+    D->>B: Pay
+    B->>O: PoDw
+    D->>O: PoDw
+    O->>Mem: Announce PoVw needed
+    Mem->>O: Verify
+    O->>M: ≥3 proofs
+    M->>M: Mint
+    M->>Mem: UBD
+```
+
+---
+
+## Core Concept v1
+
+```mermaid
+
+```
+
+---
+
+
+## v2: Reputation-Gated Consensus
+1. Only oracles with r ≥ 0.6 can bid
+2. r_avg = average of **bidding oracles only**
+3. k = ceil(n × (1 - p) × r_avg)
+4. Final p = 0.05 → k ≈ 41 (with r_avg=0.7)
+
+r_avg,k for p=0.34,k for p=0.05
+0.7,23,41
+0.8,26,47
+0.9,30,53
 
 ```mermaid
 sequenceDiagram
     participant Builder as 👷 Builder
+    participant TorqTrust as 💰 Holds and Disburses Funds
+    participant Distributor as 📦 Accepts Product
+    participant Supplier as 🚚 Sends Raw Materials
     participant Mint as 💎 Mint Node
     participant Oracle as 🧠 Oracle Node
     participant Provider as 🤖 Bot Provider
     participant Members as 👥 UBD Recipients
-    participant Distributor as 📦 Accepts Product
-    participant Supplier as 🚚 Sends Raw Materials
+    participant Investors as 💸 Investors
 
-    %% PHASE 1: BRLA SETUP
-    Builder-->>Builder: Design BRLA submission
-    Builder->>Mint: Post BRLA
-    Provider-->>Mint: Submit Bid 
-    Supplier-->>Mint: Submit Intent to supply BRLA
-    Builder-->>Mint: Select Provider
-    Mint-->>Members: Announce "Investment Opportunity!"
-    Members-->>Mint: Pledge to fund to BRLA
-    Members-->>Members: Lock Initial pledge in TorqVault on device
-    Mint-->>Mint: Check if BRLA pledged to spec
-    Mint-->>Mint: Lock BRLA
+    %% PHASE 1: ESTABLISH BRLA AND TORQTRUST
+    Builder-->>Builder: Design BRLA
+    Builder-->>TorqTrust: Open Bidding
+    TorqTrust-->>Oracle: "New BRLA needs oracle!"
+    TorqTrust-->>Mint: "New BRLA needs mint!"
+    Oracle-->>TorqTrust: Bids come in
+    Mint-->>TorqTrust: Bids come in
+    TorqTrust-->>Oracle: Choose winner
+    TorqTrust-->>Mint: Choose winner
 
-    %% PHASE 2: FUNDING
-    Mint-->>Members: Announce "BRLA pledged to spec! Your
-    Members-->>Builder: Fund BRLA
-    Builder-->>Provider: Pay for Bot Deployment + recurring maintenance 
-    Builder-->>Supplier: Pay for Raw Materials
+    %% PHASE 2: SOURCE BOTS AND MATERIALS
+    Provider-->>TorqTrust: Submit Bid 
+    Supplier-->>TorqTrust: Submit Bid
+    Builder-->>TorqTrust: Select Provider
+    Builder-->>TorqTrust: Select Supplier
+    TorqTrust->>Members: Announce "Investment Opportunity!"
+    Investors-->>TorqTrust: Pledge to fund to BRLA
+    Investors-->>Investors: Lock Initial funds in TorqVault on device
+    TorqTrust-->>TorqTrust: Check if BRLA pledged to spec
 
-    %% PHASE 3: DEPLOYMENT
+    %% PHASE 3: FUNDING
+    TorqTrust-->>Investors: "Fully pledged"
+    Investors-->>TorqTrust: Initial Funds
+    TorqTrust-->>Oracle: Submit PoFw
+    Oracle->>Members: Announce "New PoFw from TorqTrust!"
+    Members-->>Oracle: Signatures until p-value=0.34
+    TorqTrust-->>Provider: Pay for Bot Deployment
+    TorqTrust-->>Supplier: Pay for Raw Materials
+    TorqTrust-->>TorqTrust: Gets initial commission
+
+    %% PHASE 4: DEPLOYMENT
     Supplier-->>Builder: Deliver Raw Materials
     Supplier-->>Oracle: Submit PoIw
     Builder-->>Oracle: Submit PoIw
-    Oracle-->>Members: Announce "New PoIw supply pair!"
-    Provider-->>Builder: Deploy bots
+    Oracle->>Members: Announce "New PoIw supply pair!"
+    Members-->>Oracle: Signatures until p-value=0.31
+    Provider-->>Builder: Deliver bots
     Provider-->>Oracle: Submit PoIw
     Builder-->>Oracle: Submit PoIw
-    Oracle-->>Members: Announce "New PoIw deployment pair!"
-    Builder-->>Mint: Pay bot wage
-    Mint-->>Oracle: Submit PoIw
-    Oracle-->>Members: Announce "New PoIw wage pair!"
+    Oracle->>Members: Announce "New PoIw deployment pair!"
+    Members-->>Oracle: Signatures until p-value=0.27
+    Builder-->>Oracle: Start TokenTorq Timer
+    Oracle-->>Oracle: Make TokenTorq
+    Oracle-->>Oracle: Submit PoIw
+    Oracle->>Members: Announce "New PoIw wage pair!"
+    Members-->>Oracle: Signatures until p-value=0.24
 
-    %% PHASE 4: PRODUCTION
+    %% PHASE 5: PRODUCTION
     Builder-->>Oracle: Submit photo/video PoPw daily
-    Oracle-->>Members: Announce "New PoPw builder claim!"
+    Oracle->>Members: Announce "New PoPw builder claim!"
+    Members-->>Oracle: Signatures until p-value=0.21
     Supplier-->>Builder: Deliver Raw Materials
     Supplier-->>Oracle: Submit PoPw
     Builder-->>Oracle: Submit PoPw
-    Oracle-->>Members: Announce "New PoPw supply pair!"
+    Oracle->>Members: Announce "New PoPw supply pair!"
+    Members-->>Oracle: Signatures until p-value=0.17
     Provider-->>Builder: Maintain bot pool
-    Provider-->>Oracle: Submit PoWp
-    Builder-->>Oracle: Submit PoWp
-    Oracle-->>Members: Announce "New PoPw provider pair!"
+    Provider-->>Oracle: Submit PoPw
+    Builder-->>Oracle: Submit PoPw
+    Oracle->>Members: Announce "New PoPw provider pair!"
+    Members-->>Oracle: Signatures until p-value=0.14
 
-    %% PHASE 5: PRODUCTION FINISHED
-    Builder-->>Mint: Stop paying bot wage
-    Distributor-->>Oracle: Submit PoCw
-    Mint-->>Oracle: Submit PoCw
-    Oracle-->>Members: Announce "New PoCw mint pair!"
+    %% PHASE 6: PRODUCTION FINISHED
+    Builder-->>Oracle: Stop TokenTorq Timer
+    Oracle-->>Oracle: Stop TokenTorq Generation
+    Builder-->>Oracle: Submit PoCw
+    Builder-->>Provider: Bots pickup
+    Oracle->>Members: Announce "New PoCw claim!"
+    Members-->>Oracle: Signatures until p-value=0.11
 
-    %% PHASE 6: DELIVERY
+    %% PHASE 7: DELIVERY
     Builder-->>Distributor: Deliver product
-    Distributor -->>Builder: Pay for product
+    Distributor-->>TorqTrust: Pay for product
+    TorqTrust-->>Investors: Begin return stream
     Builder-->>Oracle: Submit PoDw
-    Distributor -->>Oracle: Submit PoDw
-    Oracle-->>Members: Announce "New PoDw delivery pair!"
+    Distributor-->>Oracle: Submit PoDw
+    Oracle->>Members: Announce "New PoDw pair!"
+    Members-->>Oracle: Signatures until p-value=0.08
 
-    
-    Members -->>Oracles: Use UI for PoWv Proof of Work Verifications
-    Oracle-->>Mint: Signed PoWv Proof (≥3 signatures)
+    %% PHASE 8: VERIFICATION
+    Oracle-->>Mint: Submit PoFwV, PoIwV, PoPwV, PoCwV, PoDwV, PoWv + RT
+    Members-->>Mint: Signatures until p-value=0.05
     Mint-->>Mint: Verify Consensus + Mint RoboTorq
     Mint-->>Members: Stream UBD (RT/sec)
     Members-->>Members: Save RT
-    Members-->>Distributors: Spend RT
-    Members-->>Builders: Invest in more BRLAs
+    Members-->>Distributor: Spend RT
+    Members-->>Builder: Invest in more BRLAs
 ```
 
 **Highlights:**
