@@ -26,7 +26,7 @@ Abbreviations for Oracle Proof Types:
 - **PoDw / PoDwV** — Proof / Verification of Delivered Work  
 - **PoWv** — Proof of Work Verification (final aggregated proof)
 
-## v0: Basic Three Node
+## v0: Basic Three Node RoboTorq Economy
 
 ```mermaid
 sequenceDiagram
@@ -39,14 +39,15 @@ sequenceDiagram
     B->>M: Post BRLA 1000 bot-hours → 10k toys
     P->>M: Bid 600h
     B->>M: Pick
-    M->>P: Pay deploy
+    B->>P: Pay deploy 5kRT
     P->>B: Deploy
-    B->>O: Submit final output 10k toys
+    P->>M: Pay wage 120 kRT = 600h x 200TTP
+    B->>O: Submit final output 6k toys
     O->>Mem: Announce PoWv needed
     Mem->>O: Verify photo, count
     O->>M: ≥3 signed PoVw
-    M->>M: Mint 100 RT Torq = 3
-    M->>Mem: UBD
+    M->>M: Mint 240 kRT Torq = 3
+    M->>Mem: UBD 360 kRT
 ```
 
 ---
@@ -85,9 +86,7 @@ sequenceDiagram
 
 ## Core Concept v1
 
-```mermaid
-
-```
+It's ok for this to be blank for now. The progress by v0.5 will indicate how to proceed to this stage, ensuring we stay on track for v2 as defined below.
 
 ---
 
@@ -325,6 +324,23 @@ graph TD
 ## 🔗 Three Node Types
 
 ### Mint Node
+
+#,Function,Description,Required?,Failure Impact
+1,Host BRLA Auction,Accept BRLA from builder; collect provider bids only,Yes,No new projects
+2,Select Winning Bid,Builder picks (no auto-select),Yes,Poor match
+3,Lock Contract,"Freeze provider hours, lock pledged RT",Yes,Double-spend risk
+4,Track BRLA Lifecycle,Open → Active → Mintable,Yes,Stalled jobs
+5,Receive Proof Bundles,Accept final output proof only (PoDw),Yes,Mint halted
+6,Lead PoWv Consensus,Request ≥3 oracle signatures,Yes,Mint delay
+7,Mint RoboTorq,RT_out = Torq × RT_in after ≥3 sigs,Yes,No value creation
+8,Push UBD Stream,Stream RT/sec to all members,Yes,UBD halts
+9,Maintain Registry,Store + sync member list only,Yes,UBD misrouting
+10,Broadcast Network Events,"Publish mints, auction results",Yes,Network drift
+11,Manage Funding Pools,Track DistoStream pledges,Yes,Underfunding
+12,Heartbeat / Liveness Proof,Ping every 10 min,Yes,Node paused
+
+Later Functionality
+
 | #  | Function                           | Description                                                                       | Required? | Failure Impact                           |
 | -- | ---------------------------------- | --------------------------------------------------------------------------------- | --------- | ---------------------------------------- |
 | 1  | **Host BRLA Auction**              | Accept BRLA from builder; collect provider bids + member pledges                  | ✅         | No new work contracts                    |
@@ -452,6 +468,18 @@ timeline
         🏛️ DAO Governance : Open membership + proposals
 ```
 
+## Skills to learn
 
+#,Skill,Why You Need It,Time to Learn
+1,Docker,Run Mint/Oracle/Wallet in containers,2 hours
+2,gRPC,Mint ↔ Oracle API,4 hours
+3,Protobuf,"Define messages (BRLA, Proof)",2 hours
+4,NATS,Internal pub/sub (Mint → Oracle),3 hours
+5,Postgres,"Store BRLA, bids, proofs",4 hours
+6,Redis,"Cache UBD streams, rate limits",2 hours
+7,TLS/mTLS,"Encrypt gRPC, NATS",3 hours
+8,Prometheus + Grafana,"Monitor nodes, UBD/sec",4 hours
+9,"Testing (Go: testify, Rust: cargo test)",Prevent bugs,3 hours
+10,"Deployment (Fly.io, Render, VPS)",Run 20 Mint Nodes,2 hours
 
 
