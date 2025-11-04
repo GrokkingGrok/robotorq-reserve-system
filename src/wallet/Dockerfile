@@ -16,5 +16,6 @@ RUN wasm-pack build --target web --out-dir pkg --release
 FROM nginx:alpine
 COPY web /usr/share/nginx/html
 COPY --from=builder /app/pkg /usr/share/nginx/html/pkg
+COPY nginx.conf /etc/nginx/nginx.conf
 EXPOSE 3000
 CMD ["nginx", "-g", "daemon off;"]
