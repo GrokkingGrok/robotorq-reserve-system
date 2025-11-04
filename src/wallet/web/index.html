@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>RoboTorq Wallet</title>
+</head>
+<body>
+  <h1>Wallet v0</h1>
+  <script type="module">
+    import init from './pkg/wallet.js';
+    await init();
+    console.log("WASM loaded");
+  </script>
+</body>
+</html>
