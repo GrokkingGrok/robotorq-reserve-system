@@ -33,5 +33,5 @@ jobs:
       - name: Test Wallet
         run: |
           docker compose up -d wallet            # ← CHANGED
-          sleep 10
+          sleep 15
           curl -f http://localhost:3000 || exit 1
