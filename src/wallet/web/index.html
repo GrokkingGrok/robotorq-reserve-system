@@ -2,14 +2,19 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>RoboTorq Wallet</title>
+  <title>RoboTorq Wallet v0</title>
+  <style>
+    body { font-family: Arial; text-align: center; margin-top: 50px; }
+    h1 { color: #10B981; }
+  </style>
 </head>
 <body>
-  <h1>Wallet v0</h1>
+  <h1>RoboTorq Wallet v0</h1>
+  <p>WASM Status: <span id="status">Loading...</span></p>
   <script type="module">
     import init from './pkg/wallet.js';
     await init();
-    console.log("WASM loaded");
+    document.getElementById('status').textContent = 'Loaded & Running!';
   </script>
 </body>
 </html>
