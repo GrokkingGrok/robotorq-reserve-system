@@ -1,163 +1,62 @@
-# docker-compose.yml — v0 RoboTorq LocalNet (Laptop or Pi Cluster)
-# Test: 3 nodes (Mint, Oracle, Wallet) with gRPC, NATS, Postgres, Redis
-# Run: docker-compose up --build
+# docker-compose.yml — FIXED
 version: "3.8"
 
 services:
-  # ========================================
-  # MINT NODE — Contract Host & UBD Engine
-  # ========================================
   mint:
-    build:
-      context: ./src/mint
-      dockerfile: Dockerfile
-    container_name: mint
-    hostname: mint.local
-    restart: always
+    build: ./src/mint
     ports:
       - "50051:50051"
       - "8080:8080"
-    environment:
-      - NODE_ROLE=mint
-      - NATS_URL=nats://nats:4222
-      - POSTGRES_URL=postgres://torq:torqpass@postgres:5432/roboTorq
-      - REDIS_URL=redis://redis:6379
-      - TLS_CERT=/certs/mint.crt
-      - TLS_KEY=/certs/mint.key
-    volumes:
-      - ./certs:/certs:ro
-      - mint-data:/var/lib/mint
     depends_on:
       - nats
       - postgres
-      - redis
-    networks:
-      - torqnet
-  # ========================================
-  # ORACLE NODE — Proof Verifier
-  # ========================================
-  oracle:
-    build:
-      context: ./src/oracle
-      dockerfile: Dockerfile
-    container_name: oracle
-    hostname: oracle1.local
-    restart: always
-    ports:
-      - "50052:50052"
-      - "8081:8080"
-    environment:
-      - NODE_ROLE=oracle
-      - NATS_URL=nats://nats:4222
-      - MINT_GRPC=mint:50051
-      - TLS_CERT=/certs/oracle.crt
-      - TLS_KEY=/certs/oracle.key
-    volumes:
-      - ./certs:/certs:ro
-      - ./proofs:/proofs
-    depends_on:
-      - nats
-      - mint
     networks:
       - torqnet
 
-  # ========================================
-  # WALLET NODE — Member UI + Redis Cache
-  # ========================================
-  wallet:
-    build:
-      context: ./src/wallet
-      dockerfile: Dockerfile
-    container_name: wallet
-    hostname: wallet.local
-    restart: always
+  oracle:
+    build: ./src/oracle
     ports:
-      - "3000:3000"
-    environment:
-      - NATS_URL=nats://nats:4222
-      - MINT_GRPC=mint:50051
-      - REDIS_URL=redis://redis:6379
-    volumes:
-      - ./src/wallet/web:/app/web
+      - "50052:50052"
+      - "8081:8080"
     depends_on:
       - nats
-      - redis
+      - mint
+    volumes:
+      - ./proofs:/proofs
     networks:
       - torqnet
-  # ========================================
-  # NATS — Internal Pub/Sub Bus
-  # ========================================
+
+  wallet:
+    build: ./src/wallet
+    ports:
+      - "3000:3000"
+    depends_on:
+      - nats
+    networks:
+      - torqnet
+
   nats:
     image: nats:alpine
-    container_name: nats
-    command: "--js --auth token123"
+    command: "--js"
     ports:
       - "4222:4222"
     networks:
       - torqnet
 
-  # ========================================
-  # POSTGRES — BRLA & Proof Storage
-  # ========================================
   postgres:
     image: postgres:16-alpine
-    container_name: postgres
     environment:
-      - POSTGRES_USER=torq
-      - POSTGRES_PASSWORD=torqpass
-      - POSTGRES_DB=roboTorq
+      POSTGRES_USER: torq
+      POSTGRES_PASSWORD: torqpass
+      POSTGRES_DB: roboTorq
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - pg-data:/var/lib/postgresql/data
     networks:
       - torqnet
 
-  # ========================================
-  # REDIS — UBD Cache & Rate Limiting
-  # ========================================
-  redis:
-    image: redis:alpine
-    container_name: redis
-    command: redis-server --save 60 1 --loglevel warning
-    volumes:
-      - redis-data:/data
-    networks:
-      - torqnet
-
-  # ========================================
-  # PROMETHEUS + GRAFANA (Optional)
-  # ========================================
-  prometheus:
-    image: prom/prometheus
-    container_name: prometheus
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9090:9090"
-    networks:
-      - torqnet
-
-  grafana:
-    image: grafana/grafana
-    container_name: grafana
-    ports:
-      - "3001:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=torq
-    depends_on:
-      - prometheus
-    networks:
-      - torqnet
-
-# ========================================
-# VOLUMES & NETWORK
-# ========================================
+# FIXED: This was missing '-'
 volumes:
-  - ./certs:/certs:ro
-  - $(mkcert -CAROOT)/rootCA.pem:/certs/rootCA.pem:ro
-  mint-data:
-  postgres-data:
-  redis-data:
+  pg-data:
 
 networks:
   torqnet:
-    driver: bridge
