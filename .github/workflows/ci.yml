@@ -1,0 +1,38 @@
+# .github/workflows/ci.yml
+name: CI/CD
+
+on:
+  push:
+    branches: [ main, v0 ]
+  pull_request:
+    branches: [ main, v0 ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build all images
+        run: docker-compose build --parallel
+
+      - name: Test Mint
+        run: |
+          docker-compose up -d mint nats
+          sleep 10
+          curl -f http://localhost:8080/health || exit 1
+
+      - name: Test Oracle
+        run: |
+          docker-compose up -d oracle
+          sleep 10
+          curl -f http://localhost:8081/health || exit 1
+
+      - name: Test Wallet
+        run: |
+          docker-compose up -d wallet
+          sleep 10
+          curl -f http://localhost:3000 || exit 1
