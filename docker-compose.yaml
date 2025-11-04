@@ -1,0 +1,11 @@
+version: "3.8"
+services:
+  mint:
+    build: ./src/mint
+    ports: ["50051:50051"]
+  oracle:
+    build: ./src/oracle
+    ports: ["50052:50052"]
+  wallet:
+    build: ./src/wallet
+    ports: ["8080:8080"]
