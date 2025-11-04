@@ -1,6 +1,4 @@
-# docker-compose.yml — FIXED
-version: "3.8"
-
+# docker-compose.yml — WORKING ON WINDOWS
 services:
   mint:
     build: ./src/mint
@@ -54,7 +52,6 @@ services:
     networks:
       - torqnet
 
-# FIXED: This was missing '-'
 volumes:
   pg-data:
 
