@@ -152,6 +152,8 @@ services:
 # VOLUMES & NETWORK
 # ========================================
 volumes:
+  - ./certs:/certs:ro
+  - $(mkcert -CAROOT)/rootCA.pem:/certs/rootCA.pem:ro
   mint-data:
   postgres-data:
   redis-data:
