@@ -1,59 +1,162 @@
 # docker-compose.yml — WORKING ON WINDOWS
+# Purpose: Defines all services, networks, and volumes for local development/testing.
+# Docker Compose orchestrates multiple containers and their dependencies.
+
 services:
-  mint:
-    build: ./src/mint
-    ports:
-      - "50051:50051"
-      - "8080:8080"
-    depends_on:
-      - nats
-      - postgres
-    networks:
-      - torqnet
-
-  oracle:
-    build: ./src/oracle
-    ports:
-      - "50052:50052"
-      - "8081:8080"
-    depends_on:
-      - nats
-      - mint
-    volumes:
-      - ./proofs:/proofs
-    networks:
-      - torqnet
-
-  wallet:
-    build: ./src/wallet
-    ports:
-      - "3000:3000"
-    depends_on:
-      - nats
-    networks:
-      - torqnet
-
+    # -----------------------------
+  # NATS (Messaging Broker)
+  # -----------------------------
   nats:
     image: nats:alpine
-    command: "--js"
+    command: >-
+      --jetstream
+      --http_port 8222
+      -m 8222
     ports:
       - "4222:4222"
+      - "8222:8222"          # ← EXPOSE MONITORING
     networks:
       - torqnet
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    # Connect NATS to the shared network.
 
+  # -----------------------------
+  # PostgreSQL Database
+  # -----------------------------
   postgres:
     image: postgres:16-alpine
+    # Use official Postgres 16 Alpine image.
+    # Lightweight, fast, suitable for dev/test.
+
     environment:
       POSTGRES_USER: torq
       POSTGRES_PASSWORD: torqpass
       POSTGRES_DB: roboTorq
+    # Set up default username, password, and database.
+    # These credentials will be used by Mint or other services.
+
     volumes:
       - pg-data:/var/lib/postgresql/data
+    # Persist database data using a named volume.
+    # Ensures database is not lost if the container restarts.
+
     networks:
       - torqnet
+    healthcheck:                  # ← ADD THIS
+      test: ["CMD-SHELL", "pg_isready -U torq -d roboTorq"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Connect Postgres to the shared network.
+  # -----------------------------
+  # Mint Service
+  # -----------------------------
+  mint:
+    build: ./src/mint
+    # Build the Mint service from the local directory ./src/mint
+    # Dockerfile in this directory will be used for the image.
 
+    ports:
+      - "50051:50051"
+      - "8080:8080"
+    # Maps container ports to host machine ports.
+    # 50051 → likely gRPC interface, 8080 → HTTP/health or API.
+    # Format: "hostPort:containerPort"
+
+    depends_on: 
+      nats:
+        condition: service_healthy   # ← ADD THIS
+      postgres:
+        condition: service_healthy # ← ADD THIS
+    healthcheck: # ← ADD THIS
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    # Ensure Mint only starts after NATS and Postgres are up.
+    # Note: depends_on controls startup order but does **not** guarantee that the services are fully ready. Use healthchecks if needed.
+
+    networks:
+      - torqnet
+    # Connect Mint to the 'torqnet' network for inter-service communication.
+
+  # -----------------------------
+  # Oracle Service
+  # -----------------------------
+  oracle:
+    build: ./src/oracle
+    # Build the Oracle service from ./src/oracle directory.
+
+    ports:
+      - "50052:50052"
+      - "8081:8080"
+    # 50052 → likely gRPC interface for Oracle.
+    # 8081 → HTTP/health or web API mapped to host 8081.
+
+    depends_on:
+      nats:
+        condition: service_healthy   # ← ADD THIS
+      postgres:
+        condition: service_healthy # ← ADD THIS
+    healthcheck: # ← ADD THIS
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    # Oracle starts only after NATS and Mint are up.
+
+    volumes:
+      - ./proofs:/proofs
+    # Mount a host directory (./proofs) into the container (/proofs) to persist proof files or logs.
+    # This allows easy access from Windows host for testing/debugging.
+
+    networks:
+      - torqnet
+    # Connect Oracle to the shared 'torqnet' network.
+
+  # -----------------------------
+  # Wallet Service
+  # -----------------------------
+  wallet:
+    build: ./src/wallet
+    # Build the Wallet service from ./src/wallet directory.
+
+    ports:
+      - "3000:3000"
+    # Expose web interface or API on port 3000.
+
+    depends_on:
+      nats:
+        condition: service_healthy   # ← ADD THIS
+    healthcheck: # ← ADD THIS
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    # Wallet requires NATS to be up before starting.
+
+    networks:
+      - torqnet
+    # Connect Wallet to the shared network.
+
+# -----------------------------
+# Named Volumes
+# -----------------------------
 volumes:
   pg-data:
+    # Named volume for Postgres persistence.
+    # Docker manages the actual storage location automatically.
 
+# -----------------------------
+# Networks
+# -----------------------------
 networks:
   torqnet:
+    # Custom bridge network connecting all services.
+    # Ensures isolated network namespace for services to talk to each other using container names.

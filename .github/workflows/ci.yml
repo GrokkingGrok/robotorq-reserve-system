@@ -1,37 +1,72 @@
-# .github/workflows/ci.yml — FIXED
+# .github/workflows/ci.yml — With Cleanup Steps
+# This workflow builds and tests your Docker-based services (Mint, Oracle, Wallet)
+# and cleans up containers after each test to keep the environment isolated and clean.
+
 name: CI/CD
 
 on:
   push:
-    branches: [ v0 ]
-  pull_request:
+    branches: [ v0 ]  # Trigger when pushing to v0 or main
+  pull_request:       # Also run for pull requests
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    runs-on: ubuntu-latest  # Use latest Ubuntu runner
 
+    steps:
+      # Check out source code
+      - uses: actions/checkout@v4
+        # Fetches your repository code so the workflow can build and test it.
+
+      # Set up Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        # Buildx provides advanced Docker build features (e.g., caching, multi-platform builds).
 
+      # Build all Docker images
       - name: Build all images
-        run: docker compose build --parallel    # ← CHANGED: space, not hyphen
+        run: docker compose build --parallel
+        # Builds all services defined in docker-compose.yml concurrently to save time.
 
+      # Test the "Mint" service
       - name: Test Mint
         run: |
-          docker compose up -d mint nats        # ← CHANGED
-          sleep 10
+          docker compose up -d mint nats        # Start Mint and its dependency NATS
+          sleep 10                              # Wait for containers to initialize
           curl -f http://localhost:8080/health || exit 1
+          # Health check — fail if Mint doesn’t respond successfully.
 
+      # Clean up Mint containers
+      - name: Clean up Mint containers
+        if: always()  # Ensures cleanup runs even if the previous step failed
+        run: docker compose down --volumes
+        # Stops and removes all containers, networks, and volumes created by docker-compose.
+
+      # Test the "Oracle" service
       - name: Test Oracle
         run: |
-          docker compose up -d oracle            # ← CHANGED
-          sleep 10
+          docker compose up -d oracle           # Start Oracle container
+          sleep 10                              # Wait for service startup
           curl -f http://localhost:8081/health || exit 1
+          # Health check for the Oracle service.
 
+      # Clean up Oracle containers
+      - name: Clean up Oracle containers
+        if: always()
+        run: docker compose down --volumes
+        # Cleanly tear down Oracle container after testing.
+
+      # Test the "Wallet" service
       - name: Test Wallet
         run: |
-          docker compose up -d wallet            # ← CHANGED
-          sleep 30
+          docker compose up -d wallet           # Start Wallet service
+          sleep 30                              # Wallet may take longer to initialize
           curl -f http://localhost:3000 || exit 1
+          # Health check for the Wallet service’s main endpoint.
+
+      # Clean up Wallet containers
+      - name: Clean up Wallet containers
+        if: always()
+        run: docker compose down --volumes
+        # Final cleanup — ensures all containers, networks, and volumes are removed
+        # even if the Wallet test fails.

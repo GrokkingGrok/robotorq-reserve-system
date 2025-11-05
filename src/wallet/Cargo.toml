@@ -1,10 +1,80 @@
+# -------------------------------
+# Package metadata
+# -------------------------------
 [package]
 name = "wallet"
-version = "0.1.0"
-edition = "2024"
+# The name of the Rust crate. 
+# This is the identifier for your package in Cargo and for WASM packaging.
 
+version = "0.1.0"
+# Follows semantic versioning: major.minor.patch.
+# Increment this when you release new features or bug fixes.
+
+edition = "2024"
+# Rust edition specifies language features and compiler behavior.
+# Use the latest edition for modern features and optimizations.
+
+authors = ["Jonathan Clark @GrokkingGrok"]
+# Optional: helps identify the crate author, useful for publishing.
+
+description = "RoboTorq Wallet WASM frontend"
+# Optional: brief description for documentation or package publishing.
+
+license = "GPL"
+# Optional: declare the license for clarity and compliance.
+
+# -------------------------------
+# Library configuration
+# -------------------------------
 [lib]
 crate-type = ["cdylib"]
+# Use "cdylib" for WebAssembly binaries that can be imported into JavaScript.
+# Alternative: "rlib" is Rust-only and not suitable for WASM JS interop.
 
+# -------------------------------
+# Dependencies
+# -------------------------------
 [dependencies]
 wasm-bindgen = "0.2"
+# Required for bridging Rust ↔ JavaScript in WebAssembly.
+# Provides macros like #[wasm_bindgen] for exposing Rust functions to JS.
+
+serde = { version = "1.0", features = ["derive"] }
+# Optional, recommended for serialization/deserialization.
+# Useful for converting Rust structs to JSON and vice versa when interacting with JS.
+
+serde_json = "1.0"
+# Optional, works with serde to handle JSON in WASM apps.
+
+js-sys = "0.3"
+# Optional, low-level JS bindings. Provides access to JS types like Array, Date, Math.
+
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+    "console",
+    "Window",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "Request",
+    "RequestInit",
+    "Response"
+]}
+# Optional, recommended for interacting with browser APIs like DOM, localStorage, and console.
+
+# -------------------------------
+# Build profile optimizations
+# -------------------------------
+
+
+# -------------------------------
+# Best practices and notes
+# -------------------------------
+# 1. Keep dependencies minimal: Every crate adds size to your WASM binary.
+# 2. Use "cdylib" for WASM; other crate types will not generate JS-compatible output.
+# 3. Use release builds for production: `cargo build --release` ensures optimizations.
+# 4. Use wasm-opt (from binaryen) post-build to further shrink WASM size.
+# 5. Version dependencies explicitly to prevent breaking changes.
+# 6. Add `serde` + `serde_json` for structured data handling between Rust and JS.
+# 7. Use `js-sys` and `web-sys` only as needed to avoid bloating WASM.
+# 8. Consider optional features for future upgrades, e.g., cryptography, wallet signing, etc.

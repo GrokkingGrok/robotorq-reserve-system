@@ -6,15 +6,17 @@
   <style>
     body { font-family: Arial; text-align: center; margin-top: 50px; }
     h1 { color: #10B981; }
+    #status { font-weight: bold; margin-top: 20px; }
   </style>
 </head>
 <body>
   <h1>RoboTorq Wallet v0</h1>
   <p>WASM Status: <span id="status">Loading...</span></p>
   <script type="module">
-    import init from './pkg/wallet.js';
+    import init, { Wallet } from './pkg/wallet.js';
     await init();
-    document.getElementById('status').textContent = 'Loaded & Running!';
+    const wallet = new Wallet();
+    await wallet.refresh_balance();
   </script>
 </body>
 </html>
