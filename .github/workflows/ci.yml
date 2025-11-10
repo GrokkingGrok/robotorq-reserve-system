@@ -70,3 +70,31 @@ jobs:
         run: docker compose down --volumes
         # Final cleanup — ensures all containers, networks, and volumes are removed
         # even if the Wallet test fails.
+
+      # Test the "DistoRouter" service
+      - name: Test DistoRouter
+        run: |
+          docker compose up -d distorouter      # Start DistoRouter container
+          sleep 10                              # Wait for service startup
+          curl -f http://localhost:8082/health || exit 1
+          # Health check for the DistoRouter service.
+
+      # Clean up DistoRouter containers
+      - name: Clean up DistoRouter containers
+        if: always()
+        run: docker compose down --volumes
+        # Cleanly tear down DistoRouter container after testing.
+      
+      # Test the "Trust" service
+      - name: Test Trust
+        run: |
+          docker compose up -d trust            # Start Trust container
+          sleep 10                              # Wait for service startup
+          curl -f http://localhost:8083/health || exit 1
+          # Health check for the Trust service.
+
+      # Clean up Trust containers
+      - name: Clean up Trust containers
+        if: always()
+        run: docker compose down --volumes
+        # Cleanly tear down Trust container after testing.
