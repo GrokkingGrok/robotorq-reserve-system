@@ -1,6 +1,6 @@
 module b2b/oracle
 
-go 1.24
+go 1.24.0
 
 require github.com/nats-io/nats.go v1.47.0
 

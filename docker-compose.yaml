@@ -7,7 +7,10 @@ services:
   # NATS (Messaging Broker)
   # -----------------------------
   nats:
-    image: nats:alpine
+    image: nats:alpine3.20
+    build:
+      context: .
+      dockerfile: ./nats/Dockerfile.nats.cli
     command: >-
       --jetstream
       --http_port 8222
@@ -47,7 +50,7 @@ services:
 
     networks:
       - torqnet
-    healthcheck:                  # ← ADD THIS
+    healthcheck:                
       test: ["CMD-SHELL", "pg_isready -U torq -d roboTorq"]
       interval: 10s
       timeout: 5s
@@ -71,10 +74,10 @@ services:
 
     depends_on: 
       nats:
-        condition: service_healthy   # ← ADD THIS
+        condition: service_healthy 
       postgres:
-        condition: service_healthy # ← ADD THIS
-    healthcheck: # ← ADD THIS
+        condition: service_healthy
+    healthcheck: 
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 3s
@@ -96,15 +99,14 @@ services:
     ports:
       - "50052:50052"
       - "8081:8080"
-    # 50052 → likely gRPC interface for Oracle.
     # 8081 → HTTP/health or web API mapped to host 8081.
 
     depends_on:
       nats:
-        condition: service_healthy   # ← ADD THIS
+        condition: service_healthy  
       postgres:
-        condition: service_healthy # ← ADD THIS
-    healthcheck: # ← ADD THIS
+        condition: service_healthy
+    healthcheck: 
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 3s
@@ -133,8 +135,8 @@ services:
 
     depends_on:
       nats:
-        condition: service_healthy   # ← ADD THIS
-    healthcheck: # ← ADD THIS
+        condition: service_healthy  
+    healthcheck: 
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 3s
@@ -144,6 +146,32 @@ services:
     networks:
       - torqnet
     # Connect Wallet to the shared network.
+
+  # -----------------------------
+  # DistoRouter Service
+  # -----------------------------
+  distorouter:
+    build: ./src/distorouter
+    # Build the DistoRouter service from ./src/distorouter directory.
+
+    ports:
+      - "8082:8080"
+    # Expose web interface or API on port 3000.
+
+    depends_on:
+      nats:
+        condition: service_healthy   
+    healthcheck: 
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    # DistoRouter requires NATS to be up before starting.
+
+    networks:
+      - torqnet
+    # Connect DistoRouter to the shared network.
+
 
 # -----------------------------
 # Named Volumes
