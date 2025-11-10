@@ -24,10 +24,10 @@ RUN go mod tidy
 # Verify that go.mod and go.sum are in sync and remove any unused dependencies.
 # This step ensures a clean and reproducible build.
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /oracle ./cmd/oracle
+RUN CGO_ENABLED=0 GOOS=linux go build -o /refinery ./cmd/refinery
 # Compile the Go application for Linux with CGO disabled (static binary, no C dependencies).
-# Output the binary to the root of the container as /oracle.
-# The build target "./cmd/oracle" refers to your main package location.
+# Output the binary to the root of the container as /refinery.
+# The build target "./cmd/refinery" refers to your main package location.
 
 # -------------------------------
 # Stage 2: Build the final runtime image
@@ -40,7 +40,7 @@ RUN apk add --no-cache ca-certificates
 # Install trusted CA certificates so HTTPS requests from the app will work.
 # The --no-cache flag keeps the image small by not storing package index files.
 
-COPY --from=builder /oracle /oracle
+COPY --from=builder /refinery /refinery
 # Copy the compiled binary from the builder stage into this new lightweight image.
 
 # COPY --from=builder /app/certs /certs
@@ -56,6 +56,6 @@ HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost:8080/heal
 # Every 30 seconds, it makes an HTTP request to /health on port 8080.
 # If the request fails or times out after 3s, Docker marks the container as unhealthy.
 
-CMD ["/oracle"]
+CMD ["/refinery"]
 # Set the default command to run the compiled binary.
-# When the container starts, it executes the /oracle program.
+# When the container starts, it executes the /refinery program.

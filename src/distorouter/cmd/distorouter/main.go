@@ -61,7 +61,7 @@ func main() {
 			}
 
 			// @dev Publish to NATS topic
-			// @dev Topic: brla.funding → Oracle subscribes
+			// @dev Topic: brla.funding → Refinery subscribes
 			// @dev Fire-and-forget (no ack needed)
 			if err := nc.Publish("brla.funding", payload); err != nil {
 				log.Println("NATS publish error: ", err)

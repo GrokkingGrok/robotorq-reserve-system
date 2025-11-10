@@ -1,4 +1,4 @@
-// src/oracle/cmd/oracle/main.go
+// src/refinery/cmd/refinery/main.go
 package main
 
 import (
@@ -24,7 +24,7 @@ var brlaRegistry = map[string]string{
 	"JON-3DPRINT-001": "torq1xyz...", // brla_id → trust_wallet
 }
 
-// @dev Entry point for Oracle service
+// @dev Entry point for Refinery service
 // @dev Purpose: Listen to brla.funding, aggregate, mint BRLA
 // @dev Appendix X: BidNet → BRLA Minting
 func main() {
@@ -64,7 +64,7 @@ func main() {
 	// @dev Start HTTP server
 	// @dev Port: 8080 (mapped to host 8081)
 	// @dev Blocks until fatal error
-	log.Println("Oracle listening on brla.funding → minting BRLA")
+	log.Println("Refinery listening on brla.funding → minting BRLA")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 

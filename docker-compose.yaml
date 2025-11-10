@@ -90,11 +90,11 @@ services:
     # Connect Mint to the 'torqnet' network for inter-service communication.
 
   # -----------------------------
-  # Oracle Service
+  # Refinery Service
   # -----------------------------
-  oracle:
-    build: ./src/oracle
-    # Build the Oracle service from ./src/oracle directory.
+  refinery:
+    build: ./src/refinery
+    # Build the Refinery service from ./src/refinery directory.
 
     ports:
       - "50052:50052"
@@ -111,7 +111,7 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
-    # Oracle starts only after NATS and Mint are up.
+    # Refinery starts only after NATS and Mint are up.
 
     volumes:
       - ./proofs:/proofs
@@ -120,7 +120,7 @@ services:
 
     networks:
       - torqnet
-    # Connect Oracle to the shared 'torqnet' network.
+    # Connect Refinery to the shared 'torqnet' network.
 
   # -----------------------------
   # Wallet Service

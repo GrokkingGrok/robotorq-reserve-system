@@ -1,4 +1,4 @@
-module b2b/oracle
+module b2b/refinery
 
 go 1.24.0
 

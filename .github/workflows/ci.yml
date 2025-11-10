@@ -1,5 +1,5 @@
 # .github/workflows/ci.yml — With Cleanup Steps
-# This workflow builds and tests your Docker-based services (Mint, Oracle, Wallet)
+# This workflow builds and tests your Docker-based services (Mint, Refinery, Wallet)
 # and cleans up containers after each test to keep the environment isolated and clean.
 
 name: CI/CD
@@ -42,19 +42,19 @@ jobs:
         run: docker compose down --volumes
         # Stops and removes all containers, networks, and volumes created by docker-compose.
 
-      # Test the "Oracle" service
-      - name: Test Oracle
+      # Test the "Refinery" service
+      - name: Test Refinery
         run: |
-          docker compose up -d oracle           # Start Oracle container
+          docker compose up -d refinery           # Start Refinery container
           sleep 10                              # Wait for service startup
           curl -f http://localhost:8081/health || exit 1
-          # Health check for the Oracle service.
+          # Health check for the Refinery service.
 
-      # Clean up Oracle containers
-      - name: Clean up Oracle containers
+      # Clean up Refinery containers
+      - name: Clean up Refinery containers
         if: always()
         run: docker compose down --volumes
-        # Cleanly tear down Oracle container after testing.
+        # Cleanly tear down Refinery container after testing.
 
       # Test the "Wallet" service
       - name: Test Wallet
