@@ -9,8 +9,8 @@ import (
 	"github.com/nats-io/nats.go" // @dev NATS client for subscribing to brla.funding
 )
 
-// @dev BRLA funding flow from DistoRouter
-// @dev Source: DistoRouter publishes 40% of disto
+// @dev BRLA funding flow from DistoDam
+// @dev Source: DistoDam publishes 40% of disto
 // @dev Units: amount_rt in micro-RT (1 RT = 1,000,000 micro-RT)
 // @dev Appendix U: RT Transfers
 type brla_fund_flow struct {
@@ -44,7 +44,7 @@ func main() {
 		w.Write([]byte("ok"))
 	})
 
-	// @dev Subscribe to funding flows from DistoRouter
+	// @dev Subscribe to funding flows from DistoDam
 	// @dev Topic: brla.funding
 	// @dev Each message = 40% of 1-second disto from one node
 	// @dev Aggregation happens here

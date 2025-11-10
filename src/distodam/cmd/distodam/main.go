@@ -1,4 +1,4 @@
-// src/distorouter/cmd/distorouter/main.go
+// src/distodam/cmd/distodam/main.go
 package main
 
 import (
@@ -11,7 +11,7 @@ import (
 	"github.com/nats-io/nats.go" // @dev NATS client for publishing to brla.funding
 )
 
-// @dev Entry point for DistoRouter service
+// @dev Entry point for DistoDam service
 // @dev Purpose: Route 40% of incoming DistoStream to labor pool via NATS
 // @dev Appendix U: RT Transfers
 // @dev Appendix X: BidNet → brla.funding topic
@@ -72,6 +72,6 @@ func main() {
 	// @dev Start HTTP server
 	// @dev Port: 8080 (mapped to host 8082)
 	// @dev Blocks until fatal error
-	log.Println("DistoRouter routing to brla.funding on :8082")
+	log.Println("DistoDam routing to brla.funding on :8082")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

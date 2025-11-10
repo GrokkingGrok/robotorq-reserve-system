@@ -148,11 +148,11 @@ services:
     # Connect Wallet to the shared network.
 
   # -----------------------------
-  # DistoRouter Service
+  # DistoDam Service
   # -----------------------------
-  distorouter:
-    build: ./src/distorouter
-    # Build the DistoRouter service from ./src/distorouter directory.
+  distodam:
+    build: ./src/distodam
+    # Build the DistoDam service from ./src/distodam directory.
 
     ports:
       - "8082:8080"
@@ -166,11 +166,11 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
-    # DistoRouter requires NATS to be up before starting.
+    # DistoDam requires NATS to be up before starting.
 
     networks:
       - torqnet
-    # Connect DistoRouter to the shared network.
+    # Connect DistoDam to the shared network.
 
   # -----------------------------
   # Trust Service
