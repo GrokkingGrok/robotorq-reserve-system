@@ -98,3 +98,15 @@ jobs:
         if: always()
         run: docker compose down --volumes
         # Cleanly tear down Trust container after testing.
+
+      # .github/workflows/test.yml
+      - name: Test with race detector
+        run: |
+          $env:CGO_ENABLED = "1"
+          go test -race -v ./...
+
+      # Clean up Trust containers
+      - name: Clean up Trust containers
+        if: always()
+        run: docker compose down --volumes
+        # Cleanly tear down Trust container after testing.
