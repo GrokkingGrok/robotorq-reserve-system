@@ -98,4 +98,34 @@ jobs:
         if: always()
         run: docker compose down --volumes
         # Cleanly tear down Trust container after testing.
+      
+      # ── Test: Digger App (Tauri) ─────────────────────────
+      - name: Test Digger App
+        working-directory: ./src/digger-app/digger
+        run: |
+          # Install npm deps
+          npm install
+
+          # Start Tauri dev server in background
+          timeout 30s cargo tauri dev &
+          TAURI_PID=$!
+
+          # Wait for server to start (port 1420 by default)
+          sleep 15
+
+          # Health check: Tauri serves index.html
+          curl -f http://localhost:1420 || (kill $TAURI_PID && exit 1)
+
+          # Kill dev server
+          kill $TAURI_PID || true
+
+      # ── Clean up Digger App (optional, no containers) ────
+      - name: Clean up Digger App
+        if: always()
+        run: |
+          echo "No containers to clean for Digger App"
+
+      # ── Final Success ─────────────────────────────────────
+      - name: All tests passed
+        run: echo "All services and Digger App are healthy!"
 
