@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 5s     # how often Prometheus scrapes targets
+  evaluation_interval: 5s
+
+scrape_configs:
+  # ─── Scrape DistoDam ────────────────────────────
+  - job_name: 'distodam'
+    static_configs:
+      - targets: ['distodam:8080']
+    metrics_path: /metrics
+
+  # ─── Scrape TrustService ────────────────────────
+  - job_name: 'trust'
+    static_configs:
+      - targets: ['trust:8080']
+    metrics_path: /metrics
+
+  # ─── Scrape Prometheus itself ───────────────────
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

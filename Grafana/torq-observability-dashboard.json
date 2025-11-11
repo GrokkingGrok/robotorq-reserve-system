@@ -1,0 +1,101 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Torq Observability (Trust + DistoDam)",
+    "tags": ["torq", "monitoring", "nats", "go"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "5s",
+    "panels": [
+      {
+        "type": "row",
+        "title": "DistoDam Metrics",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+      },
+      {
+        "type": "stat",
+        "title": "Reservoir Balance (RT)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "distodam_reservoir_rt",
+            "legendFormat": "Reservoir RT"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 12, "x": 0, "y": 1 }
+      },
+      {
+        "type": "graph",
+        "title": "Inflow Rate (per second)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(distodam_inflows_total[1m])",
+            "legendFormat": "Inflows/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 }
+      },
+      {
+        "type": "graph",
+        "title": "Outflow Rate (per second)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(distodam_outflows_total[1m])",
+            "legendFormat": "Outflows/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 }
+      },
+      {
+        "type": "row",
+        "title": "Trust Service Metrics",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 }
+      },
+      {
+        "type": "table",
+        "title": "Current Trust Balances (per BRLA)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "trust_balance_rt",
+            "legendFormat": "{{brla_id}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
+        "options": {
+          "showHeader": true
+        }
+      },
+      {
+        "type": "graph",
+        "title": "Inflow Rate by Source (Investor, Builder, Customer)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(trust_inflows_total[1m])",
+            "legendFormat": "{{source}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 }
+      },
+      {
+        "type": "graph",
+        "title": "Outflow Rate by Destination (Mint, Supplier, Investor)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(trust_outflows_total[1m])",
+            "legendFormat": "{{destination}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 }
+      }
+    ]
+  },
+  "overwrite": true
+}

@@ -1,9 +1,9 @@
 # docker-compose.yml — WORKING ON WINDOWS
 # Purpose: Defines all services, networks, and volumes for local development/testing.
-# Docker Compose orchestrates multiple containers and their dependencies.
+# Prometheus + Grafana monitoring integrated for distodam & trust metrics.
 
 services:
-    # -----------------------------
+  # -----------------------------
   # NATS (Messaging Broker)
   # -----------------------------
   nats:
@@ -17,7 +17,7 @@ services:
       -m 8222
     ports:
       - "4222:4222"
-      - "8222:8222"          # ← EXPOSE MONITORING
+      - "8222:8222"
     networks:
       - torqnet
     healthcheck:
@@ -26,190 +26,178 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
-    # Connect NATS to the shared network.
 
   # -----------------------------
   # PostgreSQL Database
   # -----------------------------
   postgres:
     image: postgres:16-alpine
-    # Use official Postgres 16 Alpine image.
-    # Lightweight, fast, suitable for dev/test.
-
     environment:
       POSTGRES_USER: torq
       POSTGRES_PASSWORD: torqpass
       POSTGRES_DB: roboTorq
-    # Set up default username, password, and database.
-    # These credentials will be used by Mint or other services.
-
     volumes:
       - pg-data:/var/lib/postgresql/data
-    # Persist database data using a named volume.
-    # Ensures database is not lost if the container restarts.
-
     networks:
       - torqnet
-    healthcheck:                
+    healthcheck:
       test: ["CMD-SHELL", "pg_isready -U torq -d roboTorq"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-    # Connect Postgres to the shared network.
+
   # -----------------------------
   # Mint Service
   # -----------------------------
   mint:
     build: ./src/mint
-    # Build the Mint service from the local directory ./src/mint
-    # Dockerfile in this directory will be used for the image.
-
     ports:
       - "50051:50051"
       - "8080:8080"
-    # Maps container ports to host machine ports.
-    # 50051 → likely gRPC interface, 8080 → HTTP/health or API.
-    # Format: "hostPort:containerPort"
-
-    depends_on: 
+    depends_on:
       nats:
-        condition: service_healthy 
+        condition: service_healthy
       postgres:
         condition: service_healthy
-    healthcheck: 
+    healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 3s
       retries: 3
-    # Ensure Mint only starts after NATS and Postgres are up.
-    # Note: depends_on controls startup order but does **not** guarantee that the services are fully ready. Use healthchecks if needed.
-
     networks:
       - torqnet
-    # Connect Mint to the 'torqnet' network for inter-service communication.
 
   # -----------------------------
   # Refinery Service
   # -----------------------------
   refinery:
     build: ./src/refinery
-    # Build the Refinery service from ./src/refinery directory.
-
     ports:
       - "50052:50052"
       - "8081:8080"
-    # 8081 → HTTP/health or web API mapped to host 8081.
-
     depends_on:
       nats:
-        condition: service_healthy  
+        condition: service_healthy
       postgres:
         condition: service_healthy
-    healthcheck: 
+    healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 3s
       retries: 3
-    # Refinery starts only after NATS and Mint are up.
-
     volumes:
       - ./proofs:/proofs
-    # Mount a host directory (./proofs) into the container (/proofs) to persist proof files or logs.
-    # This allows easy access from Windows host for testing/debugging.
-
     networks:
       - torqnet
-    # Connect Refinery to the shared 'torqnet' network.
 
   # -----------------------------
   # Wallet Service
   # -----------------------------
   wallet:
     build: ./src/wallet
-    # Build the Wallet service from ./src/wallet directory.
-
     ports:
       - "3000:3000"
-    # Expose web interface or API on port 3000.
-
     depends_on:
       nats:
-        condition: service_healthy  
-    healthcheck: 
+        condition: service_healthy
+    healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 3s
       retries: 3
-    # Wallet requires NATS to be up before starting.
-
     networks:
       - torqnet
-    # Connect Wallet to the shared network.
 
   # -----------------------------
   # DistoDam Service
   # -----------------------------
   distodam:
     build: ./src/distodam
-    # Build the DistoDam service from ./src/distodam directory.
-
     ports:
       - "8082:8080"
-    # Expose web interface or API on port 3000.
-
     depends_on:
       nats:
-        condition: service_healthy   
-    healthcheck: 
+        condition: service_healthy
+    healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 3s
       retries: 3
-    # DistoDam requires NATS to be up before starting.
-
     networks:
       - torqnet
-    # Connect DistoDam to the shared network.
 
   # -----------------------------
   # Trust Service
   # -----------------------------
   trust:
     build: ./src/trust
-    # Build the Trust service from ./src/trust directory.
-
     ports:
       - "8083:8080"
-    # Expose web interface or API on port 8083.
-
     depends_on:
       nats:
-        condition: service_healthy   
-    healthcheck: 
+        condition: service_healthy
+    healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 3s
       retries: 3
-    # Trust requires NATS to be up before starting.
-
     networks:
       - torqnet
-    # Connect Trust to the shared network.
 
+  # -----------------------------
+  # Prometheus (Metrics Collector)
+  # -----------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml   # 👈 Use your existing root file
+    networks:
+      - torqnet
+    depends_on:
+      - distodam
+      - trust
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+
+  # -----------------------------
+  # Grafana (Metrics Dashboard)
+  # -----------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3030:3000"   # 👈 Changed host port from 3000 → 3030
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - torqnet
+    depends_on:
+      - prometheus
+    restart: unless-stopped
 
 # -----------------------------
 # Named Volumes
 # -----------------------------
 volumes:
   pg-data:
-    # Named volume for Postgres persistence.
-    # Docker manages the actual storage location automatically.
+  grafana-data:
 
 # -----------------------------
 # Networks
 # -----------------------------
 networks:
   torqnet:
-    # Custom bridge network connecting all services.
-    # Ensures isolated network namespace for services to talk to each other using container names.
+    driver: bridge
