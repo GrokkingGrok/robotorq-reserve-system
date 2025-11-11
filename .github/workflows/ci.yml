@@ -119,20 +119,43 @@ jobs:
         run: cargo install tauri-cli || true
         # || true prevents failure if already installed
 
-      # Build and test the Digger App
+      # ── Test: Digger App (Tauri) ────────────────────────────────
+      - name: Install Tauri system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libglib2.0-dev \
+            pkg-config \
+            build-essential \
+            curl
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli || true
+
       - name: Build & Test Digger App
         working-directory: ./src/digger-app/digger
         run: |
-          # Install Node dependencies
           npm install
-
-          # Start Tauri dev server (builds + runs)
-          echo "Starting Tauri dev server — this can take 10–15 minutes on first run..."
+          echo "Starting Tauri dev server — may take up to 15 minutes..."
           timeout 900s cargo tauri dev &
           TAURI_PID=$!
 
-          # Wait up to 5 minutes for the dev server to come online
-          echo "Waiting up to 5 minutes for Tauri server to start..."
+          echo "Waiting up to 5 minutes for Tauri server..."
           for i in {1..60}; do
             if curl -sf http://localhost:1420 >/dev/null; then
               echo "✅ Tauri server is online!"
@@ -142,9 +165,6 @@ jobs:
             sleep 5
           done
 
-          # Final check
           curl -f http://localhost:1420 || (echo "❌ Tauri server never responded" && kill $TAURI_PID && exit 1)
-
-          # Kill the dev server
           echo "Stopping Tauri dev server..."
           kill $TAURI_PID || true
