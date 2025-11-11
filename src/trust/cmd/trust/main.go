@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"log"      // @dev Logging to stdout (Docker logs)
 	"net/http" // @dev HTTP server for /health endpoint
-	"sync"     // @dev Math for rounding float to integer
+	"strconv"
+	"sync" // @dev Math for rounding float to integer
 
 	"github.com/nats-io/nats.go"
 	// @dev Ticker for 1-second intervals
@@ -13,8 +14,8 @@ import (
 )
 
 type Trust struct {
-	ID      string
-	Wallets map[string]float64 // wallet → balance
+	ID      string  // torq1xyz...
+	Balance float64 // RT
 	mu      sync.RWMutex
 }
 
@@ -56,43 +57,107 @@ func main() {
 	// @dev Topic: brla.funding
 	// @dev Each message = 40% of 1-second disto from one node
 	// @dev Aggregation happens here
-	_, err = nc.Subscribe("brla.funding", func(m *nats.Msg) {
+	if _, err := nc.Subscribe("brla.funding", func(m *nats.Msg) {
 		var flow brla_fund_flow
 		if err := json.Unmarshal(m.Data, &flow); err != nil {
 			log.Printf("Invalid JSON: %v", err)
 			return
 		}
+		addInflow(flow.BrlaID, "distodam", float64(flow.AmountMicroRT)/1_000_000)
 
-		// @dev Pay to Trust wallet
-		payTrust(flow.TrustWallet, flow.AmountMicroRT)
+	}); err != nil {
+		log.Fatal("Failed to subscribe to brla.funding: ", err)
+	}
+
+	// @dev Inflow from Investor (HTTP)
+	http.HandleFunc("/invest", func(w http.ResponseWriter, r *http.Request) {
+		brlaID := r.URL.Query().Get("brla_id")
+		amount := parseFloat(r.URL.Query().Get("amount"))
+		addInflow(brlaID, "investor", amount)
+		w.Write([]byte("Invested"))
 	})
 
-	// @dev Start HTTP server
-	// @dev Port: 8080 (mapped to host 8081)
-	// @dev Blocks until fatal error
-	log.Println("Trust listening on brla.funding")
+	// @dev Inflow from Builder (HTTP)
+	http.HandleFunc("/retainer", func(w http.ResponseWriter, r *http.Request) {
+		brlaID := r.URL.Query().Get("brla_id")
+		amount := parseFloat(r.URL.Query().Get("amount"))
+		addInflow(brlaID, "builder", amount)
+		w.Write([]byte("Retainer paid"))
+	})
 
-	http.HandleFunc("/pay", func(w http.ResponseWriter, r *http.Request) {
-		// @dev Oracle calls /pay?trust_id=...&wallet=...&amount=...
-		// @dev Add to wallet
+	// @dev Inflow from Customer (HTTP)
+	http.HandleFunc("/sale", func(w http.ResponseWriter, r *http.Request) {
+		brlaID := r.URL.Query().Get("brla_id")
+		amount := parseFloat(r.URL.Query().Get("amount"))
+		addInflow(brlaID, "customer", amount)
+		w.Write([]byte("Sale recorded"))
+	})
+
+	// @dev Pay Mint (TokenTorq)
+	http.HandleFunc("/pay-mint", func(w http.ResponseWriter, r *http.Request) {
+		brlaID := r.URL.Query().Get("brla_id")
+		amount := parseFloat(r.URL.Query().Get("amount"))
+		payOutflow(brlaID, "mint", amount)
+		w.Write([]byte("Paid Mint"))
+	})
+
+	// @dev Pay Supplier
+	http.HandleFunc("/pay-supplier", func(w http.ResponseWriter, r *http.Request) {
+		brlaID := r.URL.Query().Get("brla_id")
+		amount := parseFloat(r.URL.Query().Get("amount"))
+		payOutflow(brlaID, "supplier", amount)
+		w.Write([]byte("Paid Supplier"))
+	})
+
+	// @dev Pay Investor
+	http.HandleFunc("/pay-investor", func(w http.ResponseWriter, r *http.Request) {
+		brlaID := r.URL.Query().Get("brla_id")
+		amount := parseFloat(r.URL.Query().Get("amount"))
+		payOutflow(brlaID, "investor", amount)
+		w.Write([]byte("Paid Investor"))
 	})
 
 	log.Println("Trust Service running on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-func payTrust(wallet string, microRT int64) {
-	trustsMu.Lock()
-	defer trustsMu.Unlock()
+// @dev Parse float64 from query string
+// @dev Edge: invalid → 0
+func parseFloat(s string) float64 {
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+	return f
+}
 
-	if _, exists := trusts[wallet]; !exists {
-		trusts[wallet] = &Trust{
-			ID:      wallet,
-			Wallets: make(map[string]float64),
-		}
+func addInflow(brlaID, source string, amountRT float64) {
+	trustsMu.Lock()
+	if _, ok := trusts[brlaID]; !ok {
+		trusts[brlaID] = &Trust{}
+	}
+	t := trusts[brlaID]
+	trustsMu.Unlock()
+
+	t.mu.Lock()
+	t.Balance += amountRT
+	t.mu.Unlock()
+
+	log.Printf("INFLOW: %s → %s: %.6f RT", source, brlaID, amountRT)
+}
+
+func payOutflow(brlaID, dest string, amountRT float64) {
+	trustsMu.Lock()
+	t, ok := trusts[brlaID]
+	trustsMu.Unlock()
+	if !ok || t.Balance < amountRT {
+		log.Printf("INSUFFICIENT: BRLA %s", brlaID)
+		return
 	}
 
-	amountRT := float64(microRT) / 1_000_000
-	trusts[wallet].Wallets[wallet] += amountRT
-	log.Printf("PAYING TRUST: %s += %.6f RT", wallet, amountRT)
+	t.mu.Lock()
+	t.Balance -= amountRT
+	t.mu.Unlock()
+
+	log.Printf("OUTFLOW: BRLA %s → %s: %.6f RT", brlaID, dest, amountRT)
 }
