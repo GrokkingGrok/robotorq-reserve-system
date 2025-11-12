@@ -1,129 +1,99 @@
-# .github/workflows/ci.yml — With Cleanup Steps
-# This workflow builds and tests your Docker-based services (Mint, Refinery, Wallet)
-# and cleans up containers after each test to keep the environment isolated and clean.
-
+# .github/workflows/ci.yml — Full CI with Docker services + Digger (Tauri)
 name: CI/CD
 
 on:
   push:
-    branches: [ v0 ]  # Trigger when pushing to v0 or main
-  pull_request:       # Also run for pull requests
+    branches: [ v0 ]
+  pull_request:
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # Use latest Ubuntu runner
+    runs-on: ubuntu-latest
+    env:
+      CI: true
 
     steps:
-      # Check out source code
+      # ── Checkout source code ─────────────────────────────────────
       - uses: actions/checkout@v4
-        # Fetches your repository code so the workflow can build and test it.
 
-      # Set up Docker Buildx
+      # ── Docker Buildx (for all services) ────────────────────────
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        # Buildx provides advanced Docker build features (e.g., caching, multi-platform builds).
 
-      # Build all Docker images
-      - name: Build all images
+      # ── Build all Docker images in parallel ─────────────────────
+      - name: Build all Docker images
         run: docker compose build --parallel
-        # Builds all services defined in docker-compose.yml concurrently to save time.
 
-      # Test the "Mint" service
+      # ── Test Mint ───────────────────────────────────────────────
       - name: Test Mint
         run: |
-          docker compose up -d mint nats        # Start Mint and its dependency NATS
-          sleep 10                              # Wait for containers to initialize
+          docker compose up -d mint nats
+          sleep 10
           curl -f http://localhost:8080/health || exit 1
-          # Health check — fail if Mint doesn’t respond successfully.
 
-      # Clean up Mint containers
-      - name: Clean up Mint containers
-        if: always()  # Ensures cleanup runs even if the previous step failed
+      - name: Clean up Mint
+        if: always()
         run: docker compose down --volumes
-        # Stops and removes all containers, networks, and volumes created by docker-compose.
 
-      # Test the "Refinery" service
+      # ── Test Refinery ───────────────────────────────────────────
       - name: Test Refinery
         run: |
-          docker compose up -d refinery           # Start Refinery container
-          sleep 10                              # Wait for service startup
+          docker compose up -d refinery
+          sleep 10
           curl -f http://localhost:8081/health || exit 1
-          # Health check for the Refinery service.
 
-      # Clean up Refinery containers
-      - name: Clean up Refinery containers
+      - name: Clean up Refinery
         if: always()
         run: docker compose down --volumes
-        # Cleanly tear down Refinery container after testing.
 
-      # Test the "Wallet" service
+      # ── Test Wallet ─────────────────────────────────────────────
       - name: Test Wallet
         run: |
-          docker compose up -d wallet           # Start Wallet service
-          sleep 30                              # Wallet may take longer to initialize
+          docker compose up -d wallet
+          sleep 30
           curl -f http://localhost:3000 || exit 1
-          # Health check for the Wallet service’s main endpoint.
 
-      # Clean up Wallet containers
-      - name: Clean up Wallet containers
+      - name: Clean up Wallet
         if: always()
         run: docker compose down --volumes
-        # Final cleanup — ensures all containers, networks, and volumes are removed
-        # even if the Wallet test fails.
 
-      # Test the "DistoDam" service
+      # ── Test DistoDam ───────────────────────────────────────────
       - name: Test DistoDam
         run: |
-          docker compose up -d distodam      # Start DistoDam container
-          sleep 10                              # Wait for service startup
+          docker compose up -d distodam
+          sleep 10
           curl -f http://localhost:8082/health || exit 1
-        # Health check for the DistoDam service.
 
-      # Clean up DistoDam containers
-      - name: Clean up DistoDam containers
+      - name: Clean up DistoDam
         if: always()
         run: docker compose down --volumes
-        # Cleanly tear down DistoDam container after testing.
-      
-      # Test the "Trust" service
+
+      # ── Test Trust ──────────────────────────────────────────────
       - name: Test Trust
         run: |
-          docker compose up -d trust            # Start Trust container
-          sleep 10                              # Wait for service startup
+          docker compose up -d trust
+          sleep 10
           curl -f http://localhost:8083/health || exit 1
-          # Health check for the Trust service.
 
-      # Clean up Trust containers
-      - name: Clean up Trust containers
+      - name: Clean up Trust
         if: always()
         run: docker compose down --volumes
-        # Cleanly tear down Trust container after testing.
-      
-      # ── Test: Digger App (Tauri) ────────────────────────────────
-      # Builds and validates your Tauri app with caching for speed
-      # and robust waiting for the dev server to become available.
 
-      # Cache Rust dependencies and build output
-      - name: Cache Cargo registry and build
-        uses: actions/cache@v4
+      # ── Setup Rust & Node for Digger (Tauri) ───────────────────
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          node-version: 20
+          cache: npm
 
-      # Install the Tauri CLI (cached if already present)
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli || true
-        # || true prevents failure if already installed
-
-      # ── Test: Digger App (Tauri) ────────────────────────────────
-      - name: Install Tauri system dependencies (Linux)
+      # ── Linux system deps for Tauri (GTK, WebKit, etc.) ────────
+      - name: Install Tauri dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
+          sudo apt-get update -y
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             libgtk-3-dev \
@@ -134,6 +104,7 @@ jobs:
             build-essential \
             curl
 
+      # ── Cache Cargo (registry + build) ────────────────────────
       - name: Cache Cargo registry and build
         uses: actions/cache@v4
         with:
@@ -144,27 +115,24 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+      # ── Install Tauri CLI ─────────────────────────────────────
       - name: Install Tauri CLI
-        run: cargo install tauri-cli || true
+        run: cargo install tauri-cli --locked
 
-      - name: Build & Test Digger App
+      # ── Build Digger App (headless) ───────────────────────────
+      - name: Build Digger App
         working-directory: ./src/digger-app/digger
         run: |
           npm install
-          echo "Starting Tauri dev server — may take up to 15 minutes..."
-          timeout 900s cargo tauri dev &
-          TAURI_PID=$!
+          cargo tauri build
 
-          echo "Waiting up to 5 minutes for Tauri server..."
-          for i in {1..60}; do
-            if curl -sf http://localhost:1420 >/dev/null; then
-              echo "✅ Tauri server is online!"
-              break
-            fi
-            echo "⏳ Waiting... ($((i*5))s elapsed)"
-            sleep 5
-          done
+      # ── Upload Linux .deb artifact ───────────────────────────
+      - name: Upload Digger Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: digger-app-linux
+          path: src/digger-app/digger/src-tauri/target/release/bundle/deb/*.deb
 
-          curl -f http://localhost:1420 || (echo "❌ Tauri server never responded" && kill $TAURI_PID && exit 1)
-          echo "Stopping Tauri dev server..."
-          kill $TAURI_PID || true
+      # ── Final success ────────────────────────────────────────
+      - name: All tests passed
+        run: echo "All services and Digger App are healthy!"
