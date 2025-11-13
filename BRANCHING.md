@@ -76,8 +76,8 @@ Tag known-good commits so you can always rebuild them:
 
 ```bash
 git checkout v0
-git tag -a v0.0.0 -m "Stable baseline before Trust refactor"
-git push origin v0.0.0
+git tag -a v0.frozen -m "Stable baseline before Trust refactor"
+git push origin v0.frozen
 ```
 
 Later versions:

@@ -1,232 +1,96 @@
-// src/trust/cmd/trust/main.go
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"log"
-	"net/http"
-	"os"
-	"os/signal"
-	"strconv"
-	"sync"
-	"syscall"
+	"time"
+
+	"b2b/trust/internal/appraisor"
+	"b2b/trust/internal/executor"
+	"b2b/trust/internal/fundsync"
+	"b2b/trust/internal/metrics"
+	"b2b/trust/pkg"
 
 	"github.com/nats-io/nats.go"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-type Trust struct {
-	ID      string
-	Balance float64
-	mu      sync.RWMutex
-}
-
-type TrustService struct {
-	nc     *nats.Conn
-	trusts map[string]*Trust
-	mu     sync.RWMutex
-	ctx    context.Context
-	cancel context.CancelFunc
-
-	// ─── Prometheus metrics ──────────────────────────────
-	inflowCounter  *prometheus.CounterVec
-	outflowCounter *prometheus.CounterVec
-	balanceGauge   *prometheus.GaugeVec
-}
-
-func NewTrustService(ctx context.Context, nc *nats.Conn) *TrustService {
-	cctx, cancel := context.WithCancel(ctx)
-
-	s := &TrustService{
-		nc:     nc,
-		trusts: make(map[string]*Trust),
-		ctx:    cctx,
-		cancel: cancel,
-	}
-
-	s.inflowCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "trust_inflows_total",
-		Help: "Number of inflow operations by source",
-	}, []string{"source"})
-
-	s.outflowCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "trust_outflows_total",
-		Help: "Number of outflow operations by destination",
-	}, []string{"dest"})
-
-	s.balanceGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "trust_balance_rt",
-		Help: "Current RT balance per BRLA",
-	}, []string{"brla_id"})
-
-	prometheus.MustRegister(s.inflowCounter, s.outflowCounter, s.balanceGauge)
-	return s
-}
-
 func main() {
-	natsURL := os.Getenv("NATS_URL")
-	if natsURL == "" {
-		natsURL = "nats:4222"
-	}
-	nc, err := nats.Connect(natsURL)
+	// -----------------------
+	// STEP 1: Initialize Metrics
+	// -----------------------
+	m := metrics.NewMetricRegistry()
+	log.Println("Prometheus metrics initialized")
+
+	// -----------------------
+	// STEP 2: Connect to NATS
+	// -----------------------
+	nc, err := nats.Connect(nats.DefaultURL)
 	if err != nil {
-		log.Fatal("Failed to connect to NATS: ", err)
+		log.Fatalf("Failed to connect to NATS: %v", err)
 	}
 	defer nc.Close()
+	log.Println("Connected to NATS")
 
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
+	// Example subscription: listen for new opportunities (mocked)
+	if _, err := nc.Subscribe("bidnet.opportunities", func(msg *nats.Msg) {
+		log.Printf("Received message on bidnet.opportunities: %s", string(msg.Data))
+		// In a real system, decode msg.Data into pkg.Opportunity
+	}); err != nil {
+		log.Fatalf("Failed to subscribe to bidnet.opportunities: %v", err)
+	}
+	if err := nc.Flush(); err != nil {
+		log.Fatalf("Failed to flush NATS connection: %v", err)
+	}
 
-	service := NewTrustService(ctx, nc)
-	service.subscribeFunding()
-	service.startHTTP()
+	// -----------------------
+	// STEP 3: Instantiate Trust Node Components
+	// -----------------------
+	trust := pkg.Trust{
+		ID:      "trust-001",
+		Balance: 1000.0, // Starting with 1000 RT
+	}
 
-	log.Println("✅ Trust Service running on :8080 (metrics at /metrics)")
+	app := appraisor.New()
+	fs := fundsync.NewFundSync()
+	exec := executor.NewExecutor()
 
-	<-ctx.Done()
-	service.Shutdown()
-	log.Println("✅ Trust Service exited cleanly.")
-}
+	// -----------------------
+	// STEP 4: Simulate Business Loop
+	// -----------------------
+	for i := 1; i <= 3; i++ { // Loop 3 times for demo
+		log.Printf("🔄 Starting business cycle %d", i)
 
-//
-// ────────────────────────────────────────────────────────────────
-//   NATS & HTTP ROUTES
-// ────────────────────────────────────────────────────────────────
-//
-
-type brlaFundFlow struct {
-	BrlaID        string `json:"brla_id"`
-	AmountMicroRT int64  `json:"amount_rt"`
-	Source        string `json:"source"`
-	TrustWallet   string `json:"trust_wallet"`
-}
-
-func (ts *TrustService) subscribeFunding() {
-	_, err := ts.nc.Subscribe("brla.funding", func(m *nats.Msg) {
-		var flow brlaFundFlow
-		if err := json.Unmarshal(m.Data, &flow); err != nil {
-			log.Printf("Invalid brla.funding payload: %v", err)
-			return
+		// Step 4a: Create a fake opportunity (simulates BidNet message)
+		op := pkg.Opportunity{
+			ID:                 "opp-001",
+			Builder:            "builder-123",
+			RoboStakeRequested: 500.0,
+			ExpectedROI:        1.2,
 		}
-		amountRT := float64(flow.AmountMicroRT) / 1_000_000.0
-		ts.addInflow(flow.BrlaID, "distodam", amountRT)
-	})
-	if err != nil {
-		log.Fatal("Failed to subscribe to brla.funding:", err)
-	}
-}
+		log.Printf("📥 New opportunity received: %s", op.ID)
 
-func (ts *TrustService) startHTTP() {
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte("ok"))
-	})
-
-	mux.HandleFunc("/status", func(w http.ResponseWriter, _ *http.Request) {
-		ts.mu.RLock()
-		snapshot := make(map[string]float64)
-		for id, t := range ts.trusts {
-			t.mu.RLock()
-			snapshot[id] = t.Balance
-			t.mu.RUnlock()
+		// Step 4b: Appraisor selects the best opportunity
+		best := app.SelectBestOpportunity([]pkg.Opportunity{op})
+		if best == nil {
+			log.Println("No suitable opportunity selected, skipping cycle")
+			continue
 		}
-		ts.mu.RUnlock()
-		data, _ := json.MarshalIndent(snapshot, "", "  ")
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(data)
-	})
 
-	// ─── Prometheus metrics ─────────────────────────────
-	mux.Handle("/metrics", promhttp.Handler())
+		// Step 4c: Mock BidNet auto-accept
+		app.MockBidNet(best)
 
-	// ─── Simplified inflow/outflow endpoints ────────────
-	mux.HandleFunc("/invest", func(w http.ResponseWriter, r *http.Request) {
-		ts.addInflow(r.URL.Query().Get("brla_id"), "investor", parseFloat(r.URL.Query().Get("amount")))
-		w.Write([]byte("Invested"))
-	})
-	mux.HandleFunc("/retainer", func(w http.ResponseWriter, r *http.Request) {
-		ts.addInflow(r.URL.Query().Get("brla_id"), "builder", parseFloat(r.URL.Query().Get("amount")))
-		w.Write([]byte("Retainer paid"))
-	})
-	mux.HandleFunc("/sale", func(w http.ResponseWriter, r *http.Request) {
-		ts.addInflow(r.URL.Query().Get("brla_id"), "customer", parseFloat(r.URL.Query().Get("amount")))
-		w.Write([]byte("Sale recorded"))
-	})
-	mux.HandleFunc("/pay-investor", func(w http.ResponseWriter, r *http.Request) {
-		ts.payOutflow(r.URL.Query().Get("brla_id"), "investor", parseFloat(r.URL.Query().Get("amount")))
-		w.Write([]byte("Paid investor"))
-	})
+		// Step 4d: FundSync requests RoboStake from DistoDam (mocked)
+		contract := fs.NotifyNewContract(best)
 
-	go func() {
-		if err := http.ListenAndServe(":8080", mux); err != nil && err != http.ErrServerClosed {
-			log.Fatal("HTTP server error: ", err)
-		}
-	}()
-}
+		// Step 4e: Executor sets up contract and sends RoboStake
+		exec.SetupContract(contract)
 
-//
-// ────────────────────────────────────────────────────────────────
-//   TRUST OPERATIONS
-// ────────────────────────────────────────────────────────────────
-//
+		// Step 4f: Update metrics (simulated)
+		m.BalanceGauge.WithLabelValues(trust.ID).Set(trust.Balance)
+		m.InflowCounter.WithLabelValues("demo").Inc()
 
-func (ts *TrustService) addInflow(brlaID, source string, amountRT float64) {
-	if brlaID == "" {
-		log.Println("Missing BRLA ID inflow")
-		return
+		log.Printf("✅ Business cycle %d complete\n", i)
+		time.Sleep(1 * time.Second) // pause between cycles
 	}
-	t := ts.getOrCreateTrust(brlaID)
-	t.mu.Lock()
-	t.Balance += amountRT
-	newBal := t.Balance
-	t.mu.Unlock()
 
-	ts.inflowCounter.WithLabelValues(source).Inc()
-	ts.balanceGauge.WithLabelValues(brlaID).Set(newBal)
-	log.Printf("💰 INFLOW: %s → %s: +%.6f RT (balance=%.6f)", source, brlaID, amountRT, newBal)
-}
-
-func (ts *TrustService) payOutflow(brlaID, dest string, amountRT float64) {
-	if brlaID == "" {
-		log.Println("Missing BRLA ID outflow")
-		return
-	}
-	t := ts.getOrCreateTrust(brlaID)
-	t.mu.Lock()
-	if t.Balance < amountRT {
-		log.Printf("⚠️ INSUFFICIENT: %s balance %.6f < %.6f", brlaID, t.Balance, amountRT)
-		t.mu.Unlock()
-		return
-	}
-	t.Balance -= amountRT
-	newBal := t.Balance
-	t.mu.Unlock()
-
-	ts.outflowCounter.WithLabelValues(dest).Inc()
-	ts.balanceGauge.WithLabelValues(brlaID).Set(newBal)
-	log.Printf("💸 OUTFLOW: %s → %s: -%.6f RT (balance=%.6f)", brlaID, dest, amountRT, newBal)
-}
-
-func (ts *TrustService) getOrCreateTrust(brlaID string) *Trust {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	t, ok := ts.trusts[brlaID]
-	if !ok {
-		t = &Trust{ID: brlaID}
-		ts.trusts[brlaID] = t
-	}
-	return t
-}
-
-func parseFloat(s string) float64 {
-	v, _ := strconv.ParseFloat(s, 64)
-	return v
-}
-
-func (ts *TrustService) Shutdown() {
-	ts.cancel()
-	ts.nc.Flush()
+	log.Println("🛑 Demo loop complete, Trust service exiting")
 }
