@@ -36,6 +36,8 @@ type TrustService struct {
 	balanceGauge   *prometheus.GaugeVec
 }
 
+// TODO(enhancement): Add struct for contracts
+
 func NewTrustService(ctx context.Context, nc *nats.Conn) *TrustService {
 	cctx, cancel := context.WithCancel(ctx)
 

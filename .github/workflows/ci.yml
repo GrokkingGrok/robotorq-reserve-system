@@ -136,3 +136,26 @@ jobs:
       # ── Final success ────────────────────────────────────────
       - name: All tests passed
         run: echo "All services and Digger App are healthy!"
+  # ── Create GitHub Issues from TODO comments ───────────────────────────────
+  todo:
+    name: Create TODO Issues
+    runs-on: ubuntu-latest
+    # Remove `needs: build` — let it run independently
+    permissions:
+      issues: write      # Can create/close issues
+      contents: read     # Can read code
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create TODO Issues
+        uses: alstr/todo-to-issue-action@v4
+        with:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LABELS: "todo,enhancement"        # No spaces, comma-separated
+          CLOSE_ISSUES: true
+          AUTO_ASSIGN: false
+          COMMENT_MARKER: "TODO"
+          UNIQUE: true
+          INCLUDE_FILE_PATH: true
+          INCLUDE_LINE_NUMBER: true
