@@ -117,7 +117,7 @@ jobs:
 
       # ── Install Tauri CLI ─────────────────────────────────────
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --locked
+        run: cargo install tauri-cli --locked --force
 
       # ── Build Digger App (headless) ───────────────────────────
       - name: Build Digger App
