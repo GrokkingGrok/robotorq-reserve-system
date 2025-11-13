@@ -281,6 +281,11 @@ func NewRefinery() *Refinery {
 		r.minterPool <- struct{}{}
 	}
 
+	// ← ADD THESE TWO LINES
+	for i := 0; i < MinMinterPool; i++ {
+		r.spawnMinter()
+	}
+
 	// Start core processing loop and initial minter workers
 	r.startPipeline()
 	return r

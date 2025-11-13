@@ -1,39 +1,110 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="stylesheet" href="styles.css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri App</title>
-    <script type="module" src="/main.js" defer></script>
-  </head>
+<head>
+  <meta charset="UTF-8" />
+  <title>Digger Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background-color: #111;
+      color: #0f0;
+      padding: 2rem;
+    }
 
-  <body>
-    <main class="container">
-      <h1>Welcome to Tauri</h1>
+    h1 {
+      text-align: center;
+      margin-bottom: 2rem;
+      color: #0ff;
+      text-shadow: 0 0 10px #0ff;
+    }
 
-      <div class="row">
-        <a href="https://tauri.app" target="_blank">
-          <img src="/assets/tauri.svg" class="logo tauri" alt="Tauri logo" />
-        </a>
-        <a
-          href="https://developer.mozilla.org/en-US/docs/Web/JavaScript"
-          target="_blank"
-        >
-          <img
-            src="/assets/javascript.svg"
-            class="logo vanilla"
-            alt="JavaScript logo"
-          />
-        </a>
-      </div>
-      <p>Click on the Tauri logo to learn more about the framework</p>
+    #container {
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 2rem;
+      border: 1px solid #0f0;
+      border-radius: 8px;
+      background: #111a;
+    }
 
-      <form class="row" id="greet-form">
-        <input id="greet-input" placeholder="Enter a name..." />
-        <button type="submit">Greet</button>
-      </form>
-      <p id="greet-msg"></p>
-    </main>
-  </body>
+    label {
+      display: block;
+      margin: 1rem 0 0.5rem 0;
+      font-weight: bold;
+    }
+
+    input {
+      padding: 0.5rem;
+      font-size: 1rem;
+      width: 100%;
+      background: #222;
+      color: #0f0;
+      border: 1px solid #0f0;
+      border-radius: 4px;
+    }
+
+    button {
+      padding: 1rem 2rem;
+      font-size: 1.2rem;
+      margin-top: 1rem;
+      background: #222;
+      color: #0f0;
+      border: 1px solid #0f0;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: 0.2s all;
+    }
+
+    button:hover:not(:disabled) {
+      background: #0f0;
+      color: #111;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .status {
+      font-weight: bold;
+      margin: 1rem 0;
+      padding: 0.5rem;
+      border-radius: 4px;
+      text-align: center;
+    }
+
+    .status.ready { color: #0f0; }
+    .status.running { color: #ff0; }
+    .status.complete { color: #0ff; }
+    .status.error { color: #f00; }
+
+    pre {
+      background: #222;
+      padding: 1rem;
+      border-radius: 8px;
+      overflow: auto;
+      white-space: pre-wrap;
+      max-height: 50vh;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>Digger Dashboard</h1>
+  <div id="container">
+    <label for="digger_id">Digger ID:</label>
+    <input id="digger_id" value="dig-jon-ai-001">
+
+    <label for="contract_id">Contract ID:</label>
+    <input id="contract_id" value="contract-001">
+
+    <button id="startBtn">Start Contract</button>
+
+    <div id="status" class="status ready">Ready</div>
+    <pre id="output">Waiting for action...</pre>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
 </html>

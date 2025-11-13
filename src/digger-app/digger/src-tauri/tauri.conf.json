@@ -4,15 +4,20 @@
   "version": "0.1.0",
   "identifier": "com.robotorq.digger",
   "build": {
-    "frontendDist": "../src"
+    "beforeBuildCommand": "",
+    "beforeDevCommand": "",
+
+    "frontendDist":   "../src"
   },
   "app": {
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "digger",
-        "width": 800,
-        "height": 600
+        "title": "Digger Dashboard",
+        "width": 900,
+        "height": 700,
+        "resizable": true,
+        "fullscreen": false
       }
     ],
     "security": {

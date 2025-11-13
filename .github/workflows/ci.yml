@@ -132,7 +132,7 @@ jobs:
         with:
           name: digger-app-linux
           path: src/digger-app/digger/src-tauri/target/release/bundle/deb/*.deb
-
+      
       # ── Final success ────────────────────────────────────────
       - name: All tests passed
         run: echo "All services and Digger App are healthy!"
