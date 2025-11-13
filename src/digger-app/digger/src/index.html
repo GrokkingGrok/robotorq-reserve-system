@@ -1,110 +1,145 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- This tells the browser how to read the text -->
   <meta charset="UTF-8" />
+  
+  <!-- The title that shows in the browser tab -->
   <title>Digger Dashboard</title>
+  
+  <!-- This connects to a separate style file (we're not using it now) -->
   <link rel="stylesheet" href="style.css">
+  
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <!-- STYLE — This makes the app look cool (like a sci-fi computer) -->
+  <!-- ──────────────────────────────────────────────────────────────── -->
   <style>
+    /* The whole page background and text color */
     body {
-      font-family: system-ui, sans-serif;
-      background-color: #111;
-      color: #0f0;
-      padding: 2rem;
+      font-family: system-ui, sans-serif;  /* Clean, modern font */
+      background-color: #111;              /* Dark background */
+      color: #0f0;                         /* Green text (like old computers) */
+      padding: 2rem;                       /* Space around the edges */
     }
 
+    /* The big title at the top */
     h1 {
-      text-align: center;
-      margin-bottom: 2rem;
-      color: #0ff;
-      text-shadow: 0 0 10px #0ff;
+      text-align: center;                  /* Center the title */
+      margin-bottom: 2rem;                 /* Space below */
+      color: #0ff;                         /* Bright cyan */
+      text-shadow: 0 0 10px #0ff;          /* Glowing effect */
     }
 
+    /* The main control box in the center */
     #container {
-      max-width: 500px;
-      margin: 0 auto;
-      padding: 2rem;
-      border: 1px solid #0f0;
-      border-radius: 8px;
-      background: #111a;
+      max-width: 500px;                    /* Not too wide */
+      margin: 0 auto;                      /* Center it */
+      padding: 2rem;                       /* Space inside */
+      border: 1px solid #0f0;              /* Green border */
+      border-radius: 8px;                  /* Rounded corners */
+      background: #111a;                  /* Slightly lighter dark */
     }
 
+    /* Labels above the text boxes */
     label {
-      display: block;
-      margin: 1rem 0 0.5rem 0;
-      font-weight: bold;
+      display: block;                      /* One per line */
+      margin: 1rem 0 0.5rem 0;             /* Space around */
+      font-weight: bold;                   /* Bold text */
     }
 
+    /* The text input boxes */
     input {
-      padding: 0.5rem;
-      font-size: 1rem;
-      width: 100%;
-      background: #222;
-      color: #0f0;
-      border: 1px solid #0f0;
-      border-radius: 4px;
+      padding: 0.5rem;                     /* Space inside */
+      font-size: 1rem;                     /* Readable size */
+      width: 100%;                         /* Full width */
+      background: #222;                    /* Dark box */
+      color: #0f0;                         /* Green text */
+      border: 1px solid #0f0;              /* Green border */
+      border-radius: 4px;                  /* Rounded */
     }
 
+    /* The big Start button */
     button {
-      padding: 1rem 2rem;
-      font-size: 1.2rem;
-      margin-top: 1rem;
-      background: #222;
-      color: #0f0;
-      border: 1px solid #0f0;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: 0.2s all;
+      padding: 1rem 2rem;                  /* Big and comfy */
+      font-size: 1.2rem;                   /* Large text */
+      margin-top: 1rem;                    /* Space above */
+      background: #222;                    /* Dark background */
+      color: #0f0;                         /* Green text */
+      border: 1px solid #0f0;              /* Green border */
+      border-radius: 6px;                  /* Rounded */
+      cursor: pointer;                     /* Hand icon on hover */
+      transition: 0.2s all;                /* Smooth hover effect */
     }
 
+    /* When you hover over the button (and it's not disabled) */
     button:hover:not(:disabled) {
-      background: #0f0;
-      color: #111;
+      background: #0f0;                    /* Green background */
+      color: #111;                         /* Dark text */
     }
 
+    /* When the button is disabled (can't click) */
     button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+      opacity: 0.5;                        /* Faded */
+      cursor: not-allowed;                 /* "No" icon */
     }
 
+    /* The status bar below the button */
     .status {
-      font-weight: bold;
-      margin: 1rem 0;
-      padding: 0.5rem;
-      border-radius: 4px;
-      text-align: center;
+      font-weight: bold;                   /* Bold text */
+      margin: 1rem 0;                      /* Space around */
+      padding: 0.5rem;                     /* Space inside */
+      border-radius: 4px;                  /* Rounded */
+      text-align: center;                  /* Centered text */
     }
 
-    .status.ready { color: #0f0; }
-    .status.running { color: #ff0; }
-    .status.complete { color: #0ff; }
-    .status.error { color: #f00; }
+    /* Different colors for different statuses */
+    .status.ready    { color: #0f0; }      /* Green = ready */
+    .status.running  { color: #ff0; }      /* Yellow = working */
+    .status.complete { color: #0ff; }      /* Cyan = done */
+    .status.error    { color: #f00; }      /* Red = error */
 
+    /* The big text box that shows updates */
     pre {
-      background: #222;
-      padding: 1rem;
-      border-radius: 8px;
-      overflow: auto;
-      white-space: pre-wrap;
-      max-height: 50vh;
-      font-family: monospace;
+      background: #222;                    /* Dark background */
+      padding: 1rem;                       /* Space inside */
+      border-radius: 8px;                  /* Rounded */
+      overflow: auto;                      /* Scroll if too long */
+      white-space: pre-wrap;               /* Wrap long lines */
+      max-height: 50vh;                    /* Max height = half screen */
+      font-family: monospace;              /* Code font */
     }
   </style>
 </head>
 <body>
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <!-- THE DASHBOARD — What you see on screen -->
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  
+  <!-- Big glowing title -->
   <h1>Digger Dashboard</h1>
+
+  <!-- The control panel (centered box) -->
   <div id="container">
+    
+    <!-- Input for robot name -->
     <label for="digger_id">Digger ID:</label>
     <input id="digger_id" value="dig-jon-ai-001">
 
+    <!-- Input for job number -->
     <label for="contract_id">Contract ID:</label>
     <input id="contract_id" value="contract-001">
 
+    <!-- The big green Start button -->
     <button id="startBtn">Start Contract</button>
 
+    <!-- Status bar (changes color) -->
     <div id="status" class="status ready">Ready</div>
+
+    <!-- Big text area for live updates -->
     <pre id="output">Waiting for action...</pre>
   </div>
 
+  <!-- This loads the brain of the app (main.js) -->
   <script type="module" src="main.js"></script>
 </body>
 </html>

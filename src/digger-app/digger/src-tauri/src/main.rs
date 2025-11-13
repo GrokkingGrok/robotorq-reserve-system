@@ -1,106 +1,140 @@
+// This tells Windows to hide the black console window when running the app
+// (Only works when we're not in debug mode)
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
-mod digger;
-mod ore_storage;
-mod contracts;
-mod types;
+// These are like "import" statements — they bring in other parts of our code
+mod digger;        // Controls the robots (Diggers)
+mod ore_storage;   // Stores the digital gold (Ore) the robots make
+mod contracts;     // Manages the job agreements (Contracts)
+mod types;         // Defines the shapes of our data (like blueprints)
 
-use digger::DiggerManager;
-use contracts::ContractManager;
-use ore_storage::OreStorage;
+// We use these tools to manage our robots, jobs, and treasure
+use digger::DiggerManager;        // The boss of all robots
+use contracts::ContractManager;   // The boss of all job contracts
+use ore_storage::OreStorage;      // The vault where Ore is kept
 
-/// Start a contract job
+/// This is like the "Start Job" button in the app
+/// It tells a robot to begin working on a contract
 #[tauri::command]
 fn start_contract(digger_id: String, contract_id: String, app: tauri::AppHandle) -> Result<String, String> {
-    println!("🔹 start_contract called with digger_id={} contract_id={}", digger_id, contract_id);
+    // Print a message so we can see what's happening
+    println!("Start button pressed! Robot: {}, Job: {}", digger_id, contract_id);
 
-    let manager = DiggerManager::global();
-    let contract_mgr = ContractManager::global();
-    let ore_store = OreStorage::global();
+    // Get the big bosses (managers) that control everything
+    let manager = DiggerManager::global();        // Robot boss
+    let contract_mgr = ContractManager::global(); // Job boss
+    let ore_store = OreStorage::global();         // Treasure vault
 
+    // Lock the robot boss so we can look inside safely
     let mut manager_lock = manager.lock().unwrap();
+    // Find the robot by its name
     let manager_ref = match manager_lock.get_digger_mut(&digger_id) {
-        Some(d) => d,
+        Some(d) => d,  // Found it!
         None => {
-            println!("❌ Digger {} not found", digger_id);
-            return Err(format!("Digger {} not found", digger_id));
+            // Robot doesn't exist
+            println!("Robot {} not found!", digger_id);
+            return Err(format!("Robot {} not found", digger_id));
         }
     };
 
+    // Lock the job boss to check the contract
     let contract = {
         let contract_mgr_lock = contract_mgr.lock().unwrap();
         match contract_mgr_lock.get_contract(&contract_id) {
-            Some(c) => c,
+            Some(c) => c,  // Job exists!
             None => {
-                println!("❌ Contract {} not found", contract_id);
-                return Err(format!("Contract {} not found", contract_id));
+                // Job doesn't exist
+                println!("Job {} not found!", contract_id);
+                return Err(format!("Job {} not found", contract_id));
             }
         }
     };
 
+    // Make sure the job is allowed to start
     if !contract.authorized {
-        println!("⚠️ Contract {} is not authorized yet", contract_id);
-        return Err("Contract not authorized yet".into());
+        println!("Job {} is not approved yet!", contract_id);
+        return Err("Job not approved yet".into());
     }
 
-    let job_id = format!("{}-{}", digger_id, contract_id); // create a unique job id
-    println!("✅ Starting contract {} on digger {} as job_id {}", contract_id, digger_id, job_id);
+    // Create a unique name for this work session
+    let job_id = format!("{}-{}", digger_id, contract_id);
+    println!("Starting job {} with robot {} → Session ID: {}", contract_id, digger_id, job_id);
 
-    // Pass AppHandle and job_id into start_contract
+    // Tell the robot to start working!
+    // We give it the job details, treasure vault, app handle, and session ID
     manager_ref.start_contract(contract, ore_store, app.clone(), job_id);
 
-    Ok(format!("Digger_{}_started_contract_{}", digger_id, contract_id))
+    // Tell the app everything is good
+    Ok(format!("Robot_{}_started_job_{}", digger_id, contract_id))
 }
 
-
+/// This is like the "Show All Robots" button
+/// It lists every robot in the system
 #[tauri::command]
 fn list_diggers() -> Vec<String> {
-    let mgr = DiggerManager::global();
-    let lock = mgr.lock().unwrap();
-    lock.list_diggers()
+    let mgr = DiggerManager::global();     // Get robot boss
+    let lock = mgr.lock().unwrap();        // Open the robot list
+    lock.list_diggers()                    // Return all robot names
 }
 
+/// This is like the "Show All Jobs" button
+/// It lists every job contract in the system
 #[tauri::command]
 fn list_contracts() -> Vec<String> {
-    let mgr = ContractManager::global();
-    let lock = mgr.lock().unwrap();
-    lock.list_contracts()
+    let mgr = ContractManager::global();   // Get job boss
+    let lock = mgr.lock().unwrap();        // Open the job list
+    lock.list_contracts()                  // Return all job IDs
 }
 
+/// This is the **main function** — where the program starts
 fn main() {
+    // Turn on helpful messages in the console
     env_logger::init();
 
-    // ---- Mock data bootstrapping ----
+    // ──────────────────────────────
+    // FAKE DATA FOR TESTING
+    // (Like setting up a demo world)
+    // ──────────────────────────────
+
     {
-        let diggers = DiggerManager::global();
-        let mut d = diggers.lock().unwrap();
+        // Add a robot to the system
+        let diggers = DiggerManager::global();  // Robot boss
+        let mut d = diggers.lock().unwrap();    // Open robot storage
         d.add_digger(digger::Digger {
-            id: "dig-jon-ai-001".to_string(),
-            power_kw: 0.25,
-            max_token_throughput: 12,
-            current_contract: None,
+            id: "dig-jon-ai-001".to_string(),   // Robot name
+            power_kw: 0.25,                     // Uses 250 watts
+            max_token_throughput: 12,           // Can make 12 coins/sec
+            current_contract: None,             // Not working yet
         });
     }
 
     {
-        let contracts = ContractManager::global();
-        let mut c = contracts.lock().unwrap();
+        // Add a job contract to the system
+        let contracts = ContractManager::global();  // Job boss
+        let mut c = contracts.lock().unwrap();      // Open job storage
         c.add_contract(types::Contract {
-            id: "contract-001".to_string(),
-            authorized: true,
-            torq: 5,
-            max_token_throughput: 12,
-            interval_seconds: 5,
-            total_tokens: 0,
+            id: "contract-001".to_string(),         // Job number
+            authorized: true,                       // Approved to start
+            torq: 5,                                // Work is worth 5× normal
+            max_token_throughput: 12,               // Robot can do 12/sec
+            interval_seconds: 5,                    // Send update every 5 sec
+            total_tokens: 0,                        // No coins earned yet
         });
     }
+
+    // ──────────────────────────────
+    // START THE APP
+    // ──────────────────────────────
 
     tauri::Builder::default()
+        // Connect the buttons to the functions
         .invoke_handler(tauri::generate_handler![
-            start_contract,
-            list_diggers,
-            list_contracts
+            start_contract,    // "Start Job" button
+            list_diggers,      // "Show Robots" button
+            list_contracts     // "Show Jobs" button
         ])
+        // Launch the app window
         .run(tauri::generate_context!())
-        .expect("error while running Tauri application");
+        // Stop if something goes wrong
+        .expect("Error: App failed to start");
 }
