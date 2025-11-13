@@ -7,7 +7,6 @@ services:
   # NATS (Messaging Broker)
   # -----------------------------
   nats:
-    image: nats:alpine3.20
     build:
       context: .
       dockerfile: ./nats/Dockerfile.nats.cli
@@ -21,7 +20,7 @@ services:
     networks:
       - torqnet
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz", "server", "nats", "ping"]
+      test: ["CMD", "wget", "-qO-", "server", "nats", "ping"]
       interval: 5s
       timeout: 3s
       retries: 3
