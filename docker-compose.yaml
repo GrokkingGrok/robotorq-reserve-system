@@ -20,7 +20,7 @@ services:
     networks:
       - torqnet
     healthcheck:
-      test: ["CMD", "nats", "server", "ping"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
       interval: 5s
       timeout: 3s
       retries: 3
