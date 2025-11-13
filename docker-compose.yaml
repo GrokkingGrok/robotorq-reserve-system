@@ -20,7 +20,7 @@ services:
     networks:
       - torqnet
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "server", "nats", "ping"]
+      test: ["CMD", "server", "nats", "ping"]
       interval: 5s
       timeout: 3s
       retries: 3
