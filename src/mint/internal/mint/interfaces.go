@@ -5,7 +5,26 @@ package mint
 
 import (
 	"context"
+	"errors"
 	"time"
+)
+
+// ─────────────────────────────────────────────────────────────
+// Common Errors
+// ─────────────────────────────────────────────────────────────
+
+var (
+	// ErrBufferFull indicates the ingot buffer is at capacity.
+	ErrBufferFull = errors.New("ingot buffer is full")
+
+	// ErrBufferEmpty indicates no ingots available in buffer.
+	ErrBufferEmpty = errors.New("ingot buffer is empty")
+
+	// ErrInvalidIngot indicates ingot validation failed.
+	ErrInvalidIngot = errors.New("invalid ingot")
+
+	// ErrNatsDisconnected indicates NATS connection is lost.
+	ErrNatsDisconnected = errors.New("nats connection lost")
 )
 
 // ─────────────────────────────────────────────────────────────
@@ -148,9 +167,9 @@ type DistoDamClient interface {
 //   - Metadata for traceability (ContractID, DiggerID, Timestamp, Hash)
 type TokenTorqIngot struct {
 	// Core values
-	JouleTorq float64 `json:"joule"`      // Always 3600.0 (1 kWh of work)
-	RoboTorq  float64 `json:"robo"`       // Robot stake paid for this work
-	Price     float64 `json:"price"`      // Sale value in USD (for accounting)
+	JouleTorq float64 `json:"joule"` // Always 3600.0 (1 kWh of work)
+	RoboTorq  float64 `json:"robo"`  // Robot stake paid for this work
+	Price     float64 `json:"price"` // Sale value in USD (for accounting)
 
 	// Metadata for traceability and merkle leaves
 	ContractID string    `json:"contract_id"` // BRLA contract identifier
@@ -176,9 +195,9 @@ type MintEvent struct {
 	BatchHash string `json:"batch_hash"` // SHA256 of batch data (future: Merkle root)
 
 	// Economic data
-	TotalRoboTorq   float64 `json:"total_robo"`    // Sum from all ingots
-	IngotsProcessed int     `json:"ingots_count"`  // Batch size (usually 1000)
-	SaleValueUSD    float64 `json:"sale_value"`    // Sum of prices (accounting)
+	TotalRoboTorq   float64 `json:"total_robo"`   // Sum from all ingots
+	IngotsProcessed int     `json:"ingots_count"` // Batch size (usually 1000)
+	SaleValueUSD    float64 `json:"sale_value"`   // Sum of prices (accounting)
 
 	// Metadata
 	BatchID   string    `json:"batch_id"`  // Unique identifier
