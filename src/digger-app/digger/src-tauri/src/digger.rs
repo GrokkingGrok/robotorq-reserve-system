@@ -2,6 +2,7 @@
 
 use crate::types::{Contract, JouleTorqOre};  // Import our data blueprints
 use crate::ore_storage::OreStorage;          // Import the treasure vault
+use crate::refinery_client;                  // Import Refinery HTTP client
 use std::sync::{Arc, Mutex};                 // Tools to safely share data
 use tokio::time::{sleep, Duration};          // Tool to wait between steps
 use std::time::{SystemTime, UNIX_EPOCH};     // Tool to get the current time
@@ -97,34 +98,35 @@ impl Digger {
                 let joules = (power_kw * contract.interval_seconds as f64 * 1000.0) as u64;
 
                 // ────────────────────────────────────────────────────────────────
-                // TODO #6: Calculate and Attach RoboStake to Ore
+                // TODO #6: Calculate and Attach RoboStake to Ore ✅ IMPLEMENTED
                 // ────────────────────────────────────────────────────────────────
-                // CURRENT: Ore has no robo_stake_amount (economics lost!)
-                // NEEDED: Calculate fair share of total stake for this milestone
-                //
-                // IMPLEMENTATION:
-                // 1. Get contract.robo_stake_total (from TODO #3)
-                // 2. Calculate total_milestones = (duration_hours × 3600) / interval_seconds
-                // 3. Calculate robo_per_milestone = robo_stake_total / total_milestones
-                // 4. Attach to ore: ore.robo_stake_amount = robo_per_milestone
-                // 5. Sign ore using crypto::sign_ore() (TODO #2)
-                // 6. Call refinery_client::send_ore_to_refinery(&ore) (TODO #4)
-                // 7. Update milestone status based on result (TODO #8)
-                //
-                // EXAMPLE:
-                // - robo_stake_total = 3000 RT (from /stake)
-                // - duration_hours = 20.0
-                // - interval_seconds = 1
-                // - total_milestones = (20 × 3600) / 1 = 72000
-                // - robo_per_milestone = 3000 / 72000 = 0.04166... RT
+                // Calculate fair share of total RoboStake for this milestone
+                // Formula: robo_per_milestone = robo_stake_total / total_milestones
+                //   where total_milestones = (duration_hours × 3600) / interval_seconds
                 //
                 // ECONOMICS:
                 // - Each milestone carries its fair share of total stake
-                // - RoboStake travels with ore through pipeline:
-                //   Digger → Refinery → TokenTorqIngot → Mint → Ledger
-                // - Mint aggregates RoboStake amounts in Merkle tree
+                // - RoboStake travels with ore: Digger → Refinery → Mint → Ledger
+                // - Mint aggregates amounts in Merkle tree
                 // - DistoDam receives total RT when contract completes
                 // ────────────────────────────────────────────────────────────────
+
+                // Calculate RoboStake amount for this milestone
+                let robo_stake_amount = if contract.robo_stake_total > 0.0 && contract.duration_hours > 0.0 {
+                    // Total milestones = (hours × 3600 seconds/hour) / interval_seconds
+                    let total_milestones = (contract.duration_hours * 3600.0) / contract.interval_seconds as f64;
+                    // Fair share per milestone
+                    let robo_per_milestone = contract.robo_stake_total / total_milestones;
+                    
+                    println!(
+                        "💰 Milestone economics: {} RT total / {:.0} milestones = {:.6} RT/milestone",
+                        contract.robo_stake_total, total_milestones, robo_per_milestone
+                    );
+                    
+                    robo_per_milestone
+                } else {
+                    0.0 // No stake received yet (contract not funded)
+                };
 
                 // Create a **report card** of this work
                 let ore = JouleTorqOre {
@@ -135,18 +137,37 @@ impl Digger {
                     milestone_index,
                     timestamp: start_time,
                     proof_of_work: proof_photo,
-                    robo_stake_amount: 0.0,  // TODO #6: Calculate from contract.robo_stake_total / total_milestones
-                    signature: None,          // TODO #2: Sign with crypto::sign_ore() before sending to Refinery
+                    robo_stake_amount,  // ✅ Calculated above
+                    signature: None,    // TODO #2: Sign with crypto::sign_ore() before sending to Refinery
                 };
 
                 // Print a message so we can see progress
                 println!(
-                    "Digger {} step {}: {} tokens, {} joules",
-                    digger_id, milestone_index, tokens, joules
+                    "⚙️  Digger {} milestone {}: {} tokens, {} joules, {:.6} RT",
+                    digger_id, milestone_index, tokens, joules, robo_stake_amount
                 );
 
                 // Save the report in the treasure vault
                 ore_store.lock().unwrap().add_ore(ore.clone());
+
+                // ────────────────────────────────────────────────────────────────
+                // Send Ore to Refinery ✅ IMPLEMENTED
+                // ────────────────────────────────────────────────────────────────
+                // Send the ore batch to Refinery for processing into ingots
+                // Refinery will validate signature (TODO #2) and create TokenTorqIngot
+                // ────────────────────────────────────────────────────────────────
+                
+                match refinery_client::send_ore_to_refinery(&ore) {
+                    Ok(()) => {
+                        println!("✅ Refinery accepted milestone {}", milestone_index);
+                        // TODO #8: Mark milestone as Confirmed
+                    }
+                    Err(e) => {
+                        println!("⚠️  Failed to send milestone {} to Refinery: {}", milestone_index, e);
+                        // TODO #8: Mark milestone as Failed(error_message)
+                        // For now, continue despite error (ore is stored locally)
+                    }
+                }
 
                 // ────────────────────────────────────────────────────────────────
                 // TODO #8: Track Milestone Submission Status

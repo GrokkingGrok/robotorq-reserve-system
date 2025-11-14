@@ -7,6 +7,8 @@ mod digger;        // Controls the robots (Diggers)
 mod ore_storage;   // Stores the digital gold (Ore) the robots make
 mod types;         // Defines the shapes of our data (like blueprints)
 mod http_api;      // HTTP API for external services to query/control Digger
+mod crypto;        // Cryptographic signatures (TODO #2)
+mod refinery_client; // HTTP client to send ore to Refinery (TODO #4)
 
 // We use these tools to manage our robots, jobs, and treasure
 use digger::DiggerManager;        // The boss of all robots
