@@ -6,8 +6,11 @@
 // GET  /health       → Health check
 
 use crate::digger::DiggerManager;
+use crate::types::Contract;
 use serde::{Deserialize, Serialize};
 use tiny_http::{Response, Server};
+#[allow(unused_imports)] // False positive: Read trait used by request.as_reader().read_to_string()
+use std::io::Read;
 
 /// Response for /robot/status
 #[derive(Serialize)]
@@ -22,7 +25,7 @@ struct RobotStatusResponse {
 struct StakeRequest {
     contract_id: String,
     amount_rt: f64,
-    builder: String,
+    // Note: Trust may send 'builder' field, but we don't use it yet
 }
 
 /// Response for /stake
@@ -108,13 +111,66 @@ fn handle_stake(mut request: tiny_http::Request) {
 
     println!("💰 Stake received: {} RT for contract {}", stake_req.amount_rt, stake_req.contract_id);
 
-    // TODO: Actually process the stake (store it, trigger work, etc.)
-    // For now, just acknowledge receipt
+    // Process the stake and calculate contract duration
+    let digger_manager = DiggerManager::global();
+    
+    // Get digger and update its contract
+    let mut digger_lock = digger_manager.lock().unwrap();
+    let digger = match digger_lock.get_digger_mut("dig-jon-ai-001") {
+        Some(d) => d,
+        None => {
+            let response = Response::from_string("Digger not found")
+                .with_status_code(404);
+            let _ = request.respond(response);
+            return;
+        }
+    };
+    
+    let power_kw = digger.power_kw;
+    let max_token_throughput = digger.max_token_throughput;
+    
+    // Calculate contract duration
+    // duration_hours = amount_rt / (power_kw × max_token_throughput)
+    let duration_hours = stake_req.amount_rt / (power_kw * max_token_throughput as f64);
+    
+    println!(
+        "📊 Calculated duration: {:.2} hours (stake={} RT, power={} kW, throughput={} tokens/sec)",
+        duration_hours, stake_req.amount_rt, power_kw, max_token_throughput
+    );
+    
+    // Get or create contract and update with stake info
+    let mut contract = digger.current_contract
+        .clone()
+        .unwrap_or_else(|| {
+            // Create new contract if digger doesn't have one
+            Contract {
+                id: stake_req.contract_id.clone(),
+                authorized: true,
+                torq: 1, // Default multiplier
+                max_token_throughput,
+                interval_seconds: 1, // Default: 1 second per milestone
+                total_tokens: 0,
+                robo_stake_total: 0.0,
+                duration_hours: 0.0,
+            }
+        });
+    
+    // Update contract with stake and duration
+    contract.id = stake_req.contract_id.clone(); // Update contract ID to match stake request
+    contract.robo_stake_total = stake_req.amount_rt;
+    contract.duration_hours = duration_hours;
+    
+    // Store updated contract in the digger
+    digger.current_contract = Some(contract);
+    drop(digger_lock); // Release lock
 
     let resp = StakeResponse {
         status: "accepted".to_string(),
         contract_id: stake_req.contract_id.clone(),
-        message: format!("Received {} RT for contract", stake_req.amount_rt),
+        message: format!(
+            "Received {} RT for contract, duration: {:.2} hours",
+            stake_req.amount_rt, duration_hours
+        ),
     };
 
     let json = serde_json::to_string(&resp).unwrap();

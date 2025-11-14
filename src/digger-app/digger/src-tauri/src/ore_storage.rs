@@ -35,6 +35,7 @@ impl OreStorage {
 
     /// Get a **copy of every Ore** in the vault
     /// Like making a photocopy of the entire notebook
+    #[allow(dead_code)] // Future use: dashboard ore history display
     pub fn get_all(&self) -> Vec<JouleTorqOre> {
         self.ores.clone()  // Return a fresh copy
     }

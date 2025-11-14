@@ -108,6 +108,111 @@
       max-height: 50vh;                    /* Max height = half screen */
       font-family: monospace;              /* Code font */
     }
+
+    /* ──────────────────────────────────────────────────────────────── */
+    /* TODO #10: Dashboard Panel Styles ✅ */
+    /* ──────────────────────────────────────────────────────────────── */
+    
+    .dashboard-panel {
+      margin: 1rem 0;
+      padding: 1rem;
+      border: 1px solid #0f0;
+      border-radius: 8px;
+      background: #222a;
+    }
+
+    .dashboard-panel h3 {
+      margin: 0 0 1rem 0;
+      color: #0ff;
+      font-size: 1.1rem;
+      text-shadow: 0 0 5px #0ff;
+    }
+
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      margin: 0.5rem 0;
+      padding: 0.25rem 0;
+    }
+
+    .metric .label {
+      color: #888;
+      font-size: 0.9rem;
+    }
+
+    .metric .value {
+      color: #0f0;
+      font-weight: bold;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 20px;
+      background: #333;
+      border: 1px solid #0f0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 1rem 0;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #0f0, #0ff);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    .health-indicator {
+      font-size: 1.2rem;
+      margin-right: 0.5rem;
+    }
+
+    .health-indicator.healthy {
+      color: #0f0;
+    }
+
+    .health-indicator.unhealthy {
+      color: #f00;
+    }
+
+    .controls-panel {
+      margin: 1rem 0;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .controls-panel button {
+      flex: 1;
+      min-width: 120px;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      margin: 0;
+    }
+
+    .controls-panel button.pause {
+      border-color: #ff0;
+      color: #ff0;
+    }
+
+    .controls-panel button.pause:hover:not(:disabled) {
+      background: #ff0;
+      color: #111;
+    }
+
+    .controls-panel button.stop {
+      border-color: #f00;
+      color: #f00;
+    }
+
+    .controls-panel button.stop:hover:not(:disabled) {
+      background: #f00;
+      color: #111;
+    }
+
+    .hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -134,6 +239,86 @@
 
     <!-- Status bar (changes color) -->
     <div id="status" class="status ready">Ready</div>
+
+    <!-- ──────────────────────────────────────────────────────────────── -->
+    <!-- TODO #10: Contract Control Buttons ✅ IMPLEMENTED -->
+    <!-- ──────────────────────────────────────────────────────────────── -->
+    <div id="controls" class="controls-panel hidden">
+      <button id="pauseBtn" class="pause">⏸️ Pause</button>
+      <button id="resumeBtn" class="pause hidden">▶️ Resume</button>
+      <button id="stopBtn" class="stop">🛑 Stop</button>
+    </div>
+
+    <!-- ──────────────────────────────────────────────────────────────── -->
+    <!-- TODO #10: Economics Panel ✅ IMPLEMENTED -->
+    <!-- ──────────────────────────────────────────────────────────────── -->
+    <div id="economics" class="dashboard-panel hidden">
+      <h3>💰 Economics</h3>
+      <div class="metric">
+        <span class="label">Tokens Generated:</span>
+        <span class="value" id="total-tokens">0</span>
+      </div>
+      <div class="metric">
+        <span class="label">Energy Consumed:</span>
+        <span class="value" id="total-joules">0 J</span>
+      </div>
+      <div class="metric">
+        <span class="label">RoboStake Received:</span>
+        <span class="value" id="robostake-received">0 RT</span>
+      </div>
+      <div class="metric">
+        <span class="label">RoboStake Sent:</span>
+        <span class="value" id="robostake-sent">0 RT</span>
+      </div>
+    </div>
+
+    <!-- ──────────────────────────────────────────────────────────────── -->
+    <!-- TODO #10: Progress Panel ✅ IMPLEMENTED -->
+    <!-- ──────────────────────────────────────────────────────────────── -->
+    <div id="progress" class="dashboard-panel hidden">
+      <h3>⚙️ Progress</h3>
+      <div class="progress-bar-container">
+        <div id="progress-bar" class="progress-bar"></div>
+      </div>
+      <div class="metric">
+        <span class="label">Milestones:</span>
+        <span class="value" id="milestones">0 / 0</span>
+      </div>
+      <div class="metric">
+        <span class="label">Percent Complete:</span>
+        <span class="value" id="percent-complete">0%</span>
+      </div>
+      <div class="metric">
+        <span class="label">Time Elapsed:</span>
+        <span class="value" id="time-elapsed">0h 0m 0s</span>
+      </div>
+      <div class="metric">
+        <span class="label">Time Remaining:</span>
+        <span class="value" id="time-remaining">--h --m --s</span>
+      </div>
+    </div>
+
+    <!-- ──────────────────────────────────────────────────────────────── -->
+    <!-- TODO #10: Health Panel ✅ IMPLEMENTED -->
+    <!-- ──────────────────────────────────────────────────────────────── -->
+    <div id="health" class="dashboard-panel hidden">
+      <h3>🔍 Status</h3>
+      <div class="metric">
+        <span class="label">Refinery Connection:</span>
+        <span class="value">
+          <span id="refinery-health" class="health-indicator">●</span>
+          <span id="refinery-status">Unknown</span>
+        </span>
+      </div>
+      <div class="metric">
+        <span class="label">Milestones Confirmed:</span>
+        <span class="value" id="milestones-confirmed">0</span>
+      </div>
+      <div class="metric">
+        <span class="label">Milestones Failed:</span>
+        <span class="value" id="milestones-failed">0</span>
+      </div>
+    </div>
 
     <!-- Big text area for live updates -->
     <pre id="output">Waiting for action...</pre>
