@@ -1,3 +1,10 @@
+// Package appraiser evaluates opportunities and creates contracts.
+//
+// It applies ROI-based filtering to determine which opportunities should
+// be approved for contract creation. Opportunities with ROI >= 10% (MinROI)
+// are automatically approved and converted into contracts for the pipeline.
+//
+// The appraiser runs concurrent workers to process opportunities in parallel.
 package appraiser
 
 import (

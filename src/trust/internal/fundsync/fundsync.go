@@ -1,3 +1,10 @@
+// Package fundsync bridges NATS and the Executor.
+//
+// It subscribes to the 'contracts.funded' topic to receive contracts
+// that DistoDam has successfully funded, then forwards them to the
+// Executor for execution via the Digger HTTP API.
+//
+// This decouples the NATS messaging layer from the execution logic.
 package fundsync
 
 import (

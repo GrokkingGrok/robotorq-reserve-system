@@ -1,3 +1,10 @@
+// Package ticker auto-generates test opportunities for development and testing.
+//
+// It creates synthetic opportunities every second with incrementing ROI values
+// to simulate a continuous stream of work. This allows testing the complete
+// pipeline without external data sources.
+//
+// In production, this would be replaced by real opportunity discovery mechanisms.
 package ticker
 
 import (

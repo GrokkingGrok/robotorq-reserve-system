@@ -1,3 +1,11 @@
+// Package executor communicates with Digger HTTP API to execute funded contracts.
+//
+// For each funded contract, it:
+//  1. Queries GET /robot/status to verify Digger availability
+//  2. Sends POST /stake with RoboStake payment
+//  3. Updates contract status to "executing"
+//
+// The executor runs a worker pool to handle multiple contracts concurrently.
 package executor
 
 import (
@@ -51,7 +59,9 @@ func Start(ctx context.Context, in <-chan *contract.Contract, out chan<- *contra
 						logger.Error("Failed to execute contract",
 							zap.String("contract_id", c.ID),
 							zap.Error(err))
-						// TODO: Consider retry logic or dead-letter queue
+						// TODO(enhancement): Add retry logic with exponential backoff
+						// and/or dead-letter queue for persistent failures. Current
+						// behavior logs and drops failed executions.
 						continue
 					}
 

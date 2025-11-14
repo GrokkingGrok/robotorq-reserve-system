@@ -1,3 +1,14 @@
+// Package trustsvc orchestrates the complete Trust pipeline.
+//
+// It wires together all components of the decentralized contract flow:
+//   - Ticker: Auto-generates test opportunities
+//   - HTTP API: Receives external opportunities via POST /opportunities
+//   - Appraiser: Evaluates ROI and creates contracts
+//   - NATS Publisher: Sends contracts.pending to DistoDam for funding
+//   - FundSync: Receives contracts.funded from DistoDam
+//   - Executor: Executes funded contracts via Digger HTTP API
+//
+// The service manages all channels, goroutines, and graceful shutdown.
 package trustsvc
 
 import (
