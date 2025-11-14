@@ -154,7 +154,7 @@ func TestValidateIngot_EmptyContractID(t *testing.T) {
 	ingot.ContractID = "" // Empty
 	err := r.validateIngot(ingot)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "ContractID")
+	assert.Contains(t, err.Error(), "contract ID")
 }
 
 func TestValidateIngot_EmptyDiggerID(t *testing.T) {
@@ -165,7 +165,7 @@ func TestValidateIngot_EmptyDiggerID(t *testing.T) {
 	ingot.DiggerID = "" // Empty
 	err := r.validateIngot(ingot)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "DiggerID")
+	assert.Contains(t, err.Error(), "digger ID")
 }
 
 func TestValidateIngot_EmptyHash(t *testing.T) {
@@ -176,7 +176,7 @@ func TestValidateIngot_EmptyHash(t *testing.T) {
 	ingot.Hash = "" // Empty
 	err := r.validateIngot(ingot)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Hash")
+	assert.Contains(t, err.Error(), "hash")
 }
 
 func TestValidateIngot_ZeroTimestamp(t *testing.T) {
@@ -187,7 +187,7 @@ func TestValidateIngot_ZeroTimestamp(t *testing.T) {
 	ingot.Timestamp = time.Time{} // Zero time
 	err := r.validateIngot(ingot)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Timestamp")
+	assert.Contains(t, err.Error(), "timestamp")
 }
 
 // ─────────────────────────────────────────────────────────────

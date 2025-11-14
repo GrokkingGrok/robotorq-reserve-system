@@ -238,20 +238,20 @@ func (r *ingotReceiver) validateIngot(ingot *TokenTorqIngot) error {
 
 	// Validate metadata fields (must not be empty)
 	if ingot.ContractID == "" {
-		return fmt.Errorf("ContractID cannot be empty")
+		return fmt.Errorf("contract ID cannot be empty")
 	}
 
 	if ingot.DiggerID == "" {
-		return fmt.Errorf("DiggerID cannot be empty")
+		return fmt.Errorf("digger ID cannot be empty")
 	}
 
 	if ingot.Hash == "" {
-		return fmt.Errorf("Hash cannot be empty")
+		return fmt.Errorf("hash cannot be empty")
 	}
 
 	// Validate timestamp (must not be zero)
 	if ingot.Timestamp.IsZero() {
-		return fmt.Errorf("Timestamp cannot be zero")
+		return fmt.Errorf("timestamp cannot be zero")
 	}
 
 	return nil
