@@ -156,6 +156,7 @@ fn handle_stake(mut request: tiny_http::Request) {
         });
     
     // Update contract with stake and duration
+    contract.id = stake_req.contract_id.clone(); // Update contract ID to match stake request
     contract.robo_stake_total = stake_req.amount_rt;
     contract.duration_hours = duration_hours;
     

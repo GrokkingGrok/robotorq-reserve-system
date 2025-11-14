@@ -271,7 +271,7 @@ impl Digger {
                 );
                 
                 // Send the ore batch to Refinery for processing
-                let refinery_success = match refinery_client::send_ore_to_refinery(&ore) {
+                let refinery_success = match refinery_client::send_ore_to_refinery(&ore).await {
                     Ok(()) => {
                         println!("✅ Refinery accepted milestone {}", milestone_index);
                         

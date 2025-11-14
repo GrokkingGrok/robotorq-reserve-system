@@ -154,16 +154,16 @@ struct RefineryErrorResponse {
 /// # Example
 /// ```rust,ignore
 /// let ore = JouleTorqOre { /* ... */ };
-/// match send_ore_to_refinery(&ore) {
+/// match send_ore_to_refinery(&ore).await {
 ///     Ok(()) => println!("Ore accepted by Refinery!"),
 ///     Err(RefineryError::QueueFull) => println!("Refinery busy, retry later"),
 ///     Err(e) => println!("Failed to send ore: {}", e),
 /// }
 /// ```
-pub fn send_ore_to_refinery(ore: &JouleTorqOre) -> Result<(), RefineryError> {
+pub async fn send_ore_to_refinery(ore: &JouleTorqOre) -> Result<(), RefineryError> {
     // Get Refinery URL from environment or use default
     let refinery_url = std::env::var("REFINERY_URL")
-        .unwrap_or_else(|_| "http://localhost:8100".to_string());
+        .unwrap_or_else(|_| "http://localhost:8081".to_string());
     
     println!(
         "📤 Sending ore to Refinery: contract={}, milestone={}, robo_stake={}, url={}",
@@ -174,7 +174,7 @@ pub fn send_ore_to_refinery(ore: &JouleTorqOre) -> Result<(), RefineryError> {
     );
 
     // Create HTTP client with timeout
-    let client = reqwest::blocking::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()
         .map_err(|e| RefineryError::NetworkError(format!("Failed to create HTTP client: {}", e)))?;
@@ -184,6 +184,7 @@ pub fn send_ore_to_refinery(ore: &JouleTorqOre) -> Result<(), RefineryError> {
         .post(format!("{}/receive-ore", refinery_url))
         .json(&ore)
         .send()
+        .await
         .map_err(|e| {
             if e.is_timeout() {
                 RefineryError::NetworkError("Request timeout".to_string())
@@ -200,6 +201,7 @@ pub fn send_ore_to_refinery(ore: &JouleTorqOre) -> Result<(), RefineryError> {
             // Success - ore accepted
             let refinery_resp: RefineryResponse = response
                 .json()
+                .await
                 .map_err(|e| RefineryError::SerializationError(e.to_string()))?;
             
             println!("✅ Refinery accepted ore: status={}", refinery_resp.status);
@@ -207,7 +209,7 @@ pub fn send_ore_to_refinery(ore: &JouleTorqOre) -> Result<(), RefineryError> {
         }
         400 => {
             // Bad request - likely invalid signature
-            match response.json::<RefineryErrorResponse>() {
+            match response.json::<RefineryErrorResponse>().await {
                 Ok(err_resp) if err_resp.error == "invalid_signature" => {
                     println!("❌ Refinery rejected ore: invalid signature");
                     Err(RefineryError::InvalidSignature)
@@ -237,6 +239,7 @@ pub fn send_ore_to_refinery(ore: &JouleTorqOre) -> Result<(), RefineryError> {
             // Other HTTP error
             let message = response
                 .text()
+                .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             
             println!("❌ Refinery HTTP error {}: {}", status, message);
