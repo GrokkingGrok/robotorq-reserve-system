@@ -35,6 +35,37 @@ pub enum MilestoneStatus {
 }
 
 // ────────────────────────────────────────────────────────────────
+// CONTRACT STATUS UPDATE (TODO #9)
+// ────────────────────────────────────────────────────────────────
+
+/// Comprehensive contract status for UI dashboard
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ContractStatusUpdate {
+    // Identity
+    pub contract_id: String,
+    pub digger_id: String,
+    
+    // Economics
+    pub total_joules: u64,
+    pub total_tokens: u64,
+    pub total_robo_stake: f64,
+    pub robo_stake_sent: f64,      // Sum of confirmed milestones
+    
+    // Progress
+    pub current_milestone: u32,
+    pub total_milestones: u32,
+    pub percent_complete: f32,
+    pub time_elapsed_secs: u64,
+    pub time_remaining_secs: u64,
+    
+    // Status
+    pub milestones_confirmed: u32,
+    pub milestones_failed: u32,
+    pub refinery_healthy: bool,    // Last send succeeded?
+    pub state: String,             // "running", "paused", "stopped", "completed"
+}
+
+// ────────────────────────────────────────────────────────────────
 // THE ROBOT (Digger)
 // ────────────────────────────────────────────────────────────────
 
@@ -103,6 +134,24 @@ impl Digger {
             // Initialize contract state as Running
             let state_manager = ContractStateManager::global();
             state_manager.lock().unwrap().set_state(contract_id_for_state.clone(), ContractControl::Running);
+
+            // ────────────────────────────────────────────────────────────────
+            // TODO #9: Emit contract_started event ✅ IMPLEMENTED
+            // ────────────────────────────────────────────────────────────────
+            let total_milestones = ((contract.duration_hours * 3600.0) / contract.interval_seconds as f64) as u32;
+            let _ = app.emit("contract_started", serde_json::json!({
+                "contract_id": contract.id,
+                "digger_id": digger_id,
+                "duration_hours": contract.duration_hours,
+                "total_milestones": total_milestones,
+                "robo_stake_total": contract.robo_stake_total,
+                "interval_seconds": contract.interval_seconds,
+            }));
+            
+            // Tracking variables for status updates
+            let mut total_joules: u64 = 0;
+            let mut total_tokens: u64 = 0;
+            let mut robo_stake_sent: f64 = 0.0;
 
             // Keep working until contract completes or is stopped
             loop {
@@ -222,7 +271,7 @@ impl Digger {
                 );
                 
                 // Send the ore batch to Refinery for processing
-                match refinery_client::send_ore_to_refinery(&ore) {
+                let refinery_success = match refinery_client::send_ore_to_refinery(&ore) {
                     Ok(()) => {
                         println!("✅ Refinery accepted milestone {}", milestone_index);
                         
@@ -233,6 +282,9 @@ impl Digger {
                             MilestoneStatus::Confirmed
                         );
                         
+                        // Update running totals
+                        robo_stake_sent += robo_stake_amount;
+                        
                         // Emit success event to UI
                         let _ = app.emit("milestone_confirmed", serde_json::json!({
                             "contract_id": contract.id,
@@ -240,6 +292,8 @@ impl Digger {
                             "tokens": tokens,
                             "robo_stake": robo_stake_amount,
                         }));
+                        
+                        true  // Success
                     }
                     Err(e) => {
                         let error_msg = format!("{}", e);
@@ -260,49 +314,69 @@ impl Digger {
                         }));
                         
                         // Continue despite error (ore is stored locally for retry)
+                        false  // Failure
                     }
-                }
+                };
+
+                // Update running totals
+                total_joules += joules;
+                total_tokens += tokens;
 
                 // ────────────────────────────────────────────────────────────────
-                // TODO #9: Emit Rich Contract Status Events
+                // TODO #9: Emit Rich Contract Status Events ✅ IMPLEMENTED
                 // ────────────────────────────────────────────────────────────────
-                // CURRENT: Only sends basic ore_update with ore data
-                // NEEDED: Send comprehensive economics and progress data to UI
-                //
-                // IMPLEMENTATION:
-                // 1. Create ContractStatusUpdate struct:
-                //    #[derive(Serialize, Clone)]
-                //    struct ContractStatusUpdate {
-                //        contract_id: String,
-                //        digger_id: String,
-                //        // Economics
-                //        total_joules: u64,
-                //        total_tokens: u64,
-                //        total_robo_stake: f64,
-                //        robo_stake_sent: f64,      // Sum of all sent milestones
-                //        // Progress
-                //        current_milestone: u32,
-                //        total_milestones: u32,
-                //        percent_complete: f32,
-                //        time_elapsed_secs: u64,
-                //        time_remaining_secs: u64,
-                //        // Status
-                //        milestones_sent: u32,
-                //        milestones_confirmed: u32,
-                //        milestones_failed: u32,
-                //        refinery_healthy: bool,    // Last send succeeded?
-                //    }
-                //
-                // 2. Calculate all fields using contract data
-                // 3. Emit "contract_status_update" event (in addition to "ore_update")
-                // 4. UI subscribes to this event for dashboard updates (TODO #10)
-                //
-                // UI DISPLAY (TODO #10):
-                // - Economics panel: Total JouleTorq, RoboStake received, RoboStake sent
-                // - Progress bar: current_milestone / total_milestones
-                // - Timer: "18.5 hours remaining"
-                // - Health indicator: Green (refinery_healthy=true), Red (false)
-                // - Milestone status: "68/100 confirmed, 2 failed"
+                // Send comprehensive progress updates to UI dashboard
+                // ────────────────────────────────────────────────────────────────
+                
+                // Calculate progress metrics
+                let time_elapsed = SystemTime::now()
+                    .duration_since(contract_start_time)
+                    .unwrap_or(Duration::from_secs(0))
+                    .as_secs();
+                
+                let time_remaining = if let Ok(remaining) = contract_end_time.duration_since(SystemTime::now()) {
+                    remaining.as_secs()
+                } else {
+                    0  // Contract is complete
+                };
+                
+                let percent_complete = if total_milestones > 0 {
+                    ((milestone_index + 1) as f32 / total_milestones as f32) * 100.0
+                } else {
+                    0.0
+                };
+                
+                // Get milestone statistics
+                let all_milestones = milestone_tracker.lock().unwrap().get_all_for_contract(&contract.id);
+                let milestones_confirmed = all_milestones.iter()
+                    .filter(|(_, s)| matches!(s, MilestoneStatus::Confirmed))
+                    .count() as u32;
+                let milestones_failed = all_milestones.iter()
+                    .filter(|(_, s)| matches!(s, MilestoneStatus::Failed(_)))
+                    .count() as u32;
+                
+                // Create comprehensive status update
+                let status_update = ContractStatusUpdate {
+                    contract_id: contract.id.clone(),
+                    digger_id: digger_id.clone(),
+                    total_joules,
+                    total_tokens,
+                    total_robo_stake: contract.robo_stake_total,
+                    robo_stake_sent,
+                    current_milestone: milestone_index,
+                    total_milestones,
+                    percent_complete,
+                    time_elapsed_secs: time_elapsed,
+                    time_remaining_secs: time_remaining,
+                    milestones_confirmed,
+                    milestones_failed,
+                    refinery_healthy: refinery_success,
+                    state: "running".to_string(),
+                };
+                
+                // Emit comprehensive status update
+                let _ = app.emit("contract_status_update", &status_update);
+
                 // ────────────────────────────────────────────────────────────────
                 if let Err(e) = app.emit("ore_update", ore.clone()) {
                     println!("Warning: Could not send update: {:?}", e);
