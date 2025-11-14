@@ -68,6 +68,66 @@ async function startContract() {
       log(`Live Update: ${JSON.stringify(event.payload, null, 2)}`);
     });
 
+    // ────────────────────────────────────────────────────────────────
+    // TODO #10: Subscribe to Contract Status Updates
+    // ────────────────────────────────────────────────────────────────
+    // CURRENT: Only listens to ore_update (raw ore data)
+    // NEEDED: Listen to contract_status_update (rich economics/progress)
+    //
+    // IMPLEMENTATION:
+    // 1. Add listener for "contract_status_update" event (from TODO #9)
+    // 2. Update dashboard elements with received data:
+    //
+    //    const unlistenStatus = await listen("contract_status_update", (event) => {
+    //      const data = event.payload;
+    //      
+    //      // Economics panel
+    //      document.getElementById("total-jouletorq").textContent = 
+    //        `${data.total_joules} J + ${data.total_tokens} tokens`;
+    //      document.getElementById("robostake-received").textContent = 
+    //        `${data.total_robo_stake.toFixed(2)} RT`;
+    //      document.getElementById("robostake-sent").textContent = 
+    //        `${data.robo_stake_sent.toFixed(2)} RT`;
+    //      
+    //      // Progress panel
+    //      const percent = (data.current_milestone / data.total_milestones) * 100;
+    //      document.getElementById("progress-bar").style.width = `${percent}%`;
+    //      document.getElementById("milestones").textContent = 
+    //        `${data.current_milestone} / ${data.total_milestones}`;
+    //      document.getElementById("time-elapsed").textContent = 
+    //        formatTime(data.time_elapsed_secs);
+    //      document.getElementById("time-remaining").textContent = 
+    //        formatTime(data.time_remaining_secs);
+    //      
+    //      // Health panel
+    //      const healthIndicator = document.getElementById("refinery-health");
+    //      if (data.refinery_healthy) {
+    //        healthIndicator.classList.add("healthy");
+    //        healthIndicator.classList.remove("unhealthy");
+    //        document.getElementById("refinery-status").textContent = "Online";
+    //      } else {
+    //        healthIndicator.classList.add("unhealthy");
+    //        healthIndicator.classList.remove("healthy");
+    //        document.getElementById("refinery-status").textContent = "Offline";
+    //      }
+    //      document.getElementById("milestones-confirmed").textContent = 
+    //        data.milestones_confirmed;
+    //      document.getElementById("milestones-failed").textContent = 
+    //        data.milestones_failed;
+    //    });
+    //
+    // 3. Add formatTime() helper function:
+    //    function formatTime(seconds) {
+    //      const hours = Math.floor(seconds / 3600);
+    //      const minutes = Math.floor((seconds % 3600) / 60);
+    //      const secs = seconds % 60;
+    //      return `${hours}h ${minutes}m ${secs}s`;
+    //    }
+    //
+    // 4. Clean up listener on completion:
+    //    unlistenStatus(); // in ore_complete handler
+    // ────────────────────────────────────────────────────────────────
+
     // Listen for **job finished** message
     const unlistenComplete = await listen(`ore_complete_${jobId}`, (event) => {
       log(`Contract ${jobId} complete!`);

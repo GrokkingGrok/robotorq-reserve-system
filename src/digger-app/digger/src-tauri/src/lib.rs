@@ -2,6 +2,12 @@
 // THIS IS THE **BRAIN** OF THE APP — Where Rust and JavaScript meet
 // ────────────────────────────────────────────────────────────────
 
+// Crypto module for post-quantum signatures (TODO #2)
+pub mod crypto;
+
+// Refinery HTTP client (TODO #4)
+pub mod refinery_client;
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 /// This is a **magic button** you can press from the screen

@@ -108,6 +108,33 @@ fn handle_stake(mut request: tiny_http::Request) {
 
     println!("💰 Stake received: {} RT for contract {}", stake_req.amount_rt, stake_req.contract_id);
 
+    // ────────────────────────────────────────────────────────────────
+    // TODO #3: Process RoboStake and Calculate Duration
+    // ────────────────────────────────────────────────────────────────
+    // CURRENT: Just acknowledge receipt, stake is LOST
+    // NEEDED: Store stake and calculate contract duration
+    //
+    // IMPLEMENTATION:
+    // 1. Get ContractManager and retrieve/create contract
+    // 2. Get DiggerManager to find digger's power_kw and max_token_throughput
+    // 3. Calculate: duration_hours = amount_rt / (power_kw × max_token_throughput)
+    // 4. Update contract with:
+    //    - robo_stake_total = stake_req.amount_rt
+    //    - duration_hours = calculated value
+    // 5. Store updated contract in ContractManager
+    //
+    // EXAMPLE CALCULATION:
+    // - amount_rt = 3000 RT
+    // - power_kw = 2.5 kW (from DiggerConfig)
+    // - max_token_throughput = 60 tokens/sec
+    // - duration_hours = 3000 / (2.5 × 60) = 20 hours
+    //
+    // INTEGRATION:
+    // - This makes the stake available to digger.rs when executing contract
+    // - digger.rs uses duration_hours for timer-based completion (TODO #7)
+    // - digger.rs calculates robo_per_milestone for each ore batch (TODO #6)
+    // ────────────────────────────────────────────────────────────────
+
     // TODO: Actually process the stake (store it, trigger work, etc.)
     // For now, just acknowledge receipt
 

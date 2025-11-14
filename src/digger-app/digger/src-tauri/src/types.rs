@@ -36,6 +36,40 @@ pub struct JouleTorqOre {
     /// Stored as a long text string (base64)
     /// Can be empty (None) if no photo
     pub proof_of_work: Option<String>, // base64 photo
+
+    // ────────────────────────────────────────────────────────────────
+    // TODO #1: Add RoboStake Economic Tracking
+    // ────────────────────────────────────────────────────────────────
+    // GOAL: Track the RoboStake payment allocated to this ore batch.
+    //
+    // Add these fields:
+    // - robo_stake_amount: f64     // Portion of total stake for this milestone
+    // - signature: Option<Vec<u8>> // Post-quantum signature (Dilithium)
+    //
+    // Also add method:
+    // impl JouleTorqOre {
+    //     pub fn unsigned_bytes(&self) -> Vec<u8> {
+    //         // Serialize all fields EXCEPT signature for signing
+    //         // This is the data that will be signed by Dilithium
+    //     }
+    // }
+    //
+    // CALCULATION:
+    // - Total RoboStake received from Trust via POST /stake
+    // - Calculate: robo_per_milestone = total_stake / number_of_milestones
+    // - Each ore batch carries its fair share through the pipeline
+    //
+    // CRYPTO ARCHITECTURE (Future Implementation):
+    // - Phase 1 (NOW): Add fields, stub crypto.rs with sign_ore/verify_ore
+    // - Phase 2 (Later): Implement Dilithium signatures using pqcrypto-dilithium
+    // - Phase 3 (Later): Refinery verifies signatures before accepting ore
+    // - Phase 4 (Later): Mint uses SPHINCS+ for Merkle tree ledger
+    //
+    // INTEGRATION:
+    // - Digger signs ore before sending to Refinery
+    // - Refinery verifies signature, bundles into TokenTorqIngot
+    // - RoboStake travels with ore: Refinery→TokenTorqIngot→Mint→Ledger
+    // ────────────────────────────────────────────────────────────────
 }
 
 /// This is the **job contract** — like a work agreement.
@@ -64,6 +98,37 @@ pub struct Contract {
     /// Total tokens earned so far in the whole job
     /// Starts at 0, goes up
     pub total_tokens: u64,
+
+    // ────────────────────────────────────────────────────────────────
+    // TODO #3: Track RoboStake and Duration
+    // ────────────────────────────────────────────────────────────────
+    // GOAL: Store the economic parameters for this contract.
+    //
+    // Add these fields:
+    // - robo_stake_total: f64   // Total RT received from Trust
+    // - duration_hours: f64     // How long contract runs
+    //
+    // CALCULATION (from http_api.rs /stake handler):
+    // When Trust sends POST /stake with amount_rt:
+    //   duration_hours = amount_rt / (power_kw × max_token_throughput)
+    //
+    // EXAMPLE:
+    // - Trust sends: 3000 RT
+    // - Digger power: 2.5 kW
+    // - Throughput: 60 tokens/sec
+    // - Duration: 3000 / (2.5 × 60) = 20 hours
+    //
+    // MILESTONE ECONOMICS:
+    // - milestones = duration_hours × 3600 / interval_seconds
+    // - robo_per_milestone = robo_stake_total / milestones
+    // - Each JouleTorqOre carries robo_per_milestone
+    //
+    // CONTRACT LIFECYCLE:
+    // 1. Trust calls POST /stake with amount_rt
+    // 2. Calculate duration_hours and store both values
+    // 3. Start contract execution for fixed duration
+    // 4. Contract runs full duration (time-based, not work-based)
+    // ────────────────────────────────────────────────────────────────
 }
 
 /// This is the **robot's ID card** — who it is and what it can do.
