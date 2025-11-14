@@ -1,0 +1,4 @@
+[
+  { "id": "opp-1", "description": "factory A", "required_rt": 400 },
+  { "id": "opp-2", "description": "factory B", "required_rt": 700 }
+]

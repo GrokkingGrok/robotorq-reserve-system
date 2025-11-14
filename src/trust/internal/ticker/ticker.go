@@ -2,14 +2,16 @@ package ticker
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"b2b/trust/internal/metrics"
+	"b2b/trust/internal/opportunity"
 
 	"go.uber.org/zap"
 )
 
-func Start(ctx context.Context, ch chan<- string, logger *zap.Logger, m *metrics.Metrics) {
+func Start(ctx context.Context, ch chan<- *opportunity.Opportunity, logger *zap.Logger, m *metrics.Metrics) {
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
@@ -17,11 +19,17 @@ func Start(ctx context.Context, ch chan<- string, logger *zap.Logger, m *metrics
 		for {
 			select {
 			case <-ticker.C:
-				opportunity := "opportunity-" + time.Now().Format("150405") + "-" + string(counter)
+				opp := opportunity.New(
+					fmt.Sprintf("opportunity-%s-%d", time.Now().Format("150405"), counter),
+					fmt.Sprintf("Builder-%d", counter),
+					fmt.Sprintf("Description-%d", counter),
+					counter*100,
+					"pending",
+				)
 				counter++
 				select {
-				case ch <- opportunity:
-					logger.Info("Submitted opportunity", zap.String("opportunity", opportunity))
+				case ch <- opp:
+					logger.Info("Submitted opportunity", zap.String("opportunity", opp.ID))
 					m.IncSubmitted()
 				default:
 					logger.Warn("Submit channel full, dropping opportunity")

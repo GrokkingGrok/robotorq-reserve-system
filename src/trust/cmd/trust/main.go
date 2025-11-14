@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -25,7 +26,15 @@ func main() {
 
 	// Trust service
 	svc := trustsvc.NewService(logger, m)
-	svc.Start(ctx)
+	mux := svc.Start(ctx)
+
+	// Start HTTP server
+	go func() {
+		logger.Info("HTTP server listening on :8080")
+		if err := http.ListenAndServe(":8080", mux); err != nil {
+			logger.Fatal("HTTP server failed", zap.Error(err))
+		}
+	}()
 
 	// Signal handling
 	stop := make(chan os.Signal, 1)
