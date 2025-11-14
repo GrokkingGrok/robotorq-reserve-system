@@ -122,36 +122,14 @@ pub struct Contract {
     /// Starts at 0, goes up
     pub total_tokens: u64,
 
-    // ────────────────────────────────────────────────────────────────
-    // TODO #3: Track RoboStake and Duration
-    // ────────────────────────────────────────────────────────────────
-    // GOAL: Store the economic parameters for this contract.
-    //
-    // Add these fields:
-    // - robo_stake_total: f64   // Total RT received from Trust
-    // - duration_hours: f64     // How long contract runs
-    //
-    // CALCULATION (from http_api.rs /stake handler):
-    // When Trust sends POST /stake with amount_rt:
-    //   duration_hours = amount_rt / (power_kw × max_token_throughput)
-    //
-    // EXAMPLE:
-    // - Trust sends: 3000 RT
-    // - Digger power: 2.5 kW
-    // - Throughput: 60 tokens/sec
-    // - Duration: 3000 / (2.5 × 60) = 20 hours
-    //
-    // MILESTONE ECONOMICS:
-    // - milestones = duration_hours × 3600 / interval_seconds
-    // - robo_per_milestone = robo_stake_total / milestones
-    // - Each JouleTorqOre carries robo_per_milestone
-    //
-    // CONTRACT LIFECYCLE:
-    // 1. Trust calls POST /stake with amount_rt
-    // 2. Calculate duration_hours and store both values
-    // 3. Start contract execution for fixed duration
-    // 4. Contract runs full duration (time-based, not work-based)
-    // ────────────────────────────────────────────────────────────────
+    /// Total RoboStake (RT) received from Trust for this contract
+    /// Example: 3000.0 RT
+    pub robo_stake_total: f64,
+
+    /// How long the contract will run (in hours)
+    /// Calculated as: robo_stake_total / (power_kw × max_token_throughput)
+    /// Example: 20.0 hours
+    pub duration_hours: f64,
 }
 
 /// This is the **robot's ID card** — who it is and what it can do.

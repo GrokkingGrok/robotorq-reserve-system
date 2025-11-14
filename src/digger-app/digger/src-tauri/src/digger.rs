@@ -287,4 +287,20 @@ impl DiggerManager {
     pub fn add_digger(&mut self, digger: Digger) {
         self.diggers.insert(digger.id.clone(), digger);
     }
+
+    /// Get the current contract for a specific digger
+    pub fn get_contract(&self, digger_id: &str) -> Option<Contract> {
+        self.diggers.get(digger_id).and_then(|d| d.current_contract.clone())
+    }
+
+    /// Set/update the contract for a specific digger
+    pub fn set_contract(&mut self, digger_id: &str, contract: Contract) -> Result<(), String> {
+        match self.diggers.get_mut(digger_id) {
+            Some(digger) => {
+                digger.current_contract = Some(contract);
+                Ok(())
+            }
+            None => Err(format!("Digger {} not found", digger_id))
+        }
+    }
 }

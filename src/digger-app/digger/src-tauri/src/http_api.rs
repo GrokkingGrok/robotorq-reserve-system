@@ -6,8 +6,10 @@
 // GET  /health       → Health check
 
 use crate::digger::DiggerManager;
+use crate::types::Contract;
 use serde::{Deserialize, Serialize};
 use tiny_http::{Response, Server};
+use std::io::Read;
 
 /// Response for /robot/status
 #[derive(Serialize)]
@@ -108,40 +110,65 @@ fn handle_stake(mut request: tiny_http::Request) {
 
     println!("💰 Stake received: {} RT for contract {}", stake_req.amount_rt, stake_req.contract_id);
 
-    // ────────────────────────────────────────────────────────────────
-    // TODO #3: Process RoboStake and Calculate Duration
-    // ────────────────────────────────────────────────────────────────
-    // CURRENT: Just acknowledge receipt, stake is LOST
-    // NEEDED: Store stake and calculate contract duration
-    //
-    // IMPLEMENTATION:
-    // 1. Get ContractManager and retrieve/create contract
-    // 2. Get DiggerManager to find digger's power_kw and max_token_throughput
-    // 3. Calculate: duration_hours = amount_rt / (power_kw × max_token_throughput)
-    // 4. Update contract with:
-    //    - robo_stake_total = stake_req.amount_rt
-    //    - duration_hours = calculated value
-    // 5. Store updated contract in ContractManager
-    //
-    // EXAMPLE CALCULATION:
-    // - amount_rt = 3000 RT
-    // - power_kw = 2.5 kW (from DiggerConfig)
-    // - max_token_throughput = 60 tokens/sec
-    // - duration_hours = 3000 / (2.5 × 60) = 20 hours
-    //
-    // INTEGRATION:
-    // - This makes the stake available to digger.rs when executing contract
-    // - digger.rs uses duration_hours for timer-based completion (TODO #7)
-    // - digger.rs calculates robo_per_milestone for each ore batch (TODO #6)
-    // ────────────────────────────────────────────────────────────────
-
-    // TODO: Actually process the stake (store it, trigger work, etc.)
-    // For now, just acknowledge receipt
+    // Process the stake and calculate contract duration
+    let digger_manager = DiggerManager::global();
+    
+    // Get digger and update its contract
+    let mut digger_lock = digger_manager.lock().unwrap();
+    let digger = match digger_lock.get_digger_mut("dig-jon-ai-001") {
+        Some(d) => d,
+        None => {
+            let response = Response::from_string("Digger not found")
+                .with_status_code(404);
+            let _ = request.respond(response);
+            return;
+        }
+    };
+    
+    let power_kw = digger.power_kw;
+    let max_token_throughput = digger.max_token_throughput;
+    
+    // Calculate contract duration
+    // duration_hours = amount_rt / (power_kw × max_token_throughput)
+    let duration_hours = stake_req.amount_rt / (power_kw * max_token_throughput as f64);
+    
+    println!(
+        "📊 Calculated duration: {:.2} hours (stake={} RT, power={} kW, throughput={} tokens/sec)",
+        duration_hours, stake_req.amount_rt, power_kw, max_token_throughput
+    );
+    
+    // Get or create contract and update with stake info
+    let mut contract = digger.current_contract
+        .clone()
+        .unwrap_or_else(|| {
+            // Create new contract if digger doesn't have one
+            Contract {
+                id: stake_req.contract_id.clone(),
+                authorized: true,
+                torq: 1, // Default multiplier
+                max_token_throughput,
+                interval_seconds: 1, // Default: 1 second per milestone
+                total_tokens: 0,
+                robo_stake_total: 0.0,
+                duration_hours: 0.0,
+            }
+        });
+    
+    // Update contract with stake and duration
+    contract.robo_stake_total = stake_req.amount_rt;
+    contract.duration_hours = duration_hours;
+    
+    // Store updated contract in the digger
+    digger.current_contract = Some(contract);
+    drop(digger_lock); // Release lock
 
     let resp = StakeResponse {
         status: "accepted".to_string(),
         contract_id: stake_req.contract_id.clone(),
-        message: format!("Received {} RT for contract", stake_req.amount_rt),
+        message: format!(
+            "Received {} RT for contract, duration: {:.2} hours",
+            stake_req.amount_rt, duration_hours
+        ),
     };
 
     let json = serde_json::to_string(&resp).unwrap();
