@@ -12,6 +12,19 @@ use base64::{engine::general_purpose, Engine as _}; // Turn photos into text
 use tauri::Emitter;                          // Send messages to the app window
 
 // ────────────────────────────────────────────────────────────────
+// CONTRACT EXECUTION CONTROL
+// ────────────────────────────────────────────────────────────────
+
+/// Control state for contract execution (pause/resume/stop)
+#[derive(Clone, Debug, PartialEq)]
+pub enum ContractControl {
+    Running,   // Contract is actively running
+    Paused,    // Contract is paused (can resume)
+    Stopped,   // Contract has been stopped (permanent, cannot resume)
+    Completed, // Contract finished naturally (duration reached)
+}
+
+// ────────────────────────────────────────────────────────────────
 // THE ROBOT (Digger)
 // ────────────────────────────────────────────────────────────────
 
@@ -51,38 +64,70 @@ impl Digger {
         // How many tokens this robot makes **per update**
         // = robot speed × job value
         let throughput = self.max_token_throughput * contract.torq as u64;
+        
+        // Get contract ID for state tracking
+        let contract_id_for_state = contract.id.clone();
 
         // Start a background worker (like a factory machine)
         tauri::async_runtime::spawn(async move {
             let mut milestone_index: u32 = 0;  // Step counter (0, 1, 2...)
 
             // ────────────────────────────────────────────────────────────────
-            // TODO #7: Timer-Based Contract Completion
+            // TODO #7: Timer-Based Contract Completion ✅ IMPLEMENTED
             // ────────────────────────────────────────────────────────────────
-            // CURRENT: Infinite loop - contract never ends!
-            // NEEDED: Exit after contract.duration_hours (from TODO #3)
-            //
-            // IMPLEMENTATION:
-            // 1. Get contract start time (SystemTime::now())
-            // 2. Calculate end_time = start_time + (duration_hours × 3600 secs)
-            // 3. Change `loop {}` to `while SystemTime::now() < end_time {}`
-            // 4. After loop exits: emit "ore_complete" event to UI
-            // 5. Clean up contract in ContractManager
-            //
-            // EXAMPLE:
-            // - duration_hours = 20.0 (from TODO #3 calculation)
-            // - start_time = Unix timestamp at contract start
-            // - end_time = start_time + (20.0 × 3600) seconds
-            // - Loop until SystemTime reaches end_time
-            //
-            // CONTRACT BEHAVIOR:
-            // - Runs for FIXED DURATION (time-based, not work-based)
-            // - Even if work finishes early, contract runs full duration
-            // - Ensures predictable RoboStake compensation
+            // Calculate contract end time based on duration_hours
+            // Support pause/resume/stop controls
+            // Emit completion event when done
             // ────────────────────────────────────────────────────────────────
 
-            // Keep working forever (until stopped)
+            // Calculate when contract should end
+            let contract_start_time = SystemTime::now();
+            let contract_duration = Duration::from_secs_f64(contract.duration_hours * 3600.0);
+            let contract_end_time = contract_start_time + contract_duration;
+            
+            println!(
+                "⏱️  Contract {} will run for {:.2} hours (until {:?})",
+                contract.id, contract.duration_hours, contract_end_time
+            );
+            
+            // Initialize contract state as Running
+            let state_manager = ContractStateManager::global();
+            state_manager.lock().unwrap().set_state(contract_id_for_state.clone(), ContractControl::Running);
+
+            // Keep working until contract completes or is stopped
             loop {
+                // Check contract execution state
+                let current_state = state_manager.lock().unwrap().get_state(&contract_id_for_state);
+                
+                match current_state {
+                    ContractControl::Stopped => {
+                        println!("🛑 Contract {} stopped by user", contract.id);
+                        let _ = app.emit("contract_stopped", contract.id.clone());
+                        break;
+                    }
+                    ContractControl::Paused => {
+                        // Wait a bit and check again
+                        println!("⏸️  Contract {} paused, waiting...", contract.id);
+                        sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                    ContractControl::Completed => {
+                        // Already completed (shouldn't happen in loop, but safe guard)
+                        break;
+                    }
+                    ContractControl::Running => {
+                        // Continue normal execution
+                    }
+                }
+                
+                // Check if contract duration has been reached
+                if SystemTime::now() >= contract_end_time {
+                    println!("✅ Contract {} completed (duration reached)", contract.id);
+                    state_manager.lock().unwrap().set_state(contract_id_for_state.clone(), ContractControl::Completed);
+                    let _ = app.emit("contract_completed", contract.id.clone());
+                    break;
+                }
+
                 // Get the current time
                 let start_time = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -269,6 +314,37 @@ fn capture_photo_placeholder(digger_id: &str, milestone_index: u32) -> Option<St
 }
 
 // ────────────────────────────────────────────────────────────────
+// CONTRACT EXECUTION STATE MANAGER
+// ────────────────────────────────────────────────────────────────
+
+/// Global state manager for contract execution control
+/// Tracks whether contracts are running, paused, stopped, or completed
+pub struct ContractStateManager {
+    states: HashMap<String, ContractControl>, // contract_id → state
+}
+
+impl ContractStateManager {
+    /// Get the global singleton instance
+    pub fn global() -> Arc<Mutex<Self>> {
+        lazy_static! {
+            static ref INSTANCE: Arc<Mutex<ContractStateManager>> =
+                Arc::new(Mutex::new(ContractStateManager { states: HashMap::new() }));
+        }
+        INSTANCE.clone()
+    }
+
+    /// Get the current state of a contract
+    pub fn get_state(&self, contract_id: &str) -> ContractControl {
+        self.states.get(contract_id).cloned().unwrap_or(ContractControl::Running)
+    }
+
+    /// Set the state of a contract
+    pub fn set_state(&mut self, contract_id: String, state: ContractControl) {
+        self.states.insert(contract_id, state);
+    }
+}
+
+// ────────────────────────────────────────────────────────────────
 // THE ROBOT BOSS (DiggerManager)
 // ────────────────────────────────────────────────────────────────
 
@@ -313,4 +389,45 @@ impl DiggerManager {
     pub fn get_contract(&self, digger_id: &str) -> Option<Contract> {
         self.diggers.get(digger_id).and_then(|d| d.current_contract.clone())
     }
+}
+
+// ────────────────────────────────────────────────────────────────
+// TAURI COMMANDS: Contract Control
+// ────────────────────────────────────────────────────────────────
+
+/// Pause a running contract
+#[tauri::command]
+pub fn pause_contract(contract_id: String, app: tauri::AppHandle) -> Result<(), String> {
+    println!("⏸️  Pausing contract: {}", contract_id);
+    
+    let state_manager = ContractStateManager::global();
+    state_manager.lock().unwrap().set_state(contract_id.clone(), ContractControl::Paused);
+    
+    let _ = app.emit("contract_paused", contract_id);
+    Ok(())
+}
+
+/// Resume a paused contract
+#[tauri::command]
+pub fn resume_contract(contract_id: String, app: tauri::AppHandle) -> Result<(), String> {
+    println!("▶️  Resuming contract: {}", contract_id);
+    
+    let state_manager = ContractStateManager::global();
+    state_manager.lock().unwrap().set_state(contract_id.clone(), ContractControl::Running);
+    
+    let _ = app.emit("contract_resumed", contract_id);
+    Ok(())
+}
+
+/// Stop a running contract
+#[tauri::command]
+pub fn stop_contract(contract_id: String, _app: tauri::AppHandle) -> Result<(), String> {
+    println!("🛑 Stopping contract: {}", contract_id);
+    
+    let state_manager = ContractStateManager::global();
+    state_manager.lock().unwrap().set_state(contract_id.clone(), ContractControl::Stopped);
+    
+    // Note: The actual worker loop will detect this state change and exit
+    // The "contract_stopped" event will be emitted from the worker loop
+    Ok(())
 }
