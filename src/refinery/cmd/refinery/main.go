@@ -602,15 +602,15 @@ func (r *Refinery) receiveRoboHandler(w http.ResponseWriter, req *http.Request) 
 
 // JouleTorqOre represents combined ore from Digger (joules + robo_stake)
 type JouleTorqOre struct {
-	DiggerID         string   `json:"digger_id"`
-	ContractID       string   `json:"contract_id"`
-	TokensGenerated  uint64   `json:"tokens_generated"`
-	Joules           uint64   `json:"joules"`
-	MilestoneIndex   uint32   `json:"milestone_index"`
-	Timestamp        uint64   `json:"timestamp"`
-	ProofOfWork      *string  `json:"proof_of_work,omitempty"`
-	RoboStakeAmount  float64  `json:"robo_stake_amount"`
-	Signature        []byte   `json:"signature,omitempty"`
+	DiggerID        string  `json:"digger_id"`
+	ContractID      string  `json:"contract_id"`
+	TokensGenerated uint64  `json:"tokens_generated"`
+	Joules          uint64  `json:"joules"`
+	MilestoneIndex  uint32  `json:"milestone_index"`
+	Timestamp       uint64  `json:"timestamp"`
+	ProofOfWork     *string `json:"proof_of_work,omitempty"`
+	RoboStakeAmount float64 `json:"robo_stake_amount"`
+	Signature       []byte  `json:"signature,omitempty"`
 }
 
 // receiveOreHandler accepts combined JouleTorqOre from Digger via POST
@@ -649,7 +649,7 @@ func (r *Refinery) receiveOreHandler(w http.ResponseWriter, req *http.Request) {
 	if ore.RoboStakeAmount > 0 && ore.TokensGenerated > 0 {
 		price = float64(ore.TokensGenerated) / ore.RoboStakeAmount
 	}
-	
+
 	if err := r.addRobo(RoboTorq{Amount: ore.RoboStakeAmount, Price: price}); err != nil {
 		slog.Warn("robo queue full", "amount", ore.RoboStakeAmount, "price", price, "error", err)
 		http.Error(w, "Robo queue full, retry later", http.StatusTooManyRequests)
@@ -659,9 +659,9 @@ func (r *Refinery) receiveOreHandler(w http.ResponseWriter, req *http.Request) {
 	// Success response
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":     "accepted",
+		"status":      "accepted",
 		"contract_id": ore.ContractID,
-		"milestone":  ore.MilestoneIndex,
+		"milestone":   ore.MilestoneIndex,
 	})
 }
 
