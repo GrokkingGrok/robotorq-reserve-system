@@ -2,44 +2,57 @@ package trustsvc
 
 import (
 	"context"
-	"log"
 	"time"
 
+	"b2b/trust/internal/appraisor"
+	"b2b/trust/internal/executor"
+	"b2b/trust/internal/fundsync"
 	"b2b/trust/internal/metrics"
-	"b2b/trust/internal/natsx"
+	"b2b/trust/internal/ticker"
+
+	"go.uber.org/zap"
 )
 
 type Service struct {
-	nats    *natsx.Client
-	metrics *metrics.MetricRegistry
-	done    chan struct{}
+	logger  *zap.Logger
+	metrics *metrics.Metrics
 }
 
-func New(nc *natsx.Client, m *metrics.MetricRegistry) *Service {
+func NewService(logger *zap.Logger, m *metrics.Metrics) *Service {
 	return &Service{
-		nats:    nc,
+		logger:  logger,
 		metrics: m,
-		done:    make(chan struct{}),
 	}
 }
 
-func (s *Service) Start(ctx context.Context) error {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
+func (s *Service) Start(ctx context.Context) {
+	// Channels
+	submitCh := make(chan string, 10)
+	appraisedCh := make(chan string, 10)
+	fundsCh := make(chan string, 10)
+	execCh := make(chan string, 10)
 
-	log.Println("🚀 Trust service started.")
-	for {
-		select {
-		case <-ctx.Done():
-			close(s.done)
-			return nil
-		case <-ticker.C:
-			log.Println("⏱️  periodic trust tick (placeholder)")
+	// Start metrics reporter
+	metrics.StartReporter(s.logger, s.metrics, 10*time.Second, ctx)
+
+	// Start ticker
+	ticker.Start(ctx, submitCh, s.logger, s.metrics)
+
+	// Start pipeline workers
+	appraisor.Start(ctx, submitCh, appraisedCh, s.logger, s.metrics, 2)
+	fundsync.Start(ctx, appraisedCh, fundsCh, s.logger, s.metrics, 2)
+	executor.Start(ctx, fundsCh, execCh, s.logger, s.metrics, 2)
+
+	// Final execution log
+	go func() {
+		for {
+			select {
+			case msg := <-execCh:
+				s.logger.Info("Executed opportunity", zap.String("opportunity", msg))
+				s.metrics.IncExecutions()
+			case <-ctx.Done():
+				return
+			}
 		}
-	}
-}
-
-func (s *Service) Stop() {
-	<-s.done
-	log.Println("🧹 Trust service stopped.")
+	}()
 }

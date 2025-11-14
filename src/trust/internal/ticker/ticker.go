@@ -1,21 +1,34 @@
-// Package ticker provides utilities for periodic tasks or
-// "ticks" that the Trust service might perform. For example,
-// checking funding status, updating metrics, or re-evaluating bids.
 package ticker
 
 import (
-	"log"
+	"context"
 	"time"
+
+	"b2b/trust/internal/metrics"
+
+	"go.uber.org/zap"
 )
 
-// StartTicker runs a function periodically at the specified interval.
-func StartTicker(interval time.Duration, job func()) {
+func Start(ctx context.Context, ch chan<- string, logger *zap.Logger, m *metrics.Metrics) {
 	go func() {
-		ticker := time.NewTicker(interval)
+		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			log.Println("Running scheduled job...")
-			job()
+		counter := 0
+		for {
+			select {
+			case <-ticker.C:
+				opportunity := "opportunity-" + time.Now().Format("150405") + "-" + string(counter)
+				counter++
+				select {
+				case ch <- opportunity:
+					logger.Info("Submitted opportunity", zap.String("opportunity", opportunity))
+					m.IncSubmitted()
+				default:
+					logger.Warn("Submit channel full, dropping opportunity")
+				}
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 }

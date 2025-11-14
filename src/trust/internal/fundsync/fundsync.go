@@ -1,28 +1,32 @@
 package fundsync
 
 import (
-	"b2b/trust/pkg"
-	"log"
+	"context"
+	"time"
+
+	"b2b/trust/internal/metrics"
+
+	"go.uber.org/zap"
 )
 
-// FundSync handles notifying DistoDam and tracking RoboStake for approved contracts
-type FundSync struct{}
-
-// NewFundSync returns a new FundSync instance
-func NewFundSync() *FundSync {
-	return &FundSync{}
-}
-
-// NotifyNewContract simulates sending contract info to DistoDam to request RoboStake
-func (fs *FundSync) NotifyNewContract(op *pkg.Opportunity) *pkg.Contract {
-	log.Printf("💸 FundSync: Requesting RoboStake for contract %s", op.ID)
-
-	// Mock DistoDam response with full requested stake
-	contract := &pkg.Contract{
-		ID:        op.ID,
-		Builder:   op.Builder,
-		RoboStake: op.RoboStakeRequested,
+func Start(ctx context.Context, in <-chan string, out chan<- string, logger *zap.Logger, m *metrics.Metrics, workers int) {
+	for i := 0; i < workers; i++ {
+		go func(id int) {
+			for {
+				select {
+				case opp := <-in:
+					time.Sleep(200 * time.Millisecond) // simulate fundsync
+					logger.Info("Funds synced", zap.String("opportunity", opp), zap.Int("worker", id))
+					m.IncFundsSynced()
+					select {
+					case out <- opp:
+					default:
+						logger.Warn("Funds channel full, dropping opportunity")
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+		}(i)
 	}
-	log.Printf("✅ FundSync: RoboStake allocated %.2f for contract %s", contract.RoboStake, contract.ID)
-	return contract
 }

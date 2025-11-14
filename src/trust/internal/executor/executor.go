@@ -1,35 +1,32 @@
 package executor
 
 import (
-	"b2b/trust/pkg"
-	"log"
+	"context"
 	"time"
+
+	"b2b/trust/internal/metrics"
+
+	"go.uber.org/zap"
 )
 
-// Executor ensures the contract is executed correctly
-type Executor struct{}
-
-// NewExecutor returns a new Executor instance
-func NewExecutor() *Executor {
-	return &Executor{}
-}
-
-// SetupContract mocks pinging the Builder/Digger node
-func (e *Executor) SetupContract(c *pkg.Contract) {
-	log.Printf("⚙️ Executor: Setting up contract %s with Builder %s", c.ID, c.Builder)
-
-	// Mock Digger startup
-	log.Printf("🔄 Executor: Pinging Builder's Digger node for readiness...")
-	time.Sleep(1 * time.Second) // simulate network/boot time
-
-	log.Printf("✅ Executor: Builder's Digger is ready for contract %s", c.ID)
-
-	// Mock sending RoboStake
-	e.SendRoboStake(c)
-}
-
-// SendRoboStake sends the RoboStake to the Builder
-func (e *Executor) SendRoboStake(c *pkg.Contract) {
-	log.Printf("💰 Executor: Sending RoboStake %.2f to Builder %s for contract %s",
-		c.RoboStake, c.Builder, c.ID)
+func Start(ctx context.Context, in <-chan string, out chan<- string, logger *zap.Logger, m *metrics.Metrics, workers int) {
+	for i := 0; i < workers; i++ {
+		go func(id int) {
+			for {
+				select {
+				case opp := <-in:
+					time.Sleep(150 * time.Millisecond) // simulate execution
+					logger.Info("Executing opportunity", zap.String("opportunity", opp), zap.Int("worker", id))
+					m.IncExecutions()
+					select {
+					case out <- opp:
+					default:
+						logger.Warn("Exec channel full, dropping opportunity")
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+		}(i)
+	}
 }

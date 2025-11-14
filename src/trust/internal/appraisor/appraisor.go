@@ -1,37 +1,32 @@
 package appraisor
 
 import (
-	"b2b/trust/pkg"
-	"log"
+	"context"
+	"time"
+
+	"b2b/trust/internal/metrics"
+
+	"go.uber.org/zap"
 )
 
-// Appraisor evaluates incoming opportunities and chooses the best one.
-// Currently, this is a dumb selection (highest ROI).
-type Appraisor struct{}
-
-// New returns a new Appraisor instance
-func New() *Appraisor {
-	return &Appraisor{}
-}
-
-// SelectBestOpportunity picks the opportunity with the highest ROI
-func (a *Appraisor) SelectBestOpportunity(ops []pkg.Opportunity) *pkg.Opportunity {
-	if len(ops) == 0 {
-		log.Println("⚠️ No opportunities to appraise")
-		return nil
+func Start(ctx context.Context, in <-chan string, out chan<- string, logger *zap.Logger, m *metrics.Metrics, workers int) {
+	for i := 0; i < workers; i++ {
+		go func(id int) {
+			for {
+				select {
+				case opp := <-in:
+					time.Sleep(100 * time.Millisecond) // simulate appraisal
+					logger.Info("Appraised opportunity", zap.String("opportunity", opp), zap.Int("worker", id))
+					m.IncAppraised()
+					select {
+					case out <- opp:
+					default:
+						logger.Warn("Appraised channel full, dropping opportunity")
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+		}(i)
 	}
-
-	best := &ops[0]
-	for i := 1; i < len(ops); i++ {
-		if ops[i].ExpectedROI > best.ExpectedROI {
-			best = &ops[i]
-		}
-	}
-	log.Printf("✅ Appraisor selected opportunity %s with ROI %.2f", best.ID, best.ExpectedROI)
-	return best
-}
-
-// MockBidNet simulates bidding on the selected opportunity
-func (a *Appraisor) MockBidNet(op *pkg.Opportunity) {
-	log.Printf("📝 Mock BidNet: Auto-bid accepted for opportunity %s", op.ID)
 }
