@@ -75,6 +75,13 @@ services:
     ports:
       - "50052:50052"
       - "8081:8080"
+    environment:
+      - NATS_URL=nats://nats:4222
+      - REFINERY_INGOT_BATCH_INTERVAL=60
+      - MINT_MAX_RETRIES=3
+      - MINT_BASE_DELAY=1
+      - REFINERY_JOULE_QUEUE_SIZE=1000
+      - REFINERY_ROBO_QUEUE_SIZE=1000
     depends_on:
       nats:
         condition: service_healthy
