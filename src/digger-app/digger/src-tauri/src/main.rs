@@ -135,12 +135,13 @@ fn main() {
     tauri::Builder::default()
         // Connect the buttons to the functions
         .invoke_handler(tauri::generate_handler![
-            start_contract,              // "Start Contract" button
-            list_diggers,                // "Show Robots" button
-            get_contract,                // "Show Contract" button
-            digger::pause_contract,      // "Pause Contract" button (TODO #7)
-            digger::resume_contract,     // "Resume Contract" button (TODO #7)
-            digger::stop_contract        // "Stop Contract" button (TODO #7)
+            start_contract,                    // "Start Contract" button
+            list_diggers,                      // "Show Robots" button
+            get_contract,                      // "Show Contract" button
+            digger::pause_contract,            // "Pause Contract" button (TODO #7)
+            digger::resume_contract,           // "Resume Contract" button (TODO #7)
+            digger::stop_contract,             // "Stop Contract" button (TODO #7)
+            digger::get_milestone_statuses     // "Get Milestone Statuses" (TODO #8)
         ])
         // Launch the app window
         .run(tauri::generate_context!())

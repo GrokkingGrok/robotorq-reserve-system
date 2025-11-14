@@ -24,6 +24,16 @@ pub enum ContractControl {
     Completed, // Contract finished naturally (duration reached)
 }
 
+/// Status of an individual milestone submission to Refinery
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+pub enum MilestoneStatus {
+    #[allow(dead_code)]
+    Pending,      // About to be sent
+    Sending,      // Currently sending to Refinery
+    Confirmed,    // Refinery accepted the ore
+    Failed(String), // Refinery rejected or network error (reason stored)
+}
+
 // ────────────────────────────────────────────────────────────────
 // THE ROBOT (Digger)
 // ────────────────────────────────────────────────────────────────
@@ -196,60 +206,63 @@ impl Digger {
                 ore_store.lock().unwrap().add_ore(ore.clone());
 
                 // ────────────────────────────────────────────────────────────────
-                // Send Ore to Refinery ✅ IMPLEMENTED
+                // TODO #8: Track Milestone Status ✅ IMPLEMENTED
                 // ────────────────────────────────────────────────────────────────
-                // Send the ore batch to Refinery for processing into ingots
-                // Refinery will validate signature (TODO #2) and create TokenTorqIngot
+                // Track milestone submission status (Pending → Sending → Confirmed/Failed)
+                // Store in MilestoneTracker, emit events to UI
                 // ────────────────────────────────────────────────────────────────
                 
+                let milestone_tracker = MilestoneTracker::global();
+                
+                // Mark as Sending
+                milestone_tracker.lock().unwrap().set_status(
+                    &contract.id,
+                    milestone_index,
+                    MilestoneStatus::Sending
+                );
+                
+                // Send the ore batch to Refinery for processing
                 match refinery_client::send_ore_to_refinery(&ore) {
                     Ok(()) => {
                         println!("✅ Refinery accepted milestone {}", milestone_index);
-                        // TODO #8: Mark milestone as Confirmed
+                        
+                        // Mark as Confirmed
+                        milestone_tracker.lock().unwrap().set_status(
+                            &contract.id,
+                            milestone_index,
+                            MilestoneStatus::Confirmed
+                        );
+                        
+                        // Emit success event to UI
+                        let _ = app.emit("milestone_confirmed", serde_json::json!({
+                            "contract_id": contract.id,
+                            "milestone_index": milestone_index,
+                            "tokens": tokens,
+                            "robo_stake": robo_stake_amount,
+                        }));
                     }
                     Err(e) => {
-                        println!("⚠️  Failed to send milestone {} to Refinery: {}", milestone_index, e);
-                        // TODO #8: Mark milestone as Failed(error_message)
-                        // For now, continue despite error (ore is stored locally)
+                        let error_msg = format!("{}", e);
+                        println!("⚠️  Failed to send milestone {} to Refinery: {}", milestone_index, error_msg);
+                        
+                        // Mark as Failed with error message
+                        milestone_tracker.lock().unwrap().set_status(
+                            &contract.id,
+                            milestone_index,
+                            MilestoneStatus::Failed(error_msg.clone())
+                        );
+                        
+                        // Emit failure event to UI
+                        let _ = app.emit("milestone_failed", serde_json::json!({
+                            "contract_id": contract.id,
+                            "milestone_index": milestone_index,
+                            "error": error_msg,
+                        }));
+                        
+                        // Continue despite error (ore is stored locally for retry)
                     }
                 }
 
-                // ────────────────────────────────────────────────────────────────
-                // TODO #8: Track Milestone Submission Status
-                // ────────────────────────────────────────────────────────────────
-                // CURRENT: Just store locally, no Refinery feedback
-                // NEEDED: Track whether ore was successfully sent and confirmed
-                //
-                // IMPLEMENTATION:
-                // 1. Create MilestoneStatus enum:
-                //    enum MilestoneStatus {
-                //        Pending,      // Not yet sent
-                //        Sent,         // Sent to Refinery, awaiting confirmation
-                //        Confirmed,    // Refinery accepted (200 OK)
-                //        Failed(String), // Error (invalid sig, network, queue full)
-                //    }
-                //
-                // 2. Store status in Contract or separate tracking map:
-                //    HashMap<(contract_id, milestone_index), MilestoneStatus>
-                //
-                // 3. After calling send_ore_to_refinery():
-                //    match result {
-                //        Ok(_) => set_status(Confirmed),
-                //        Err(RefineryError::NetworkError(e)) => set_status(Failed(e)),
-                //        Err(RefineryError::QueueFull) => set_status(Failed("queue_full")),
-                //        ...
-                //    }
-                //
-                // 4. Include status in UI events (TODO #9)
-                //
-                // OBSERVABILITY:
-                // - Dashboard shows: "45/100 milestones confirmed"
-                // - Failed milestones can be retried
-                // - Helps debug Refinery integration issues
-                // - Provides audit trail for economics
-                // ────────────────────────────────────────────────────────────────
-
-                // Send a live update to the app window
                 // ────────────────────────────────────────────────────────────────
                 // TODO #9: Emit Rich Contract Status Events
                 // ────────────────────────────────────────────────────────────────
@@ -345,6 +358,57 @@ impl ContractStateManager {
 }
 
 // ────────────────────────────────────────────────────────────────
+// MILESTONE STATUS TRACKER (TODO #8)
+// ────────────────────────────────────────────────────────────────
+
+/// Global tracker for milestone submission status
+/// Tracks the status of each milestone sent to Refinery
+pub struct MilestoneTracker {
+    // Key: "contract_id:milestone_index" → MilestoneStatus
+    statuses: HashMap<String, MilestoneStatus>,
+}
+
+impl MilestoneTracker {
+    /// Get the global singleton instance
+    pub fn global() -> Arc<Mutex<Self>> {
+        lazy_static! {
+            static ref INSTANCE: Arc<Mutex<MilestoneTracker>> =
+                Arc::new(Mutex::new(MilestoneTracker { statuses: HashMap::new() }));
+        }
+        INSTANCE.clone()
+    }
+
+    /// Get the status of a specific milestone
+    #[allow(dead_code)]
+    pub fn get_status(&self, contract_id: &str, milestone_index: u32) -> MilestoneStatus {
+        let key = format!("{}:{}", contract_id, milestone_index);
+        self.statuses.get(&key).cloned().unwrap_or(MilestoneStatus::Pending)
+    }
+
+    /// Set the status of a milestone
+    pub fn set_status(&mut self, contract_id: &str, milestone_index: u32, status: MilestoneStatus) {
+        let key = format!("{}:{}", contract_id, milestone_index);
+        self.statuses.insert(key, status);
+    }
+
+    /// Get all milestone statuses for a contract
+    pub fn get_all_for_contract(&self, contract_id: &str) -> Vec<(u32, MilestoneStatus)> {
+        self.statuses
+            .iter()
+            .filter_map(|(key, status)| {
+                let parts: Vec<&str> = key.split(':').collect();
+                if parts.len() == 2 && parts[0] == contract_id {
+                    if let Ok(index) = parts[1].parse::<u32>() {
+                        return Some((index, status.clone()));
+                    }
+                }
+                None
+            })
+            .collect()
+    }
+}
+
+// ────────────────────────────────────────────────────────────────
 // THE ROBOT BOSS (DiggerManager)
 // ────────────────────────────────────────────────────────────────
 
@@ -430,4 +494,39 @@ pub fn stop_contract(contract_id: String, _app: tauri::AppHandle) -> Result<(), 
     // Note: The actual worker loop will detect this state change and exit
     // The "contract_stopped" event will be emitted from the worker loop
     Ok(())
+}
+
+/// Get milestone statuses for a contract (TODO #8)
+#[tauri::command]
+pub fn get_milestone_statuses(contract_id: String) -> Result<serde_json::Value, String> {
+    let tracker = MilestoneTracker::global();
+    let milestones = tracker.lock().unwrap().get_all_for_contract(&contract_id);
+    
+    // Convert to JSON-friendly format
+    let statuses: Vec<serde_json::Value> = milestones
+        .iter()
+        .map(|(index, status)| {
+            serde_json::json!({
+                "milestone_index": index,
+                "status": match status {
+                    MilestoneStatus::Pending => "pending",
+                    MilestoneStatus::Sending => "sending",
+                    MilestoneStatus::Confirmed => "confirmed",
+                    MilestoneStatus::Failed(_msg) => "failed",
+                },
+                "error": match status {
+                    MilestoneStatus::Failed(msg) => Some(msg.clone()),
+                    _ => None,
+                }
+            })
+        })
+        .collect();
+    
+    Ok(serde_json::json!({
+        "contract_id": contract_id,
+        "milestones": statuses,
+        "total": milestones.len(),
+        "confirmed": milestones.iter().filter(|(_, s)| matches!(s, MilestoneStatus::Confirmed)).count(),
+        "failed": milestones.iter().filter(|(_, s)| matches!(s, MilestoneStatus::Failed(_))).count(),
+    }))
 }
