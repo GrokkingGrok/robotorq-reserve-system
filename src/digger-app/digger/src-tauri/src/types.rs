@@ -64,6 +64,7 @@ impl JouleTorqOre {
     /// let signature = crypto::sign_ore(&ore, &private_key);
     /// ore.signature = Some(signature);
     /// ```
+    #[allow(dead_code)] // Used in TODO #2 (crypto signatures)
     pub fn unsigned_bytes(&self) -> Vec<u8> {
         // Create a temporary struct without the signature
         let unsigned = UnsignedOre {
@@ -83,6 +84,7 @@ impl JouleTorqOre {
 }
 
 /// Helper struct for serializing ore without signature
+#[allow(dead_code)] // Used by unsigned_bytes() for TODO #2
 #[derive(Serialize)]
 struct UnsignedOre<'a> {
     digger_id: &'a str,
@@ -130,20 +132,4 @@ pub struct Contract {
     /// Calculated as: robo_stake_total / (power_kw × max_token_throughput)
     /// Example: 20.0 hours
     pub duration_hours: f64,
-}
-
-/// This is the **robot's ID card** — who it is and what it can do.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct DiggerConfig {
-    /// The robot's name
-    /// Example: "dig-jon-ai-001"
-    pub id: String,
-
-    /// How much electricity it uses (in kilowatts)
-    /// Example: 2.5 kW
-    pub power_kw: f64,
-
-    /// Its **maximum speed** in making tokens per second
-    /// Example: 60 tokens/sec
-    pub max_token_throughput: u64,
 }

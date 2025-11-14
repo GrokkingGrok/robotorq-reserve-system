@@ -92,6 +92,8 @@
 use crate::types::JouleTorqOre;
 use std::error::Error;
 use std::fmt;
+use std::time::Duration;
+use serde::Deserialize;
 
 /// Errors that can occur when communicating with Refinery
 #[derive(Debug)]
@@ -119,11 +121,26 @@ impl fmt::Display for RefineryError {
 
 impl Error for RefineryError {}
 
+/// Response from Refinery when ore is accepted
+#[derive(Deserialize)]
+struct RefineryResponse {
+    status: String,
+    #[allow(dead_code)]
+    ingot_id: Option<String>,
+}
+
+/// Error response from Refinery
+#[derive(Deserialize)]
+struct RefineryErrorResponse {
+    error: String,
+    message: String,
+}
+
 /// Send a JouleTorqOre batch to the Refinery service
 ///
-/// STUB: Currently just logs and returns Ok (no real HTTP call)
-///
-/// FUTURE: Use reqwest to POST ore to Refinery
+/// This function uses reqwest to POST the ore batch to the Refinery's
+/// /receive-ore endpoint. The Refinery will validate the signature,
+/// process the ore, and store it in the ingot queue.
 ///
 /// # Arguments
 /// * `ore` - The signed ore batch to send
@@ -131,54 +148,99 @@ impl Error for RefineryError {}
 /// # Returns
 /// * `Result<(), RefineryError>` - Ok if accepted, Err if failed
 ///
-/// # Example (Future Implementation)
+/// # Environment Variables
+/// * `REFINERY_URL` - Base URL for Refinery (default: http://localhost:8100)
+///
+/// # Example
 /// ```rust,ignore
-/// use reqwest::Client;
-/// use std::time::Duration;
-///
-/// let client = Client::builder()
-///     .timeout(Duration::from_secs(5))
-///     .build()?;
-///
-/// let refinery_url = std::env::var("REFINERY_URL")
-///     .unwrap_or_else(|_| "http://localhost:8100".to_string());
-///
-/// let response = client
-///     .post(format!("{}/receive-ore", refinery_url))
-///     .json(&ore)
-///     .send()
-///     .await?;
-///
-/// match response.status().as_u16() {
-///     200 => Ok(()),
-///     400 => Err(RefineryError::InvalidSignature),
-///     503 => Err(RefineryError::QueueFull),
-///     status => Err(RefineryError::HttpError {
-///         status,
-///         message: response.text().await?,
-///     }),
+/// let ore = JouleTorqOre { /* ... */ };
+/// match send_ore_to_refinery(&ore) {
+///     Ok(()) => println!("Ore accepted by Refinery!"),
+///     Err(RefineryError::QueueFull) => println!("Refinery busy, retry later"),
+///     Err(e) => println!("Failed to send ore: {}", e),
 /// }
 /// ```
 pub fn send_ore_to_refinery(ore: &JouleTorqOre) -> Result<(), RefineryError> {
-    // TODO: Implement real HTTP POST to Refinery
+    // Get Refinery URL from environment or use default
+    let refinery_url = std::env::var("REFINERY_URL")
+        .unwrap_or_else(|_| "http://localhost:8100".to_string());
+    
     println!(
-        "📤 [STUB] Would send ore to Refinery: contract={}, milestone={}, robo_stake={}",
+        "📤 Sending ore to Refinery: contract={}, milestone={}, robo_stake={}, url={}",
         ore.contract_id,
         ore.milestone_index,
-        0.0 // Will be ore.robo_stake_amount after TODO #1
+        ore.robo_stake_amount,
+        refinery_url
     );
 
-    // TODO: Uncomment when reqwest is added
-    // let refinery_url = std::env::var("REFINERY_URL")
-    //     .unwrap_or_else(|_| "http://localhost:8100".to_string());
-    // let client = reqwest::blocking::Client::new();
-    // let response = client
-    //     .post(format!("{}/receive-ore", refinery_url))
-    //     .json(&ore)
-    //     .timeout(std::time::Duration::from_secs(5))
-    //     .send()
-    //     .map_err(|e| RefineryError::NetworkError(e.to_string()))?;
-    // ...
+    // Create HTTP client with timeout
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|e| RefineryError::NetworkError(format!("Failed to create HTTP client: {}", e)))?;
 
-    Ok(()) // Stub: pretend it worked
+    // Send POST request to Refinery
+    let response = client
+        .post(format!("{}/receive-ore", refinery_url))
+        .json(&ore)
+        .send()
+        .map_err(|e| {
+            if e.is_timeout() {
+                RefineryError::NetworkError("Request timeout".to_string())
+            } else if e.is_connect() {
+                RefineryError::NetworkError(format!("Connection refused: {}", e))
+            } else {
+                RefineryError::NetworkError(e.to_string())
+            }
+        })?;
+
+    // Handle response based on status code
+    match response.status().as_u16() {
+        200 => {
+            // Success - ore accepted
+            let refinery_resp: RefineryResponse = response
+                .json()
+                .map_err(|e| RefineryError::SerializationError(e.to_string()))?;
+            
+            println!("✅ Refinery accepted ore: status={}", refinery_resp.status);
+            Ok(())
+        }
+        400 => {
+            // Bad request - likely invalid signature
+            match response.json::<RefineryErrorResponse>() {
+                Ok(err_resp) if err_resp.error == "invalid_signature" => {
+                    println!("❌ Refinery rejected ore: invalid signature");
+                    Err(RefineryError::InvalidSignature)
+                }
+                Ok(err_resp) => {
+                    println!("❌ Refinery rejected ore: {}", err_resp.message);
+                    Err(RefineryError::HttpError {
+                        status: 400,
+                        message: err_resp.message,
+                    })
+                }
+                Err(e) => {
+                    println!("❌ Refinery error (failed to parse): {}", e);
+                    Err(RefineryError::HttpError {
+                        status: 400,
+                        message: "Bad request".to_string(),
+                    })
+                }
+            }
+        }
+        503 => {
+            // Service unavailable - queue full
+            println!("⚠️  Refinery queue full, should retry later");
+            Err(RefineryError::QueueFull)
+        }
+        status => {
+            // Other HTTP error
+            let message = response
+                .text()
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            
+            println!("❌ Refinery HTTP error {}: {}", status, message);
+            Err(RefineryError::HttpError { status, message })
+        }
+    }
 }

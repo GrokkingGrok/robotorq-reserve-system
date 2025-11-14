@@ -39,7 +39,7 @@ impl Digger {
         contract: Contract,           // The job agreement
         ore_store: Arc<Mutex<OreStorage>>, // The treasure vault
         app: tauri::AppHandle,        // The app window (to send updates)
-        job_id: String,               // Unique name for this work session
+        _job_id: String,              // Unique name for this work session (for future logging)
     ) {
         // Save the job so the robot remembers what it's doing
         self.current_contract = Some(contract.clone());
@@ -291,16 +291,5 @@ impl DiggerManager {
     /// Get the current contract for a specific digger
     pub fn get_contract(&self, digger_id: &str) -> Option<Contract> {
         self.diggers.get(digger_id).and_then(|d| d.current_contract.clone())
-    }
-
-    /// Set/update the contract for a specific digger
-    pub fn set_contract(&mut self, digger_id: &str, contract: Contract) -> Result<(), String> {
-        match self.diggers.get_mut(digger_id) {
-            Some(digger) => {
-                digger.current_contract = Some(contract);
-                Ok(())
-            }
-            None => Err(format!("Digger {} not found", digger_id))
-        }
     }
 }

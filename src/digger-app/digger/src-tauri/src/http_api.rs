@@ -9,6 +9,7 @@ use crate::digger::DiggerManager;
 use crate::types::Contract;
 use serde::{Deserialize, Serialize};
 use tiny_http::{Response, Server};
+#[allow(unused_imports)] // False positive: Read trait used by request.as_reader().read_to_string()
 use std::io::Read;
 
 /// Response for /robot/status
@@ -24,7 +25,7 @@ struct RobotStatusResponse {
 struct StakeRequest {
     contract_id: String,
     amount_rt: f64,
-    builder: String,
+    // Note: Trust may send 'builder' field, but we don't use it yet
 }
 
 /// Response for /stake

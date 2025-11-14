@@ -2,7 +2,7 @@
 // THIS IS THE **BRAIN** OF THE APP — Where Rust and JavaScript meet
 // ────────────────────────────────────────────────────────────────
 
-// Data structures (JouleTorqOre, Contract, DiggerConfig)
+// Data structures (JouleTorqOre, Contract)
 pub mod types;
 
 // Crypto module for post-quantum signatures (TODO #2)
