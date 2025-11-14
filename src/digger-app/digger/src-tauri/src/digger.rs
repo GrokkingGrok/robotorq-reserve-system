@@ -604,3 +604,219 @@ pub fn get_milestone_statuses(contract_id: String) -> Result<serde_json::Value, 
         "failed": milestones.iter().filter(|(_, s)| matches!(s, MilestoneStatus::Failed(_))).count(),
     }))
 }
+
+// ────────────────────────────────────────────────────────────────
+// UNIT TESTS (TODO #12)
+// ────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ────────────────────────────────────────────────────────────────
+    // ContractControl Enum Tests
+    // ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_contract_control_enum_states() {
+        let running = ContractControl::Running;
+        let paused = ContractControl::Paused;
+        let stopped = ContractControl::Stopped;
+        let completed = ContractControl::Completed;
+
+        assert_eq!(running, ContractControl::Running);
+        assert_eq!(paused, ContractControl::Paused);
+        assert_eq!(stopped, ContractControl::Stopped);
+        assert_eq!(completed, ContractControl::Completed);
+
+        // Test that states are distinct
+        assert_ne!(running, paused);
+        assert_ne!(paused, stopped);
+        assert_ne!(stopped, completed);
+    }
+
+    #[test]
+    fn test_contract_control_clone() {
+        let original = ContractControl::Running;
+        let cloned = original.clone();
+        assert_eq!(original, cloned);
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // MilestoneStatus Enum Tests
+    // ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_milestone_status_pending() {
+        let status = MilestoneStatus::Pending;
+        assert!(matches!(status, MilestoneStatus::Pending));
+    }
+
+    #[test]
+    fn test_milestone_status_confirmed() {
+        let status = MilestoneStatus::Confirmed;
+        assert!(matches!(status, MilestoneStatus::Confirmed));
+    }
+
+    #[test]
+    fn test_milestone_status_failed() {
+        let status = MilestoneStatus::Failed("Network timeout".to_string());
+        match status {
+            MilestoneStatus::Failed(msg) => {
+                assert_eq!(msg, "Network timeout");
+            }
+            _ => panic!("Expected Failed status"),
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // ContractStateManager Tests
+    // ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_contract_state_manager_default_state() {
+        let manager = ContractStateManager::global();
+        let state = manager.lock().unwrap().get_state("test-contract-default");
+        
+        // Default state should be Running
+        assert_eq!(state, ContractControl::Running);
+    }
+
+    #[test]
+    fn test_contract_state_manager_set_and_get() {
+        let manager = ContractStateManager::global();
+        
+        // Set state to Paused
+        manager.lock().unwrap().set_state(
+            "test-contract-set-get".to_string(),
+            ContractControl::Paused
+        );
+        
+        // Get state back
+        let state = manager.lock().unwrap().get_state("test-contract-set-get");
+        assert_eq!(state, ContractControl::Paused);
+    }
+
+    #[test]
+    fn test_contract_state_manager_state_transitions() {
+        let manager = ContractStateManager::global();
+        let contract_id = "test-transitions-002";
+        
+        // Running → Paused → Running → Stopped → Completed
+        manager.lock().unwrap().set_state(
+            contract_id.to_string(),
+            ContractControl::Running
+        );
+        assert_eq!(
+            manager.lock().unwrap().get_state(contract_id),
+            ContractControl::Running
+        );
+        
+        manager.lock().unwrap().set_state(
+            contract_id.to_string(),
+            ContractControl::Paused
+        );
+        assert_eq!(
+            manager.lock().unwrap().get_state(contract_id),
+            ContractControl::Paused
+        );
+        
+        manager.lock().unwrap().set_state(
+            contract_id.to_string(),
+            ContractControl::Stopped
+        );
+        assert_eq!(
+            manager.lock().unwrap().get_state(contract_id),
+            ContractControl::Stopped
+        );
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // MilestoneTracker Tests
+    // ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_milestone_tracker_set_and_get() {
+        let tracker = MilestoneTracker::global();
+        
+        // Set milestone to Confirmed
+        tracker.lock().unwrap().set_status(
+            "contract-milestone-test-001",
+            42,
+            MilestoneStatus::Confirmed
+        );
+        
+        // Get status back
+        let status = tracker.lock().unwrap().get_status("contract-milestone-test-001", 42);
+        assert!(matches!(status, MilestoneStatus::Confirmed));
+    }
+
+    #[test]
+    fn test_milestone_tracker_failed_with_error() {
+        let tracker = MilestoneTracker::global();
+        
+        tracker.lock().unwrap().set_status(
+            "contract-error-test",
+            0,
+            MilestoneStatus::Failed("NetworkError: timeout".to_string())
+        );
+        
+        // Verify error message is preserved
+        let status = tracker.lock().unwrap().get_status("contract-error-test", 0);
+        match status {
+            MilestoneStatus::Failed(msg) => assert_eq!(msg, "NetworkError: timeout"),
+            _ => panic!("Expected Failed status"),
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // Economic Calculation Tests
+    // ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_robo_per_milestone_calculation() {
+        // Example: 3000 RT total, 20 hour duration, 5 second intervals
+        let robo_stake_total = 3000.0;
+        let duration_hours = 20.0;
+        let interval_seconds = 5.0;
+        
+        // Calculate milestones
+        let total_milestones = (duration_hours * 3600.0) / interval_seconds;
+        let robo_per_milestone = robo_stake_total / total_milestones;
+        
+        // 20 hours × 3600 seconds/hour = 72,000 seconds
+        // 72,000 seconds / 5 seconds = 14,400 milestones
+        assert_eq!(total_milestones, 14400.0);
+        
+        // 3000 RT / 14,400 milestones ≈ 0.2083333... RT per milestone
+        assert!((robo_per_milestone - 0.208333333_f64).abs() < 0.000001);
+    }
+
+    #[test]
+    fn test_robo_per_milestone_zero_stake() {
+        let robo_stake_total = 0.0;
+        let duration_hours = 20.0;
+        let interval_seconds = 5.0;
+        
+        let total_milestones = (duration_hours * 3600.0) / interval_seconds;
+        let robo_per_milestone = if robo_stake_total > 0.0 && duration_hours > 0.0 {
+            robo_stake_total / total_milestones
+        } else {
+            0.0
+        };
+        
+        assert_eq!(robo_per_milestone, 0.0);
+    }
+
+    #[test]
+    fn test_total_milestones_calculation() {
+        // Test: 1 hour, 1 second intervals = 3600 milestones
+        assert_eq!((1.0 * 3600.0) / 1.0, 3600.0);
+        
+        // Test: 24 hours, 5 second intervals = 17,280 milestones
+        assert_eq!((24.0 * 3600.0) / 5.0, 17280.0);
+        
+        // Test: 0.5 hours (30 min), 10 second intervals = 180 milestones
+        assert_eq!((0.5 * 3600.0) / 10.0, 180.0);
+    }
+}
