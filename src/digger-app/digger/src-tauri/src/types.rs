@@ -37,39 +37,62 @@ pub struct JouleTorqOre {
     /// Can be empty (None) if no photo
     pub proof_of_work: Option<String>, // base64 photo
 
-    // ────────────────────────────────────────────────────────────────
-    // TODO #1: Add RoboStake Economic Tracking
-    // ────────────────────────────────────────────────────────────────
-    // GOAL: Track the RoboStake payment allocated to this ore batch.
-    //
-    // Add these fields:
-    // - robo_stake_amount: f64     // Portion of total stake for this milestone
-    // - signature: Option<Vec<u8>> // Post-quantum signature (Dilithium)
-    //
-    // Also add method:
-    // impl JouleTorqOre {
-    //     pub fn unsigned_bytes(&self) -> Vec<u8> {
-    //         // Serialize all fields EXCEPT signature for signing
-    //         // This is the data that will be signed by Dilithium
-    //     }
-    // }
-    //
-    // CALCULATION:
-    // - Total RoboStake received from Trust via POST /stake
-    // - Calculate: robo_per_milestone = total_stake / number_of_milestones
-    // - Each ore batch carries its fair share through the pipeline
-    //
-    // CRYPTO ARCHITECTURE (Future Implementation):
-    // - Phase 1 (NOW): Add fields, stub crypto.rs with sign_ore/verify_ore
-    // - Phase 2 (Later): Implement Dilithium signatures using pqcrypto-dilithium
-    // - Phase 3 (Later): Refinery verifies signatures before accepting ore
-    // - Phase 4 (Later): Mint uses SPHINCS+ for Merkle tree ledger
-    //
-    // INTEGRATION:
-    // - Digger signs ore before sending to Refinery
-    // - Refinery verifies signature, bundles into TokenTorqIngot
-    // - RoboStake travels with ore: Refinery→TokenTorqIngot→Mint→Ledger
-    // ────────────────────────────────────────────────────────────────
+    /// The portion of RoboStake (RT) allocated to this milestone
+    /// Example: 0.04166 RT (from 3000 RT / 72000 milestones)
+    pub robo_stake_amount: f64,
+
+    /// Post-quantum cryptographic signature (Dilithium)
+    /// Used to prove authenticity and prevent tampering
+    /// None = unsigned (stub mode), Some(bytes) = signed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature: Option<Vec<u8>>,
+}
+
+impl JouleTorqOre {
+    /// Serialize ore data for signing (excludes signature field)
+    /// 
+    /// This creates the message that will be signed by Dilithium.
+    /// The signature is computed over all fields EXCEPT the signature itself.
+    /// 
+    /// # Returns
+    /// * `Vec<u8>` - Serialized bytes ready for signing
+    /// 
+    /// # Example
+    /// ```rust,ignore
+    /// let ore = JouleTorqOre { /* ... */ signature: None };
+    /// let message = ore.unsigned_bytes();
+    /// let signature = crypto::sign_ore(&ore, &private_key);
+    /// ore.signature = Some(signature);
+    /// ```
+    pub fn unsigned_bytes(&self) -> Vec<u8> {
+        // Create a temporary struct without the signature
+        let unsigned = UnsignedOre {
+            digger_id: &self.digger_id,
+            contract_id: &self.contract_id,
+            tokens_generated: self.tokens_generated,
+            joules: self.joules,
+            milestone_index: self.milestone_index,
+            timestamp: self.timestamp,
+            proof_of_work: &self.proof_of_work,
+            robo_stake_amount: self.robo_stake_amount,
+        };
+        
+        // Serialize to JSON bytes (deterministic for crypto)
+        serde_json::to_vec(&unsigned).unwrap_or_default()
+    }
+}
+
+/// Helper struct for serializing ore without signature
+#[derive(Serialize)]
+struct UnsignedOre<'a> {
+    digger_id: &'a str,
+    contract_id: &'a str,
+    tokens_generated: u64,
+    joules: u64,
+    milestone_index: u32,
+    timestamp: u64,
+    proof_of_work: &'a Option<String>,
+    robo_stake_amount: f64,
 }
 
 /// This is the **job contract** — like a work agreement.

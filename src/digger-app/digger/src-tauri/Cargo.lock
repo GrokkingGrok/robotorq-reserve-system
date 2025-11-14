@@ -758,6 +758,7 @@ dependencies = [
  "lazy_static",
  "log",
  "pqcrypto-dilithium",
+ "pqcrypto-internals",
  "pqcrypto-traits",
  "serde",
  "serde_json",

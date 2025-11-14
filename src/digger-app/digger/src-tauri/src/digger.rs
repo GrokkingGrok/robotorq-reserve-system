@@ -135,6 +135,8 @@ impl Digger {
                     milestone_index,
                     timestamp: start_time,
                     proof_of_work: proof_photo,
+                    robo_stake_amount: 0.0,  // TODO #6: Calculate from contract.robo_stake_total / total_milestones
+                    signature: None,          // TODO #2: Sign with crypto::sign_ore() before sending to Refinery
                 };
 
                 // Print a message so we can see progress
