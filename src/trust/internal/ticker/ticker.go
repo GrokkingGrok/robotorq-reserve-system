@@ -23,8 +23,9 @@ func Start(ctx context.Context, ch chan<- *opportunity.Opportunity, logger *zap.
 					fmt.Sprintf("opportunity-%s-%d", time.Now().Format("150405"), counter),
 					fmt.Sprintf("Builder-%d", counter),
 					fmt.Sprintf("Description-%d", counter),
+					"http://localhost:9000", // Default Digger URL for testing
 					counter*100,
-					"pending",
+					0.15+float64(counter)*0.01, // ROI increases with each opportunity
 				)
 				counter++
 				select {

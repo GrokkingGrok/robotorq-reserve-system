@@ -4,7 +4,10 @@ go 1.24
 
 require github.com/nats-io/nats.go v1.47.0
 
+require github.com/kr/text v0.2.0 // indirect
+
 require (
+	b2b/natsx v0.0.0
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
@@ -23,3 +26,5 @@ require (
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 )
+
+replace b2b/natsx => ../natsx

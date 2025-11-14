@@ -7,6 +7,7 @@ mod digger;        // Controls the robots (Diggers)
 mod ore_storage;   // Stores the digital gold (Ore) the robots make
 mod contracts;     // Manages the job agreements (Contracts)
 mod types;         // Defines the shapes of our data (like blueprints)
+mod http_api;      // HTTP API for external services to query/control Digger
 
 // We use these tools to manage our robots, jobs, and treasure
 use digger::DiggerManager;        // The boss of all robots
@@ -125,6 +126,9 @@ fn main() {
     // ──────────────────────────────
     // START THE APP
     // ──────────────────────────────
+
+    // Start HTTP API server for external queries
+    http_api::start_http_server();
 
     tauri::Builder::default()
         // Connect the buttons to the functions

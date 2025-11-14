@@ -135,6 +135,11 @@ impl DiggerManager {
         INSTANCE.clone()
     }
 
+    /// Find a robot (immutable)
+    pub fn get_digger(&self, id: &str) -> Option<&Digger> {
+        self.diggers.get(id)
+    }
+
     /// Find a robot and let you change it
     pub fn get_digger_mut(&mut self, id: &str) -> Option<&mut Digger> {
         self.diggers.get_mut(id)

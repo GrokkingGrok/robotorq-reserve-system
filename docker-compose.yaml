@@ -112,14 +112,19 @@ services:
   # DistoDam Service
   # -----------------------------
   distodam:
-    build: ./src/distodam
+    build:
+      context: ./src
+      dockerfile: ./distodam/Dockerfile
     ports:
-      - "8082:8080"
+      - "8082:8082"
+    environment:
+      - NATS_URL=nats://nats:4222
+      - PORT=8082
     depends_on:
       nats:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/health"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -130,9 +135,13 @@ services:
   # Trust Service
   # -----------------------------
   trust:
-    build: ./src/trust
+    build:
+      context: ./src
+      dockerfile: ./trust/Dockerfile
     ports:
       - "8083:8080"
+    environment:
+      - NATS_URL=nats://nats:4222
     depends_on:
       nats:
         condition: service_healthy

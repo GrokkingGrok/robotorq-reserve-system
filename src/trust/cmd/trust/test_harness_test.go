@@ -6,9 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"b2b/natsx"
 	"b2b/trust/internal/metrics"
 	"b2b/trust/internal/trustsvc"
 
+	"github.com/nats-io/nats.go"
 	"go.uber.org/zap"
 )
 
@@ -19,8 +21,15 @@ func TestTrustServicePipeline(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Connect to NATS (skip test if NATS is not available)
+	natsClient, err := natsx.New(nats.DefaultURL)
+	if err != nil {
+		t.Skip("NATS not available, skipping test:", err)
+	}
+	defer natsClient.Close()
+
 	m := metrics.NewMetrics()
-	svc := trustsvc.NewService(logger, m)
+	svc := trustsvc.NewService(logger, m, natsClient)
 
 	// Start service
 	svc.Start(ctx)
@@ -72,8 +81,15 @@ func BenchmarkTrustServiceThroughput(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Connect to NATS (skip benchmark if NATS is not available)
+	natsClient, err := natsx.New(nats.DefaultURL)
+	if err != nil {
+		b.Skip("NATS not available, skipping benchmark:", err)
+	}
+	defer natsClient.Close()
+
 	m := metrics.NewMetrics()
-	svc := trustsvc.NewService(logger, m)
+	svc := trustsvc.NewService(logger, m, natsClient)
 
 	svc.Start(ctx)
 

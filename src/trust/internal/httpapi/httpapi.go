@@ -82,10 +82,13 @@ func (h *HTTPServer) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out := map[string]uint64{
-		"submitted":    h.Metrics.GetSubmitted(),
-		"appraised":    h.Metrics.GetAppraised(),
-		"funds_synced": h.Metrics.GetFundsSynced(),
-		"executions":   h.Metrics.GetExecutions(),
+		"submitted":          h.Metrics.GetSubmitted(),
+		"appraised":          h.Metrics.GetAppraised(),
+		"funds_synced":       h.Metrics.GetFundsSynced(),
+		"executions":         h.Metrics.GetExecutions(),
+		"contracts_created":  h.Metrics.GetContractsCreated(),
+		"contracts_funded":   h.Metrics.GetContractsFunded(),
+		"contracts_executed": h.Metrics.GetContractsExecuted(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

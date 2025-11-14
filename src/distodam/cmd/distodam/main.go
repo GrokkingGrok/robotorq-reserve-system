@@ -41,6 +41,9 @@ import (
 	"syscall"
 	"time"
 
+	"b2b/distorouter/internal/models"
+	"b2b/natsx"
+
 	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -54,36 +57,43 @@ import (
 // and routes labor shares to BRLa. All balance operations are
 // atomic to support high-throughput concurrent access.
 type DistoDam struct {
-	ID        string          // Unique identifier for this dam
-	nc        *nats.Conn      // NATS connection for publishing
-	reservoir atomic.Int64    // Reservoir balance in micro-RT (1 RT = 1,000,000 µRT)
-	ctx       context.Context // Lifecycle context for graceful shutdown
-	cancel    context.CancelFunc
+	ID         string          // Unique identifier for this dam
+	nc         *nats.Conn      // NATS connection for publishing
+	natsClient *natsx.Client   // NATS client for publishing JSON
+	reservoir  atomic.Int64    // Reservoir balance in micro-RT (1 RT = 1,000,000 µRT)
+	ctx        context.Context // Lifecycle context for graceful shutdown
+	cancel     context.CancelFunc
+	port       string // HTTP port for health/metrics server
 
 	// Water level thresholds (currently unused, but reserved for future rebalancing logic)
 	lowWater  int64
 	highWater int64
 
 	// ─── Prometheus metrics (all registered in NewDistoDam) ──────────────────────────────
-	reservoirGauge prometheus.Gauge     // Current reservoir balance in RT
-	inflowCounter  prometheus.Counter   // Total inflows received
-	outflowCounter prometheus.Counter   // Total outflows routed to BRLa
-	rebalCounter   prometheus.Counter   // Number of rebalance operations triggered
-	rebalHistogram prometheus.Histogram // Duration of rebalance operations
+	reservoirGauge    prometheus.Gauge     // Current reservoir balance in RT
+	inflowCounter     prometheus.Counter   // Total inflows received
+	outflowCounter    prometheus.Counter   // Total outflows routed to BRLa
+	rebalCounter      prometheus.Counter   // Number of rebalance operations triggered
+	rebalHistogram    prometheus.Histogram // Duration of rebalance operations
+	contractsReceived prometheus.Counter   // Total contracts received from Trust
+	contractsFunded   prometheus.Counter   // Total contracts successfully funded
+	contractsRejected prometheus.Counter   // Total contracts rejected (insufficient funds)
 }
 
 // NewDistoDam creates a new DistoDam instance with full observability.
 // It initializes atomic state, Prometheus metrics, and a cancellable context.
-func NewDistoDam(ctx context.Context, id string, nc *nats.Conn) *DistoDam {
+func NewDistoDam(ctx context.Context, id string, nc *nats.Conn, natsClient *natsx.Client, port string) *DistoDam {
 	cctx, cancel := context.WithCancel(ctx)
 
 	d := &DistoDam{
-		ID:        id,
-		nc:        nc,
-		ctx:       cctx,
-		cancel:    cancel,
-		lowWater:  1_000_000,  // 0.001 RT — future low-water trigger
-		highWater: 10_000_000, // 0.01 RT — future high-water trigger
+		ID:         id,
+		nc:         nc,
+		natsClient: natsClient,
+		ctx:        cctx,
+		cancel:     cancel,
+		port:       port,
+		lowWater:   1_000_000,  // 0.001 RT — future low-water trigger
+		highWater:  10_000_000, // 0.01 RT — future high-water trigger
 	}
 
 	// ─── Prometheus Metrics Registration ──────────────────────────────
@@ -109,6 +119,18 @@ func NewDistoDam(ctx context.Context, id string, nc *nats.Conn) *DistoDam {
 		Help:    "Duration of rebalance operations in seconds",
 		Buckets: prometheus.DefBuckets, // [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]
 	})
+	d.contractsReceived = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "distodam_contracts_received_total",
+		Help: "Total number of contracts received from Trust",
+	})
+	d.contractsFunded = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "distodam_contracts_funded_total",
+		Help: "Total number of contracts successfully funded",
+	})
+	d.contractsRejected = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "distodam_contracts_rejected_total",
+		Help: "Total number of contracts rejected due to insufficient funds",
+	})
 
 	prometheus.MustRegister(
 		d.reservoirGauge,
@@ -116,6 +138,9 @@ func NewDistoDam(ctx context.Context, id string, nc *nats.Conn) *DistoDam {
 		d.outflowCounter,
 		d.rebalCounter,
 		d.rebalHistogram,
+		d.contractsReceived,
+		d.contractsFunded,
+		d.contractsRejected,
 	)
 
 	return d
@@ -136,12 +161,26 @@ func main() {
 		natsURL = "nats:4222" // Docker network default
 	}
 
+	// HTTP port configuration
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8082" // Default to 8082 to avoid conflict with Trust
+	}
+
 	nc, err := nats.Connect(natsURL)
 	if err != nil {
 		slog.Error("nats_connect_failed", "error", err)
 		os.Exit(1)
 	}
 	defer nc.Close()
+
+	natsClient, err := natsx.New(natsURL)
+	if err != nil {
+		slog.Error("natsx_client_failed", "error", err)
+		os.Exit(1)
+	}
+	defer natsClient.Close()
+
 	slog.Info("nats_connected", "url", natsURL)
 
 	// Context for graceful shutdown (SIGINT, SIGTERM)
@@ -149,12 +188,13 @@ func main() {
 	defer cancel()
 
 	// Create and start the dam
-	dam := NewDistoDam(ctx, "dam-jon-001", nc)
-	dam.startHTTP()       // Health, status, metrics
-	dam.subscribeMint()   // Listen for Mint output
-	dam.startFlowTicker() // Route labor share every second
+	dam := NewDistoDam(ctx, "dam-jon-001", nc, natsClient, port)
+	dam.startHTTP()          // Health, status, metrics
+	dam.subscribeMint()      // Listen for Mint output
+	dam.subscribeContracts() // Listen for contracts from Trust
+	dam.startFlowTicker()    // Route labor share every second
 
-	slog.Info("distodam_running", "http_port", 8080, "metrics_path", "/metrics")
+	slog.Info("distodam_running", "http_port", port, "metrics_path", "/metrics")
 
 	// Block until shutdown signal
 	<-ctx.Done()
@@ -189,8 +229,9 @@ func (d *DistoDam) startHTTP() {
 
 	// Start HTTP server in background
 	go func() {
-		log.Println("HTTP server listening on :8080")
-		if err := http.ListenAndServe(":8080", mux); err != nil && err != http.ErrServerClosed {
+		addr := ":" + d.port
+		log.Println("HTTP server listening on", addr)
+		if err := http.ListenAndServe(addr, mux); err != nil && err != http.ErrServerClosed {
 			log.Fatal("HTTP server error: ", err)
 		}
 	}()
@@ -226,6 +267,68 @@ func (d *DistoDam) subscribeMint() {
 		os.Exit(1)
 	}
 	slog.Info("subscribed_to_topic", "topic", "distodam.robo")
+}
+
+// subscribeContracts listens for contracts from Trust on 'contracts.pending'
+// Checks reservoir balance, deducts funds, and publishes to 'contracts.funded'
+func (d *DistoDam) subscribeContracts() {
+	_, err := d.nc.Subscribe("contracts.pending", func(m *nats.Msg) {
+		d.contractsReceived.Inc()
+
+		// Parse contract from NATS message
+		var contract models.Contract
+		if err := json.Unmarshal(m.Data, &contract); err != nil {
+			slog.Error("invalid_contract_message", "error", err, "raw", string(m.Data))
+			return
+		}
+
+		slog.Info("contract_received",
+			"contract_id", contract.ID,
+			"opportunity_id", contract.OpportunityID,
+			"robo_stake", contract.RoboStake,
+			"roi", contract.ROI,
+			"status", contract.Status)
+
+		// Convert RT to micro-RT for reservoir deduction
+		requiredMicroRT := int64(math.Round(contract.RoboStake * 1_000_000))
+
+		// Try to fund the contract from reservoir
+		if d.deductReservoir(requiredMicroRT) {
+			// Successfully funded - update contract status
+			contract.Status = "funded"
+			now := time.Now()
+			contract.FundedAt = &now
+
+			// Publish to 'contracts.funded' topic
+			if err := d.natsClient.PublishJSON("contracts.funded", contract); err != nil {
+				slog.Error("failed_to_publish_funded_contract",
+					"contract_id", contract.ID,
+					"error", err)
+				// TODO: Add funded amount back to reservoir on publish failure
+				return
+			}
+
+			d.contractsFunded.Inc()
+			slog.Info("contract_funded",
+				"contract_id", contract.ID,
+				"robo_stake_rt", contract.RoboStake,
+				"robo_stake_micro", requiredMicroRT,
+				"reservoir_balance", float64(d.reservoir.Load())/1_000_000.0)
+		} else {
+			// Insufficient funds - reject contract
+			d.contractsRejected.Inc()
+			slog.Warn("contract_rejected_insufficient_funds",
+				"contract_id", contract.ID,
+				"required_rt", contract.RoboStake,
+				"reservoir_balance", float64(d.reservoir.Load())/1_000_000.0)
+		}
+	})
+
+	if err != nil {
+		slog.Error("subscribe_failed", "topic", "contracts.pending", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("subscribed_to_topic", "topic", "contracts.pending")
 }
 
 func (d *DistoDam) startFlowTicker() {

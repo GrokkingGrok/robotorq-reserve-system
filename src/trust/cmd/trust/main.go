@@ -8,9 +8,11 @@ import (
 	"syscall"
 	"time"
 
+	"b2b/natsx"
 	"b2b/trust/internal/metrics"
 	"b2b/trust/internal/trustsvc"
 
+	"github.com/nats-io/nats.go"
 	"go.uber.org/zap"
 )
 
@@ -21,11 +23,24 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Connect to NATS
+	natsURL := os.Getenv("NATS_URL")
+	if natsURL == "" {
+		natsURL = nats.DefaultURL // localhost:4222
+	}
+	
+	natsClient, err := natsx.New(natsURL)
+	if err != nil {
+		logger.Fatal("Failed to connect to NATS", zap.String("url", natsURL), zap.Error(err))
+	}
+	defer natsClient.Close()
+	logger.Info("Connected to NATS", zap.String("url", natsURL))
+
 	// Metrics
 	m := metrics.NewMetrics()
 
 	// Trust service
-	svc := trustsvc.NewService(logger, m)
+	svc := trustsvc.NewService(logger, m, natsClient)
 	mux := svc.Start(ctx)
 
 	// Start HTTP server
