@@ -4,10 +4,16 @@ version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
+default-run = "digger"
 
 [lib]
 name = "digger_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+# Main Tauri GUI application
+[[bin]]
+name = "digger"
+path = "src/main.rs"
 
 # Headless binary for E2E testing (no GUI/Tauri overhead)
 [[bin]]
