@@ -216,22 +216,43 @@ fn handle_stake(mut request: tiny_http::Request) {
     digger.current_contract = Some(contract.clone());
     drop(digger_lock); // Release lock before starting execution
 
+    println!("🔍 DEBUG: About to check CONTRACT_STARTER...");
+    
     // Start contract execution (if contract starter is set)
-    if let Some(starter) = CONTRACT_STARTER.lock().unwrap().as_ref() {
-        println!("🚀 Starting contract execution for {}", contract.id);
+    let starter_guard = CONTRACT_STARTER.lock().unwrap();
+    println!("🔍 DEBUG: CONTRACT_STARTER lock acquired");
+    
+    if let Some(starter) = starter_guard.as_ref() {
+        println!("🚀 DEBUG: CONTRACT_STARTER is Some! Starting contract execution for {}", contract.id);
+        println!("   DEBUG: Calling starter with:");
+        println!("     - digger_id: dig-jon-ai-001");
+        println!("     - power_kw: {}", power_kw);
+        println!("     - max_token_throughput: {}", max_token_throughput);
+        println!("     - contract.id: {}", contract.id);
+        
+        // Drop the lock before calling starter (prevent deadlock)
+        drop(starter_guard);
         
         // Call the starter (this spawns an async task in headless_executor)
+        println!("🔍 DEBUG: About to call starter function...");
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            starter(
-                "dig-jon-ai-001".to_string(),
-                power_kw,
-                max_token_throughput,
-                contract.clone(),
-            );
+            let starter_ref = CONTRACT_STARTER.lock().unwrap();
+            if let Some(s) = starter_ref.as_ref() {
+                s(
+                    "dig-jon-ai-001".to_string(),
+                    power_kw,
+                    max_token_throughput,
+                    contract.clone(),
+                );
+            }
         })) {
-            Ok(_) => println!("✅ Contract executor started successfully"),
+            Ok(_) => {
+                println!("✅ DEBUG: Contract starter function returned successfully");
+                println!("✅ Contract executor started successfully");
+            }
             Err(e) => {
-                eprintln!("❌ Contract starter panicked: {:?}", e);
+                eprintln!("❌ DEBUG: Contract starter panicked: {:?}", e);
+                eprintln!("❌ Contract starter panicked");
                 let response = Response::from_string("Internal error starting contract")
                     .with_status_code(500);
                 let _ = request.respond(response);
@@ -239,6 +260,7 @@ fn handle_stake(mut request: tiny_http::Request) {
             }
         }
     } else {
+        println!("⚠️  DEBUG: CONTRACT_STARTER is None!");
         println!("⚠️  No contract starter registered - contract will not execute");
     }
 

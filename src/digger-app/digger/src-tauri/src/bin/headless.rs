@@ -49,6 +49,9 @@ async fn main() {
     println!("   Mode: HTTP API only (no GUI)");
     println!("   Port: 9000");
     
+    // Get the current tokio runtime handle
+    let runtime_handle = tokio::runtime::Handle::current();
+    
     // Initialize test digger (same as main.rs)
     {
         let diggers = DiggerManager::global();
@@ -80,19 +83,33 @@ async fn main() {
     // Create OreStorage for headless contract execution
     let ore_store = OreStorage::global();
     let ore_store_for_callback = Arc::clone(&ore_store);
+    let handle_for_callback = runtime_handle.clone();
 
+    println!("🔍 DEBUG: About to register contract starter callback...");
+    
     // Register contract starter callback (dependency injection)
     http_api::set_contract_starter(move |digger_id, power_kw, max_token_throughput, contract| {
-        println!("🎯 Contract starter invoked for {} (contract: {})", digger_id, contract.id);
+        println!("🎯 DEBUG: ===== CONTRACT STARTER CALLBACK INVOKED! =====");
+        println!("   Digger: {}", digger_id);
+        println!("   Contract: {}", contract.id);
+        println!("   Power: {} kW", power_kw);
+        println!("   Throughput: {} tokens/sec", max_token_throughput);
+        println!("   Calling headless_executor::start_headless_contract()...");
+        
         headless_executor::start_headless_contract(
+            handle_for_callback.clone(),
             digger_id,
             power_kw,
             max_token_throughput,
             contract,
             ore_store_for_callback.clone(),
         );
+        
+        println!("   start_headless_contract() returned");
+        println!("🎯 DEBUG: ===== CONTRACT STARTER CALLBACK COMPLETE =====");
     });
 
+    println!("✅ DEBUG: Contract starter registered successfully");
     println!("✅ Contract starter registered");
     
     // Start HTTP server (it spawns its own thread)

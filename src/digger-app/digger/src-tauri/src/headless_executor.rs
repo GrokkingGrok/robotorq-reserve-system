@@ -11,9 +11,13 @@ use crate::types::{Contract, JouleTorqOre};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
+use tokio::runtime::Handle;
 
 /// Start executing a contract in headless mode (no GUI events)
+/// 
+/// This spawns onto the provided tokio runtime handle (not tokio::spawn directly)
 pub fn start_headless_contract(
+    runtime_handle: Handle,
     digger_id: String,
     power_kw: f64,
     max_token_throughput: u64,
@@ -27,7 +31,7 @@ pub fn start_headless_contract(
     println!("   Throughput: {} tokens/sec", max_token_throughput);
     println!("   Duration: {} hours", contract.duration_hours);
     
-    tokio::spawn(async move {
+    runtime_handle.spawn(async move {
         println!("🚀 Tokio task spawned! About to execute contract loop...");
         execute_contract_loop(
             digger_id,
