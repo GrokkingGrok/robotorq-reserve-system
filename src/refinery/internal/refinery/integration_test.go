@@ -397,7 +397,7 @@ func TestRefineryIntegration_QueueBackpressure(t *testing.T) {
 		ore := &models.JouleTorqOre{
 			DiggerID:        fmt.Sprintf("digger-%d", i),
 			ContractID:      "contract-001",
-			TokensGenerated: 1, // Only 1 token = 1 unit
+			TokensGenerated: 1,  // Only 1 token = 1 unit
 			Joules:          21, // 21J per token (typical AI workload)
 			MilestoneIndex:  uint32(i),
 			Timestamp:       uint64(time.Now().Unix()),
