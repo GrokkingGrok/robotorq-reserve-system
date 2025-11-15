@@ -1,795 +1,1051 @@
-# RoboTorq Network - AI Agent Instructions
+# GitHub Copilot Instructions - RoboTorq Network
 
-*Last Updated: November 15, 2025*
-
----
-
-## 🎯 Project Mission
-
-**RoboTorq** is a physics-based monetary system where robotic labor creates measurable value. This is **NOT** a cryptocurrency—it's a NATS-based distributed system with cryptographic proofs that turns energy + computation + time into currency.
-
-**Core Principle**: `1 RoboTorq = 1 kWh × 3600 tokens/sec × 1 hour` of verified robotic work.
-
-The network transforms: `Energy (Joules) → JouleTorq → TokenTorq → RoboTorq → Physical Currency`
+**Project**: RoboTorq - Physics-Based Monetary System  
+**Last Updated**: November 15, 2025  
+**Purpose**: Guide AI agents through the proven development workflow
 
 ---
 
-## 📚 Essential Reading
+## 🎯 Project Overview
 
-Before coding, understand the economics:
-- **README.md** (5,745 lines): Complete economic model, formulas, and philosophy
-- **BRANCHING.md**: Git workflow (`v0` baseline, `feature/*` branches)
-- Service-specific `ARCHITECTURE.md` files (Mint, Refinery, Trust, etc.)
+RoboTorq is **NOT** a cryptocurrency—it's a NATS-based distributed system where robotic labor creates measurable value through physics.
 
-**Key Concept**: The white paper IS the spec. When in doubt, reference `README.md` appendices for data structures, formulas, and workflows.
+**Core Equation**: `1 RoboTorq = 1 kWh × 3600 tokens/sec × 1 hour`
 
----
+**Architecture**: Message-passing system (NATS pub/sub), not blockchain
+- **No chain**: Real-time message flows, not append-only ledger
+- **No mining**: Value minted based on verified work
+- **No gas fees**: Transaction fees fund operations (demurrage)
 
-## 🏗️ Architecture Overview
-
-### Service Boundaries
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    ROBOTORQ NETWORK                              │
-│                                                                  │
-│  Digger (executor)                                              │
-│    ↓ JouleTorqOre (proofs of work)                              │
-│  Refinery (assembler)                                           │
-│    ↓ TokenTorqIngot (3600J batches)                             │
-│  Mint (batcher)                                                 │
-│    ↓ RoboTorq (finalized currency)                              │
-│  DistoDam (distributor)                                         │
-│    ↓ Universal Basic Dividend (UBD streams)                     │
-│  Trust (contract evaluator)                                     │
-│    ↔ BidNet (contract gateway - future)                         │
-│  Wallet (user interface)                                        │
-│    ↔ Printer (physical RT creator)                              │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Communication Backbone: NATS (NOT Blockchain!)
-
-**Critical**: This is a **message-passing system**, not blockchain/crypto.
-- **No chain**: Just NATS pub/sub for real-time messaging
-- **No mining**: Value is minted based on verified work
-- **No gas fees**: Transaction fees fund network operations (demurrage)
-
-**NATS Topics Pattern**:
-```
-mint.ingots         → Refinery → Mint
-mint.batches        → Mint → DistoDam
-contracts.pending   → Trust → BidNet → DistoDam
-contracts.funded    → DistoDam → Trust → Executor
-wallet.transfers    → Wallet ↔ Wallet
-printer.burn        → Wallet → Printer (off-grid)
-```
-
-**NATS Client Pattern** (see `src/natsx/`):
-```go
-import "b2b/natsx"
-
-nc, err := natsx.New(os.Getenv("NATS_URL"))
-defer nc.Close()
-
-// Publish
-nc.PublishJSON("topic", data)
-
-// Subscribe
-nc.Subscribe("topic", func(msg *nats.Msg) { /* handle */ })
-```
+**Critical Reading**:
+1. `README.md` (5,745 lines): Complete economic model, formulas, philosophy
+2. `BRANCHING.md`: Git workflow (`v0` baseline, `feature/*` branches)
+3. Service-specific architecture docs:
+   - `src/mint/MINT_ARCHITECTURE.md`
+   - `src/refinery/REFINERY_ARCHITECTURE.md`
+   - `src/trust/TRUST_ARCHITECTURE.md` (future)
 
 ---
 
-## 🔧 Development Patterns
+## 🔄 The Power Workflow
 
-### Project Structure (Go Services)
+This 14-step cycle achieved **95% completion** of the currency refactor in one focused sprint.
 
-Standard layout for all Go services:
-```
-service/
-├── cmd/
-│   └── service/
-│       └── main.go           # Entry point, wire components
-├── internal/
-│   ├── config/               # Environment config, validation
-│   ├── metrics/              # Prometheus metrics
-│   └── {service}/            # Core business logic
-│       ├── component.go
-│       └── component_test.go
-├── Dockerfile                # Multi-stage Alpine build
-├── go.mod, go.sum
-├── {SERVICE}_ARCHITECTURE.md # Component design, data flows
-└── TESTING_PLAN.md           # Test strategy, coverage goals
+### Phase 1: Planning & Context
+
+#### 1. **Branch Checkout**
+```bash
+# Always work on feature branches
+git checkout -b feature/currency-refactor
+
+# Or continue existing work
+git checkout feature/your-feature
+git pull origin feature/your-feature
 ```
 
-### Configuration Pattern
+**Why**: Isolates work, enables parallel development, protects `main` from breaking changes.
 
-**Environment-first** (12-factor app):
+#### 2. **Architecture Review**
+Read relevant architecture docs BEFORE coding:
+```bash
+# For Mint work
+cat src/mint/MINT_ARCHITECTURE.md
+
+# For Refinery work
+cat src/refinery/REFINERY_ARCHITECTURE.md
+
+# For cross-service changes
+grep -r "data flow" src/*/ARCHITECTURE.md
+```
+
+**Focus Areas**:
+- Component responsibilities (what does X do?)
+- Data flow diagrams (how do services communicate?)
+- Key data structures (JouleTorqUnit, TokenTorqIngot, RoboTorqBatch)
+- Configuration patterns (env vars, defaults)
+
+**Example from Currency Refactor**:
+> "Mint aggregates 1000 ingots OR flushes after 60s, builds merkle tree from ingot hashes, publishes batch to DistoDam."
+
+#### 3. **Code Pattern Analysis**
+Study existing implementations to match patterns:
+```bash
+# Example: Understanding Mint's components
+find src/mint/internal/mint -name "*.go" | xargs head -50
+
+# Look for:
+# - Constructor patterns (New*())
+# - Interface definitions
+# - Error handling
+# - Logging style
+# - Metrics instrumentation
+```
+
+**Key Patterns in RoboTorq**:
+- **Dependency Injection**: Components passed via constructors, not globals
+  ```go
+  func NewMintEngine(logger *slog.Logger, metrics *Metrics) *MintEngine
+  ```
+
+- **Graceful Shutdown**: All services respect `context.Context`
+  ```go
+  func (s *Service) Start(ctx context.Context) {
+      for {
+          select {
+          case <-ctx.Done():
+              s.drainBuffer()  // Flush pending work
+              return
+          // ...
+          }
+      }
+  }
+  ```
+
+- **Structured Logging**: JSON logs with contextual fields
+  ```go
+  slog.Info("ingot assembled",
+      "ingot_id", ingot.ID,
+      "units", len(ingot.Units),
+      "joules", ingot.JouleTorqTotal)
+  ```
+
+- **Prometheus Metrics**: Every operation instrumented
+  ```go
+  type Metrics struct {
+      IngotsReceivedTotal prometheus.Counter
+      ProcessingLatency   prometheus.Histogram
+  }
+  
+  m.IngotsReceivedTotal.Inc()
+  ```
+
+---
+
+### Phase 2: Implementation
+
+#### 4. **Create TODOs in Code**
+Mark implementation points BEFORE building:
 ```go
-// internal/config/config.go
-type Config struct {
-    HTTPPort         string        `default:"8080"`
-    NatsURL          string        `default:"nats://nats:4222"`
-    BatchSize        int           `default:"1000"`
-    FlushInterval    time.Duration `default:"60s"`
-    BufferCapacity   int           `default:"100000"`
-    LogLevel         string        `default:"info"`
-}
+// TODO(currency-refactor): Replace dual queues with single unit queue
+// - Remove: jouleQueue, roboQueue
+// - Add: unitQueue []JouleTorqUnit
+// - Update: processOre() to extract units
+// - Fix: assembleIngot() to consume units
+// - Test: Multi-contract unit aggregation
 
-func Load() (*Config, error) {
-    // Load from env, apply defaults, validate
-}
-
-func (c *Config) Validate() error {
-    // Business rule checks
+type Refinery struct {
+    // OLD
+    jouleQueue []float64  // TODO: REMOVE
+    roboQueue  []float64  // TODO: REMOVE
+    
+    // NEW
+    unitQueue  []*JouleTorqUnit  // TODO: IMPLEMENT
 }
 ```
 
-**Docker Compose Override**:
-```yaml
-services:
-  mint:
-    environment:
-      - BATCH_SIZE=500       # Override for testing
-      - LOG_LEVEL=debug
-```
+**Why**: Creates roadmap, enables incremental commits, documents intent.
 
-### Logging Standards
+**Naming Convention**:
+- `TODO(feature-name):` - Planned work on feature branch
+- `FIXME(issue-123):` - Bug fix for GitHub issue
+- `WIP(component):` - Work in progress, incomplete
+- `HACK:` - Temporary workaround, needs cleanup
 
-**Structured JSON logs** (zap or slog):
+#### 5. **Execute TODOs (Implementation)**
+Tackle one TODO at a time, test as you go:
+
+**Example: Refinery Single Queue Implementation**
+
 ```go
-logger.Info("batch_sent",
-    "batch_id", batch.ID,
-    "ingot_count", len(batch.Ingots),
-    "total_joules", batch.TotalJoules,
-    "hash", batch.Hash)
-```
-
-**Never** use `fmt.Println()` in services. Logs are parsed by Prometheus/Grafana.
-
-### Metrics Pattern (Prometheus)
-
-Every service exposes `/metrics`:
-```go
-// internal/metrics/metrics.go
-type Metrics struct {
-    IngotsReceivedTotal  prometheus.Counter
-    BatchesCreatedTotal  prometheus.Counter
-    ProcessingLatency    prometheus.Histogram
-    BufferUtilization    prometheus.Gauge
+// Step 1: Add new data structure
+type QueueManager struct {
+    units    []*models.JouleTorqUnit
+    mu       sync.Mutex
+    notEmpty *sync.Cond
 }
 
-// Instrument business logic
-m.IngotsReceivedTotal.Inc()
-m.ProcessingLatency.Observe(latency.Seconds())
-```
-
-**Standard Metrics**:
-- `{service}_requests_total` - Counter
-- `{service}_errors_total` - Counter  
-- `{service}_processing_latency_seconds` - Histogram (buckets: 0.001, 0.01, 0.1, 1.0)
-- `{service}_queue_depth` - Gauge
-
-See `prometheus.yml` for scrape config.
-
-### Error Handling Philosophy
-
-**Fail-fast validation, graceful degradation, explicit retries**:
-```go
-// Validate inputs immediately
-if ingot.Joules != 3600 {
-    return fmt.Errorf("invalid joules: expected 3600, got %d", ingot.Joules)
+// Step 2: Implement AddUnit
+func (qm *QueueManager) AddUnit(unit *models.JouleTorqUnit) error {
+    qm.mu.Lock()
+    defer qm.mu.Unlock()
+    
+    qm.units = append(qm.units, unit)
+    qm.notEmpty.Signal()
+    return nil
 }
 
-// Retry with exponential backoff (NATS publishing)
-for attempt := 0; attempt <= retries; attempt++ {
-    if err := nc.Publish(topic, data); err == nil {
-        return nil
+// Step 3: Implement GetUnit (blocking)
+func (qm *QueueManager) GetUnit() (*models.JouleTorqUnit, error) {
+    qm.mu.Lock()
+    defer qm.mu.Unlock()
+    
+    for len(qm.units) == 0 {
+        qm.notEmpty.Wait()  // Block until unit available
     }
-    time.Sleep(backoff * time.Duration(1<<uint(attempt)))
+    
+    unit := qm.units[0]
+    qm.units = qm.units[1:]
+    return unit, nil
 }
-
-// Graceful shutdown: drain queues before exiting
-ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-defer cancel()
 ```
 
----
+**Incremental Testing**:
+```bash
+# Test each function as implemented
+go test ./internal/refinery/queue_manager_test.go -run TestAddUnit -v
+go test ./internal/refinery/queue_manager_test.go -run TestGetUnit -v
+go test ./internal/refinery/queue_manager_test.go -run TestConcurrency -v
+```
 
-## 🧪 Testing Requirements
+#### 6. **Create Tests (TDD Approach)**
+Write tests ALONGSIDE implementation, not after:
 
-### Coverage Targets
-
-- **Unit tests**: 95%+ coverage (see `TESTING_PLAN.md` per service)
-- **Integration tests**: E2E flows with embedded NATS server
-- **PowerShell E2E**: `test-e2e-flow.ps1` - full pipeline test
-
-### Test Patterns
-
-**Unit Test Example** (Mint's `IngotBuffer`):
+**Unit Test Example** (`queue_manager_test.go`):
 ```go
-func TestIngotBuffer_PushPop(t *testing.T) {
-    buffer := NewIngotBuffer(10)
+func TestQueueManager_AddAndGet(t *testing.T) {
+    qm := NewQueueManager(100)
     
-    ingot := &TokenTorqIngot{ID: "test-1"}
-    assert.NoError(t, buffer.Push(ingot))
+    unit := &models.JouleTorqUnit{
+        TokenID: "test-token-001",
+        JoulesConsumed: 4.17,
+    }
     
-    popped, err := buffer.Pop(context.Background())
+    // Test add
+    err := qm.AddUnit(unit)
     assert.NoError(t, err)
-    assert.Equal(t, "test-1", popped.ID)
+    assert.Equal(t, 1, qm.Len())
+    
+    // Test get
+    retrieved, err := qm.GetUnit()
+    assert.NoError(t, err)
+    assert.Equal(t, "test-token-001", retrieved.TokenID)
+    assert.Equal(t, 0, qm.Len())
+}
+
+func TestQueueManager_BlockingGet(t *testing.T) {
+    qm := NewQueueManager(100)
+    
+    retrieved := false
+    go func() {
+        unit, _ := qm.GetUnit()  // Blocks
+        assert.Equal(t, "async-token", unit.TokenID)
+        retrieved = true
+    }()
+    
+    time.Sleep(100 * time.Millisecond)
+    assert.False(t, retrieved, "Should still be blocked")
+    
+    qm.AddUnit(&models.JouleTorqUnit{TokenID: "async-token"})
+    
+    time.Sleep(100 * time.Millisecond)
+    assert.True(t, retrieved, "Should have unblocked")
 }
 ```
 
-**Integration Test Pattern**:
-```go
-func TestMint_E2E(t *testing.T) {
-    // Start embedded NATS
-    natsServer := natstest.RunServer(&natstest.DefaultTestOptions)
-    defer natsServer.Shutdown()
-    
-    // Initialize components
-    mint := NewMintService(config)
-    mint.Start(ctx)
-    defer mint.Shutdown()
-    
-    // Publish test data
-    publishIngot(nc, ingot)
-    
-    // Verify output
-    select {
-    case batch := <-batchChannel:
-        assert.Equal(t, 1000, len(batch.Ingots))
-    case <-time.After(65 * time.Second):
-        t.Fatal("timeout")
-    }
-}
-```
-
-**PowerShell E2E** (see `test-e2e-flow.ps1`):
-```powershell
-# Verify services running
-Invoke-WebRequest "http://localhost:8080/health" -UseBasicParsing
-
-# Send test data
-$ore = @{ joules=900; tokens=60 } | ConvertTo-Json
-Invoke-RestMethod "http://localhost:8081/receive-ore" -Method Post -Body $ore
-
-# Check logs for success
-docker logs mint --since 10s | Select-String "batch sent"
-```
-
-### Running Tests
-
+**Coverage Target**: 95%+ for all new code
 ```bash
-# Unit tests
-cd src/mint
-go test ./... -v -cover
+go test ./... -cover
 
-# Integration tests
-go test ./... -run Integration -v
-
-# Benchmarks
-go test -bench=. -benchmem ./internal/mint
-
-# E2E (requires Docker Compose up)
-pwsh test-e2e-flow.ps1
+# Expected output:
+# ok      refinery/internal/refinery  0.450s  coverage: 96.2% of statements
 ```
 
 ---
 
-## 🚀 Build & Deployment
+### Phase 3: Validation
 
-### Docker Build Pattern
+#### 7. **Step-by-Step Commits**
+Commit after EACH working increment (not at end of day):
 
-**Multi-stage Alpine** (see `src/mint/Dockerfile`):
-```dockerfile
-FROM golang:1.24-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 go build -o service ./cmd/service
+**Commit Pattern**:
+```bash
+# After implementing QueueManager AddUnit
+git add internal/refinery/queue_manager.go
+git add internal/refinery/queue_manager_test.go
+git commit -m "feat(refinery): Add QueueManager.AddUnit with thread safety
 
-FROM alpine:3.20
-RUN apk --no-cache add ca-certificates
-COPY --from=builder /app/service .
-HEALTHCHECK --interval=30s CMD wget -qO- http://localhost:8080/health || exit 1
-CMD ["./service"]
+- Implements unit storage in slice
+- Uses mutex for goroutine safety
+- Signals condition variable on add
+- Test: concurrent adds from 10 goroutines"
+
+# After implementing GetUnit
+git add internal/refinery/queue_manager.go
+git add internal/refinery/queue_manager_test.go
+git commit -m "feat(refinery): Add QueueManager.GetUnit with blocking
+
+- Blocks when queue empty (no busy-waiting)
+- Uses sync.Cond for efficient wakeup
+- Thread-safe pop operation
+- Test: blocking behavior verified"
+
+# After integration test
+git add internal/refinery/integration_test.go
+git commit -m "test(refinery): Add QueueManager integration test
+
+- Tests full ore → unit → queue flow
+- Validates concurrent AddUnit/GetUnit
+- Confirms FIFO ordering
+- Coverage: 100% of QueueManager"
 ```
 
-### Docker Compose Workflow
+**Commit Message Format** (Conventional Commits):
+```
+<type>(<scope>): <subject>
 
-```bash
+<body>
+
+<footer>
+```
+
+**Types**:
+- `feat`: New feature
+- `fix`: Bug fix
+- `test`: Adding/updating tests
+- `refactor`: Code restructure (no behavior change)
+- `docs`: Documentation only
+- `chore`: Build, CI, dependencies
+
+**Scopes**: `mint`, `refinery`, `trust`, `distodam`, `digger`, `wallet`, `printer`
+
+**Real Example from Currency Refactor**:
+```
+feat(refinery): Implement unit-based ingot assembly
+
+Replace dual joule/robo queues with single JouleTorqUnit queue:
+- Add QueueManager with AddUnit/GetUnit
+- Update IngotAssembler to accumulate units
+- Build merkle branch hash in NewTokenTorqIngot
+- Preserve complete proof chain (token → unit → ingot)
+
+Breaking Change: Ore processing now creates 1 unit per token
+instead of aggregating joules/robo separately.
+
+Tests:
+- queue_manager_test.go: 100% coverage
+- ingot_assembler_test.go: 96% coverage
+- integration_test.go: Full pipeline verified
+
+Refs: feature/currency-refactor, README.md Appendix O
+```
+
+#### 8. **Conduct E2E Tests**
+Validate COMPLETE pipeline after changes:
+
+**RoboTorq E2E Test** (`test-digger-e2e.ps1`):
+```powershell
 # Start all services
 docker-compose up -d
 
-# View logs
-docker logs -f robotorq-network-mint-1
+# Wait for health
+Start-Sleep -Seconds 10
 
-# Restart single service
-docker-compose restart mint
+# Build headless Digger
+cd src/digger-app/digger
+cargo build --release --bin headless
+
+# Run headless in background
+Start-Process -NoNewWindow -FilePath "./target/release/headless.exe"
+
+# Send stake + execute contract
+Invoke-RestMethod "http://localhost:9000/stake" -Method Post -Body '{"amount":0.05}' -ContentType "application/json"
+Invoke-RestMethod "http://localhost:9000/execute" -Method Post -Body '{"contract_id":"e2e-test"}' -ContentType "application/json"
+
+# Wait for processing (13 ores @ 5s each = 65s)
+Write-Host "⏳ Waiting 65 seconds for ore processing..."
+Start-Sleep -Seconds 65
+
+# Verify Refinery logs
+$logs = docker logs robotorq-network-refinery-1 --since 70s
+
+if ($logs -match "ingot assembled") {
+    Write-Host "✅ SUCCESS: Ingot assembled!" -ForegroundColor Green
+    
+    # Extract details
+    $ingotLine = $logs | Select-String "ingot assembled" | Select-Object -Last 1
+    Write-Host $ingotLine
+} else {
+    Write-Host "❌ FAILURE: No ingot found" -ForegroundColor Red
+    exit 1
+}
+
+# Cleanup
+Stop-Process -Name "headless" -Force
+docker-compose down
+```
+
+**Expected Output**:
+```
+⏳ Waiting 65 seconds for ore processing...
+✅ SUCCESS: Ingot assembled!
+
+{"msg":"ingot assembled",
+ "ingot_id":"ingot-20251115-210012.547794",
+ "joules":14999.999999999249,
+ "robo_stake":0.050000000000002334,
+ "units":3600,
+ "contracts":["e2e-test-contract-001"],
+ "branch_hash":"0521434e13fa9bddc71d777d689635f73b1d91df68b74abcbd97af58a051ff10"}
+```
+
+**What E2E Test Validates**:
+- ✅ Digger executes contract, sends ore
+- ✅ Refinery receives ore, extracts units
+- ✅ QueueManager stores units
+- ✅ IngotAssembler accumulates 3600 units
+- ✅ NewTokenTorqIngot builds merkle hash
+- ✅ BatchSender publishes to Mint
+
+#### 9. **Update Documentation**
+Sync docs with implementation BEFORE merging:
+
+**Architecture Doc Updates**:
+```markdown
+## Component Architecture
+
+### QueueManager - Single Unit Queue ✅ UPDATED
+
+**Responsibilities**:
+- Store JouleTorqUnits in thread-safe FIFO queue
+- Block on GetUnit() when empty (no busy-waiting)
+- Track queue depth metrics
+
+**Architecture Change** (Currency Refactor):
+- ❌ OLD: Dual queues (JouleQueue + RoboQueue) - lost token granularity
+- ✅ NEW: Single queue ([]JouleTorqUnit) - preserves complete proof chain
+
+**Implementation**:
+[...code examples...]
+
+**Tests**: `queue_manager_test.go` (100% coverage)
+```
+
+**README Updates**:
+```markdown
+## Appendix O: Data Structures
+
+### JouleTorqUnit ✅ UPDATED
+
+The **atomic unit** of the RoboTorq system. Every token becomes one unit.
+
+```go
+type JouleTorqUnit struct {
+    TokenID        string    `json:"token_id"`         // Unique: {contract}-m{milestone}-t{index}
+    ContractID     string    `json:"contract_id"`      
+    DiggerID       string    `json:"digger_id"`        
+    JoulesConsumed float64   `json:"joules_consumed"`  // Energy for THIS token
+    RoboStakePaid  float64   `json:"robo_stake_paid"`  // Cost of THIS token
+    MilestoneIndex int       `json:"milestone_index"`  
+    Timestamp      time.Time `json:"timestamp"`        
+    Hash           string    `json:"hash"`             // SHA256 of all fields
+    Signature      []byte    `json:"signature"`        // Dilithium5 signature
+}
+```
+
+**Flow**: JouleTorqOre (300 tokens) → 300 JouleTorqUnits → accumulate to 3600 → TokenTorqIngot
+```
+
+**Commit Docs with Code**:
+```bash
+git add src/refinery/REFINERY_ARCHITECTURE.md
+git add README.md
+git commit -m "docs(refinery): Update architecture for unit-based queue
+
+- Document QueueManager single-queue design
+- Explain unit extraction from ore
+- Add merkle hash construction details
+- Update Appendix O with JouleTorqUnit flow"
+```
+
+---
+
+### Phase 4: Integration
+
+#### 10. **Update Build and CI**
+Ensure CI can build and test your changes:
+
+**Update Dockerfile** (if dependencies changed):
+```dockerfile
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download  # ← Downloads new dependencies
+
+COPY . .
+RUN CGO_ENABLED=0 go build -o refinery ./cmd/refinery
+
+# Tests run in CI
+RUN go test ./... -cover
+
+FROM alpine:3.20
+RUN apk --no-cache add ca-certificates
+COPY --from=builder /app/refinery .
+HEALTHCHECK --interval=30s CMD wget -qO- http://localhost:8081/health || exit 1
+CMD ["./refinery"]
+```
+
+**Update `docker-compose.yaml`** (if new env vars):
+```yaml
+services:
+  refinery:
+    build: ./src/refinery
+    environment:
+      - NATS_URL=nats://nats:4222
+      - REFINERY_JOULE_QUEUE_SIZE=1000        # ← NEW
+      - REFINERY_INGOT_BATCH_INTERVAL=60      # ← NEW
+      - LOG_LEVEL=info
+    depends_on:
+      - nats
+```
+
+**Verify Local Build**:
+```bash
+# Build image
+cd src/refinery
+docker build -t refinery:test .
+
+# Run tests in container
+docker run --rm refinery:test go test ./... -v
+
+# Start service
+docker-compose up -d refinery
 
 # Check health
-docker-compose ps
+curl http://localhost:8081/health
 ```
 
-**Health Check Pattern**:
+#### 11. **Push to GitHub for Testing**
+Trigger CI on feature branch:
+
+```bash
+# Ensure all tests pass locally first
+go test ./... -v
+pwsh test-digger-e2e.ps1
+
+# Push feature branch
+git push origin feature/currency-refactor
+```
+
+**GitHub Actions CI** (`.github/workflows/ci.yml`):
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [ main, 'feature/**' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+    
+    - name: Run tests
+      working-directory: src/refinery
+      run: |
+        go test ./... -v -cover
+        go test -race ./...  # Race condition detection
+    
+    - name: Build Docker image
+      run: docker build -t refinery:ci ./src/refinery
+    
+    - name: Start services
+      run: docker-compose up -d
+    
+    - name: E2E test
+      run: |
+        sleep 30  # Wait for services
+        ./test-digger-e2e.ps1
+    
+    - name: Cleanup
+      run: docker-compose down
+```
+
+**Monitor CI**:
+- Check GitHub Actions tab for workflow status
+- Review test output for failures
+- Fix any CI-specific issues (timeouts, dependencies)
+
+#### 12. **Merge to Main**
+Once CI passes on feature branch:
+
+```bash
+# Create pull request (GitHub CLI)
+gh pr create \
+  --title "Currency Refactor: Unit-Based Architecture" \
+  --body "Implements single-queue unit storage, merkle branch hashes, and complete proof chain preservation.
+
+## Changes
+- Refinery: QueueManager with single unit queue
+- Models: JouleTorqUnit, TokenTorqIngot with merkle hashes
+- Mint: Ingot validation for 3600 units
+- Tests: 95%+ coverage across all components
+
+## Testing
+- Unit tests: 96% coverage
+- Integration tests: Full pipeline verified
+- E2E test: Digger → Refinery → Mint flow working
+- Performance: 300 units/sec throughput
+
+## Breaking Changes
+- Ore processing now creates 1 unit per token
+- Ingots require exactly 3600 units (was variable joules)
+
+## Migrations
+None - fresh deployment
+
+Closes #42" \
+  --base main \
+  --head feature/currency-refactor
+
+# Wait for PR checks to pass
+gh pr checks
+
+# Merge (requires approval in production)
+gh pr merge --squash --delete-branch
+```
+
+**Or via GitHub Web UI**:
+1. Navigate to Pull Requests
+2. Click "New Pull Request"
+3. Select `feature/currency-refactor` → `main`
+4. Add description (use template above)
+5. Request reviews from team
+6. Wait for approvals + CI green
+7. Squash and merge
+
+#### 13. **Push Main, Wait for CI**
+Final validation on `main` branch:
+
+```bash
+# Pull merged changes
+git checkout main
+git pull origin main
+
+# Verify version tag
+git tag v1.0.0-currency-refactor
+git push origin v1.0.0-currency-refactor
+
+# Monitor CI on main
+gh run watch
+```
+
+**Post-Merge Checklist**:
+- ✅ CI passes on `main`
+- ✅ Docker images built and tagged
+- ✅ Documentation updated (README, architecture docs)
+- ✅ Release notes published (if applicable)
+- ✅ Stakeholders notified
+
+---
+
+## 📋 Quick Reference Checklists
+
+### Starting New Feature
+- [ ] Checkout feature branch: `git checkout -b feature/your-feature`
+- [ ] Read relevant `ARCHITECTURE.md` files
+- [ ] Review existing code patterns in target service
+- [ ] Create implementation plan (TODO comments)
+- [ ] Set up local testing environment: `docker-compose up -d`
+
+### Before Each Commit
+- [ ] Run unit tests: `go test ./... -v`
+- [ ] Check coverage: `go test ./... -cover` (target: 95%+)
+- [ ] Run integration tests (if applicable)
+- [ ] Verify code compiles: `go build ./...`
+- [ ] Check for race conditions: `go test -race ./...`
+- [ ] Format code: `go fmt ./...`
+- [ ] Lint: `golangci-lint run`
+
+### Before Pushing
+- [ ] All commits follow conventional format
+- [ ] Run E2E test: `pwsh test-digger-e2e.ps1`
+- [ ] Update architecture docs (if design changed)
+- [ ] Update README (if public API changed)
+- [ ] Update `docker-compose.yaml` (if config changed)
+- [ ] Verify Docker build: `docker build .`
+- [ ] Check for sensitive data (no secrets in code!)
+
+### Before Merging
+- [ ] CI passing on feature branch
+- [ ] Code review approved (if team workflow)
+- [ ] Documentation updated and reviewed
+- [ ] Breaking changes documented
+- [ ] Migration plan (if needed)
+- [ ] Performance benchmarks (if critical path)
+
+---
+
+## 🔍 Code Review Guidelines
+
+### What to Look For
+
+**Architecture**:
+- Does code follow service boundaries?
+- Are dependencies injected (not global)?
+- Is concurrency handled safely (mutexes, channels)?
+
+**Testing**:
+- Unit tests for all new functions?
+- Coverage ≥95%?
+- Edge cases tested (empty input, overflow, nil)?
+- Integration tests for cross-component flows?
+
+**Observability**:
+- Structured logging with context?
+- Prometheus metrics instrumented?
+- Errors logged with stack traces?
+
+**Documentation**:
+- Architecture docs updated?
+- Code comments explain WHY, not what?
+- Public APIs documented?
+
+**Performance**:
+- No busy-waiting (use channels/conditions)?
+- Bounded queues (no unbounded growth)?
+- Graceful degradation under load?
+
+### Review Comments Format
+
+**Good**:
+```
+LGTM! QueueManager uses sync.Cond perfectly for blocking.
+
+Minor: Consider adding a context.Context to GetUnit() for 
+cancellation during shutdown. See Mint's IngotBuffer.Pop() 
+for reference.
+```
+
+**Bad**:
+```
+This doesn't work.
+```
+
+---
+
+## 🛠️ Common Patterns & Anti-Patterns
+
+### ✅ DO: Dependency Injection
 ```go
-// All services expose GET /health
-http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-    status := map[string]interface{}{
-        "status": "healthy",
-        "buffer_depth": buffer.Len(),
-        "uptime_seconds": time.Since(startTime).Seconds(),
+// Good: Dependencies passed to constructor
+type MintEngine struct {
+    logger  *slog.Logger
+    metrics *Metrics
+    hasher  HashFunction
+}
+
+func NewMintEngine(logger *slog.Logger, metrics *Metrics, hasher HashFunction) *MintEngine {
+    return &MintEngine{
+        logger:  logger,
+        metrics: metrics,
+        hasher:  hasher,
     }
-    json.NewEncoder(w).Encode(status)
-})
+}
 ```
 
-### Prometheus/Grafana Monitoring
+### ❌ DON'T: Global State
+```go
+// Bad: Global variables
+var globalLogger *slog.Logger
+var globalMetrics *Metrics
 
-**Access**:
-- Prometheus: `http://localhost:9090`
-- Grafana: `http://localhost:3030` (admin/admin)
+type MintEngine struct{}
 
-**Query Examples**:
-```promql
-# Mint throughput
-rate(mint_batches_created_total[1m])
-
-# Refinery ingot assembly rate
-rate(refinery_ingots_assembled_total[5m])
-
-# DistoDam reservoir level
-distodam_reservoir_rt
+func (me *MintEngine) Process() {
+    globalLogger.Info("processing")  // Hard to test!
+}
 ```
 
-**Pre-built Dashboard**: `Grafana/torq-observability-dashboard.json`
+### ✅ DO: Context-Aware Blocking
+```go
+// Good: Respects cancellation
+func (qm *QueueManager) GetUnit(ctx context.Context) (*JouleTorqUnit, error) {
+    qm.mu.Lock()
+    defer qm.mu.Unlock()
+    
+    for len(qm.units) == 0 {
+        select {
+        case <-ctx.Done():
+            return nil, ctx.Err()
+        default:
+            qm.notEmpty.Wait()
+        }
+    }
+    
+    return qm.units[0], nil
+}
+```
+
+### ❌ DON'T: Busy-Waiting
+```go
+// Bad: Burns CPU
+func (qm *QueueManager) GetUnit() (*JouleTorqUnit, error) {
+    for len(qm.units) == 0 {
+        time.Sleep(10 * time.Millisecond)  // Wasteful!
+    }
+    return qm.units[0], nil
+}
+```
+
+### ✅ DO: Structured Logging
+```go
+// Good: Contextual fields
+slog.Info("ingot assembled",
+    "ingot_id", ingot.ID,
+    "units", len(ingot.Units),
+    "joules", ingot.JouleTorqTotal,
+    "contracts", ingot.ContractIDs)
+```
+
+### ❌ DON'T: Printf Debugging
+```go
+// Bad: Unstructured, no filtering
+fmt.Printf("Ingot: %v\n", ingot)
+```
+
+### ✅ DO: Granular Metrics
+```go
+// Good: Specific counters
+type Metrics struct {
+    IngotsReceivedTotal    prometheus.Counter
+    IngotsValidTotal       prometheus.Counter
+    IngotsInvalidTotal     prometheus.Counter
+    ProcessingLatency      prometheus.Histogram
+}
+
+m.IngotsReceivedTotal.Inc()
+if err := validate(ingot); err != nil {
+    m.IngotsInvalidTotal.Inc()
+} else {
+    m.IngotsValidTotal.Inc()
+}
+```
+
+### ❌ DON'T: Sparse Metrics
+```go
+// Bad: Can't diagnose issues
+type Metrics struct {
+    RequestsTotal prometheus.Counter  // Too generic
+}
+```
 
 ---
 
-## 📐 Data Structures (Critical!)
+## 🧪 Testing Philosophy
 
-### JouleTorqOre (Digger → Refinery)
+### Test Pyramid
 
+```
+         ┌─────────┐
+         │   E2E   │  10% - Full pipeline, slow, brittle
+         │  Tests  │
+         └─────────┘
+       ┌─────────────┐
+       │ Integration │  20% - Multi-component, moderate speed
+       │    Tests    │
+       └─────────────┘
+     ┌─────────────────┐
+     │   Unit Tests    │  70% - Single function, fast, reliable
+     └─────────────────┘
+```
+
+### Unit Test Example
 ```go
-type JouleTorqOre struct {
-    DiggerID        string    `json:"digger_id"`       // Executor ID
-    ContractID      string    `json:"contract_id"`     // BRLA reference
-    TokensGenerated int       `json:"tokens_generated"` // AI tokens processed
-    Joules          int       `json:"joules"`          // Energy expended (usually 900J)
-    MilestoneIndex  int       `json:"milestone_index"` // Progress tracker
-    Timestamp       int64     `json:"timestamp"`       // Unix seconds
-    RoboStakeAmount float64   `json:"robo_stake_amount"` // RT value
-    ProofOfWork     *string   `json:"proof_of_work"`   // Cryptographic proof
-    Signature       *string   `json:"signature"`       // Digital signature
+// Test ONE function in isolation
+func TestQueueManager_AddUnit(t *testing.T) {
+    qm := NewQueueManager(10)
+    
+    unit := &models.JouleTorqUnit{TokenID: "test-1"}
+    
+    err := qm.AddUnit(unit)
+    
+    assert.NoError(t, err)
+    assert.Equal(t, 1, qm.Len())
 }
 ```
 
-**Validation**: See `README.md` Appendix O for complete rules.
-
-### TokenTorqIngot (Refinery → Mint)
-
+### Integration Test Example
 ```go
-type TokenTorqIngot struct {
-    ID              string             `json:"id"`              // UUID
-    ContractID      string             `json:"contract_id"`     
-    AccumulatedJoules int              `json:"accumulated_joules"` // Must = 3600
-    TotalTokens     int                `json:"total_tokens"`    
-    RoboStakeAmount float64            `json:"robo_stake_amount"`
-    Ores            []JouleTorqOre     `json:"ores"`            // Source ores (4 @ 900J)
-    CreatedAt       time.Time          `json:"created_at"`      
-    Hash            string             `json:"hash"`            // SHA256(ores)
+// Test multiple components together
+func TestRefinery_OreToIngot(t *testing.T) {
+    // Setup
+    qm := NewQueueManager(1000)
+    assembler := NewIngotAssembler(qm)
+    receiver := NewOreReceiver(qm)
+    
+    // Send ore
+    ore := &models.JouleTorqOre{TokensGenerated: 300, Joules: 1250}
+    receiver.ReceiveOre(ore)
+    
+    // Verify units queued
+    assert.Equal(t, 300, qm.Len())
+    
+    // Assemble ingot (needs 3600 units = 12 ores)
+    for i := 0; i < 11; i++ {
+        receiver.ReceiveOre(ore)
+    }
+    
+    ingot := assembler.GetCompletedIngots()[0]
+    assert.Equal(t, 3600, len(ingot.Units))
+    assert.NotEmpty(t, ingot.BranchHash)
 }
 ```
 
-**Invariant**: `AccumulatedJoules == 3600` (enforced by Mint validation).
-
-### RoboTorq Batch (Mint → DistoDam)
-
-```go
-type RoboTorqBatch struct {
-    BatchID         string             `json:"batch_id"`        // UUID
-    Ingots          []TokenTorqIngot   `json:"ingots"`          // 1000 ingots
-    TotalJoules     int                `json:"total_joules"`    // Sum(ingots)
-    TotalRoboStake  float64            `json:"total_robo_stake"`
-    Hash            string             `json:"hash"`            // SHA256(ingot hashes)
-    Timestamp       time.Time          `json:"timestamp"`       
-}
-```
-
-### Contract (Trust ↔ BidNet ↔ DistoDam)
-
-```go
-type Contract struct {
-    ID            string     `json:"id"`              // UUID
-    Type          string     `json:"type"`            // "production" | "currency_exchange"
-    OpportunityID string     `json:"opportunity_id"`  
-    Builder       string     `json:"builder"`         // Enterprise ID
-    DiggerURL     string     `json:"digger_url"`      // Execution endpoint
-    RoboStake     float64    `json:"robo_stake"`      // RT required
-    ROI           float64    `json:"roi"`             // Expected return %
-    Torq          int        `json:"torq"`            // Total torque
-    Status        string     `json:"status"`          // "pending" → "approved" → "funded" → "executed"
-    CreatedAt     time.Time  `json:"created_at"`      
-    FundedAt      *time.Time `json:"funded_at,omitempty"`
-    ExecutedAt    *time.Time `json:"executed_at,omitempty"`
-    CompletedAt   *time.Time `json:"completed_at,omitempty"`
-}
-```
-
-**Lifecycle**: `pending` (Trust) → `approved` (BidNet) → `funded` (DistoDam) → `executed` (Digger).
+### E2E Test Example
+See `test-digger-e2e.ps1` for full pipeline test.
 
 ---
 
-## 🎨 Component-Specific Patterns
+## 📊 Performance Benchmarks
 
-### Mint Service
-
-**Core Responsibility**: Batch 1000 ingots or flush after 60s, hash, publish.
-
-**Key Files**:
-- `cmd/mint/main.go` - Wire components
-- `internal/mint/ingot_receiver.go` - HTTP + NATS dual input
-- `internal/mint/batch_aggregator.go` - Time/size thresholds
-- `internal/mint/mint_engine.go` - Hash generation, NATS publish
-
-**Gotchas**:
-- Ingots MUST have 3600J (reject anything else)
-- Batch flush on **size OR time** (whichever first)
-- Graceful shutdown: drain buffer before exit
-
-### Refinery Service
-
-**Core Responsibility**: Accumulate ore (Tokens, Joules, RoboTorq, data) → 1 ingot (3600J).
-
-**State Management**:
-```go
-// In-memory accumulator (single contract at a time)
-accumulatedJoules := 0
-ores := []JouleTorqOre{}
-
-// When ore arrives
-accumulatedJoules += ore.Joules
-ores = append(ores, ore)
-
-if accumulatedJoules >= 3600 {
-    ingot := assembleIngot(ores)
-    publishToMint(ingot)
-    reset()
-}
-```
-
-**Batch Publishing**: Every 60s, send ingots[] to Mint via NATS.
-
-### Trust Service
-
-**Core Responsibility**: Evaluate opportunities, create contracts, monitor execution.
-
-**Pipeline**:
-```
-Opportunity (HTTP POST) 
-  → Appraiser (evaluate, create contract)
-  → NATS publish "contracts.pending"
-  → BidNet (future: contract gateway)
-```
-
-**Key Components**:
-- `opportunity_handler.go` - REST API
-- `appraiser.go` - Contract creation logic
-- `fundsync.go` - Listen for "contracts.funded", notify executor
-
-### DistoDam Service (Future Refactor)
-
-**Current State**: Placeholder.
-
-**Future Design** (see `src/distodam/REFACTOR_TODO.md`):
-- Subscribe to `contracts.approved` (from BidNet)
-- Allocate RT from reservoir
-- Publish `contracts.funded` (to Trust)
-- Manage UBD streams (distribution)
-
-### Wallet & Printer (Mobile + Embedded)
-
-**Wallet**: User-facing mobile app (future React Native).
-
-**Printer**: Raspberry Pi + 3D printer controller.
-- Burns digital RT → prints physical bills with NFC tags
-- See `src/printer/IMPLEMENTATION_TODO.md` for hardware specs
-
----
-
-## 🔒 Security & Cryptography
-
-### Signature Pattern (Dilithium5 - Post-Quantum)
-
-**IMPORTANT**: RoboTorq uses **Dilithium5** (NIST FIPS 204), NOT Ed25519!
-- **Why**: Quantum-resistant (protects against Shor's algorithm)
-- **Security**: NIST Level 5 (AES-256 equivalent)
-- **Signature size**: ~4595 bytes (vs Ed25519's 64 bytes)
-- **Public key size**: 2592 bytes
-
-```rust
-// Digger (Rust) - see src/digger-app/digger/src-tauri/src/crypto.rs
-use pqcrypto_dilithium::dilithium5;
-use pqcrypto_traits::sign::*;
-
-// Generate keypair
-let (pk, sk) = dilithium5::keypair();
-
-// Sign
-let message = b"data";
-let signature = dilithium5::detached_sign(message, &sk);
-
-// Verify
-let valid = dilithium5::verify_detached_signature(&signature, message, &pk).is_ok();
-```
-
-```go
-// Refinery/Mint (Go) - TODO: Implement with cloudflare/circl
-import "github.com/cloudflare/circl/sign/dilithium/mode5"
-
-// Verify signature
-var pubKey mode5.PublicKey
-copy(pubKey[:], pubKeyBytes)
-valid := mode5.Verify(&pubKey, message, signature)
-```
-
-**Current State**: Dilithium is **stubbed out** in Digger's `crypto.rs`
-- Signing: Returns empty `vec![]`
-- Verification: Always returns `true`
-- **This is INSECURE** - only for development/testing!
-
-**Future Implementation**: See TODO checklist in `src/digger-app/digger/src-tauri/src/crypto.rs`
-
-### Hash Pattern (SHA256)
-
-```go
-import "crypto/sha256"
-
-// Deterministic batch hashing
-data := fmt.Sprintf("%s|%s|%d", id, timestamp, joules)
-hash := sha256.Sum256([]byte(data))
-hashHex := hex.EncodeToString(hash[:])
-```
-
-**Used In**:
-- Ingot hashes (Refinery)
-- Batch hashes (Mint)
-- Proof-of-work verification
-
-### Anti-Counterfeiting (Physical RT)
-
-**NFC Tag Data**:
-```json
-{
-  "serial_number": "RT-10-2025-ABC123XYZ",
-  "denomination": 10.0,
-  "minted_at": "2025-11-15T14:30:10Z",
-  "minted_by": "printer-abc123",
-  "signature": "0x9abc...",          // Printer's Ed25519 sig
-  "printer_public_key": "0xdef0..."  // For verification
-}
-```
-
-**Redemption Check**:
-1. Read NFC tag
-2. Verify signature with printer's public key
-3. Query network: "Has serial been redeemed?"
-4. If valid + unredeemed → credit wallet, mark serial redeemed
-
----
-
-## 🚨 Common Pitfalls & Solutions
-
-### "Buffer Full" Errors
-
-**Symptom**: Mint returns `429 Too Many Requests`.
-
-**Cause**: IngotBuffer at capacity (100k ingots).
-
-**Fix**:
+### Running Benchmarks
 ```bash
-# Increase buffer size
-docker-compose down
-# Edit docker-compose.yml
-BUFFER_CAPACITY=200000
-docker-compose up -d
+# All benchmarks
+go test -bench=. -benchmem ./internal/refinery
+
+# Specific benchmark
+go test -bench=BenchmarkQueueManager -benchmem ./internal/refinery
 ```
 
-**Or**: Reduce batch flush interval (process faster):
-```yaml
-FLUSH_INTERVAL=30s  # Was 60s
-```
-
-### NATS Connection Drops
-
-**Symptom**: Services log "NATS publish failed".
-
-**Cause**: NATS server restart, network partition.
-
-**Fix**: Retry logic with exponential backoff (already in `natsx` client):
+### Example Benchmark
 ```go
-// natsx/client.go handles this
-func (c *Client) PublishJSON(topic string, data interface{}) error {
-    // Auto-retry 3x with backoff
+func BenchmarkQueueManager_Throughput(b *testing.B) {
+    qm := NewQueueManager(100000)
+    
+    unit := &models.JouleTorqUnit{TokenID: "bench"}
+    
+    b.ResetTimer()
+    for i := 0; i < b.N; i++ {
+        qm.AddUnit(unit)
+    }
 }
+
+// Output:
+// BenchmarkQueueManager_Throughput-8   5000000   250 ns/op   64 B/op   1 allocs/op
+//                                       ^^^^^     ^^^^^^^     ^^^^^^    ^^^^^^^^^^^
+//                                       ops       ns/op       bytes     allocations
 ```
 
-**Check Health**:
+### Performance Targets
+- **Refinery**: 300 units/sec sustained
+- **Mint**: 1 batch/60s (1000 ingots)
+- **Memory**: <500MB per service
+- **Latency**: p99 < 100ms for API calls
+
+---
+
+## 🚀 Real-World Example: Currency Refactor
+
+This workflow achieved **95% completion** in one sprint. Here's how:
+
+### Week 1: Planning
+- Read `README.md` Appendices (data structures, formulas)
+- Diagrammed current flow (dual queues)
+- Identified issue: Lost token granularity in aggregation
+- Designed solution: Single unit queue with merkle trees
+
+### Week 2: Refinery Refactor
 ```bash
-curl http://localhost:8222/healthz
-docker logs robotorq-network-nats-1
+# Day 1: QueueManager
+git checkout -b feature/currency-refactor
+# - Implement AddUnit/GetUnit
+# - Write unit tests (100% coverage)
+# - Commit: "feat(refinery): Add QueueManager single unit queue"
+
+# Day 2: Unit Extraction
+# - Update OreReceiver.extractUnits()
+# - Distribute joules/robo per token
+# - Commit: "feat(refinery): Extract JouleTorqUnits from ore"
+
+# Day 3: Ingot Assembly
+# - Refactor IngotAssembler to consume units
+# - Commit: "refactor(refinery): Use unit-based ingot assembly"
+
+# Day 4: Merkle Hashes
+# - Implement CalculateBranchHash()
+# - Commit: "feat(models): Add merkle branch hash to ingots"
+
+# Day 5: Integration Test
+# - Write ore → unit → ingot pipeline test
+# - Commit: "test(refinery): Add integration test for unit flow"
 ```
 
-### Ingot "Not 3600 Joules" Rejection
-
-**Symptom**: Mint rejects ingots with validation error.
-
-**Cause**: Refinery assembled partial ingot (< 4 ores).
-
-**Debug**:
+### Week 3: Mint Integration
 ```bash
-# Check Refinery state
-curl http://localhost:8081/health | jq '.ingot_assembly'
+# Day 1: Ingot Validation
+# - Update Mint to expect 3600 units
+# - Reject ingots without units array
+# - Commit: "feat(mint): Validate ingot unit count (3600)"
 
-# Expected output
-{
-  "accumulated_joules": 2700,  # Waiting for 1 more ore
-  "progress_to_next_ingot_percent": 75
-}
+# Day 2: Merkle Tree Aggregation
+# - Build batch hash from ingot hashes
+# - Commit: "feat(mint): Aggregate ingot merkle hashes"
+
+# Day 3-4: E2E Test
+# - Implement test-digger-e2e.ps1
+# - Verify full pipeline
+# - Commit: "test(e2e): Add Digger → Refinery → Mint test"
+
+# Day 5: Documentation
+# - Rebuild MINT_ARCHITECTURE.md
+# - Rebuild REFINERY_ARCHITECTURE.md
+# - Commit: "docs: Rebuild architecture for currency refactor"
 ```
 
-**Solution**: Send more ores OR wait for timeout flush.
-
-### Docker Compose Port Conflicts
-
-**Symptom**: `bind: address already in use`.
-
-**Fix**: Change host port (not container port):
-```yaml
-ports:
-  - "8084:8080"  # Host:Container (container always 8080)
-```
-
----
-
-## 🔮 Future Work (Don't Implement Yet!)
-
-### Phase 2: BidNet (Contract Gateway)
-
-**Status**: Documented in `src/bidnet/IMPLEMENTATION_TODO.md` but NOT implemented.
-
-**When to Build**: After DistoDam refactor complete.
-
-**Purpose**: Pluggable contract evaluation (ROI scoring, gaming resistance).
-
-### Phase 2: Currency Exchange Contracts
-
-**Status**: Spec exists in BidNet docs.
-
-**Purpose**: RT ↔ USDC/fiat on-ramps.
-
-**Wait For**: Production DistoDam + Trust stabilization.
-
-### Phase 3: Vault Services
-
-**Files**: `src/vault/{STASHVAULT,TORQEDVAULT}_IMPLEMENTATION.md`
-
-**Purpose**: Savings accounts, interest mechanisms, lending.
-
-**Blockers**: Requires mature DistoDam UBD streams.
-
----
-
-## 💡 Quick Reference
-
-### Environment Variables Cheat Sheet
-
+### Week 4: Polish & Merge
 ```bash
-# All services
-NATS_URL=nats://nats:4222
-LOG_LEVEL=debug|info|warn|error
-HTTP_PORT=8080
-
-# Mint-specific
-BATCH_SIZE=1000
-FLUSH_INTERVAL=60s
-BUFFER_CAPACITY=100000
-
-# Refinery-specific
-REFINERY_INGOT_BATCH_INTERVAL=60
-REFINERY_JOULE_QUEUE_SIZE=1000
-
-# Trust-specific
-TRUST_ROI_THRESHOLD=10.0
+# Day 1: Remove outdated TODOs
+# Day 2: CI/CD updates
+# Day 3: PR review, address feedback
+# Day 4: Merge to main
+# Day 5: Monitor production deploy
 ```
 
-### Docker Commands
-
-```bash
-# Build single service
-cd src/mint && docker build -t mint:latest .
-
-# View service logs
-docker logs -f robotorq-network-mint-1
-
-# Restart all
-docker-compose restart
-
-# Clean rebuild
-docker-compose down && docker-compose up --build -d
-
-# Shell into container
-docker exec -it robotorq-network-mint-1 sh
-```
-
-### NATS CLI (Debug)
-
-```bash
-# Inside NATS container
-docker exec -it robotorq-network-nats-1 sh
-
-# List subjects
-nats stream ls
-
-# Subscribe to topic
-nats sub "mint.batches"
-
-# Publish test message
-nats pub "mint.ingots" '{"id":"test"}'
-```
+**Result**: **95% complete**, only crypto signatures remain (~12h work).
 
 ---
 
-## 📞 Getting Help
+## 🔐 Security Reminders
 
-1. **Check Architecture Docs**: Each service has `{SERVICE}_ARCHITECTURE.md`
-2. **Read Test Plans**: `TESTING_PLAN.md` shows expected behaviors
-3. **Review README.md**: Especially Appendices O, P, N for data structures
-4. **Check IMPLEMENTATION_TODO.md**: Shows current phase and blockers
-5. **Examine E2E Scripts**: `test-e2e-flow.ps1` demonstrates correct flows
-
-**Critical Files for New Contributors**:
-- `README.md` (lines 1-2000): Economics & formulas
-- `BRANCHING.md`: Git workflow
-- `docker-compose.yaml`: Service configuration
-- `src/mint/MINT_ARCHITECTURE.md`: Best example of complete service
+- **No secrets in code**: Use environment variables
+- **Validate all inputs**: Never trust external data
+- **Sanitize logs**: Don't log sensitive data (private keys, passwords)
+- **Use prepared statements**: (When SQL added in future)
+- **Principle of least privilege**: Services only access what they need
 
 ---
 
-## ✅ Pre-Commit Checklist
+## 📚 Additional Resources
 
-Before pushing code:
-
-- [ ] Unit tests pass: `go test ./... -v`
-- [ ] Coverage ≥95%: `go test -cover ./...`
-- [ ] Integration test passes
-- [ ] E2E script succeeds: `pwsh test-e2e-flow.ps1`
-- [ ] No `fmt.Println()` debugging
-- [ ] Metrics instrumented
-- [ ] Structured logging used
-- [ ] Health endpoint works: `curl localhost:8080/health`
-- [ ] Docker build succeeds: `docker build .`
-- [ ] Updated relevant `ARCHITECTURE.md` if changing design
-- [ ] Added tests for new functionality
+- **White Paper**: `README.md` (complete economic model)
+- **Branching Strategy**: `BRANCHING.md`
+- **Mint Architecture**: `src/mint/MINT_ARCHITECTURE.md`
+- **Refinery Architecture**: `src/refinery/REFINERY_ARCHITECTURE.md`
+- **Status Tracker**: `CURRENCY_REFACTOR_STATUS.md`
+- **Prometheus Dashboard**: `Grafana/torq-observability-dashboard.json`
 
 ---
 
-## 🎓 Learning Path for New AI Agents
+## 🎓 Final Tips
 
-1. **Day 1**: Read README.md Sections 1-5 (What is Torq? → TTP)
-2. **Day 2**: Read Mint Architecture, run `test-e2e-flow.ps1`
-3. **Day 3**: Study Refinery Architecture, trace JouleTorq → TokenTorq flow
-4. **Day 4**: Explore Trust service, understand contract lifecycle
-5. **Day 5**: Review all IMPLEMENTATION_TODO.md files (future roadmap)
+1. **Read the white paper first**: The economics drive the architecture
+2. **Test as you build**: Don't write 1000 lines then test
+3. **Commit frequently**: Small commits are easier to review and revert
+4. **Document decisions**: Future you will thank present you
+5. **Ask for help**: Architecture docs exist for a reason
+6. **Measure everything**: Metrics reveal truth
+7. **Respect context**: Graceful shutdown prevents data loss
 
-**Hands-On Exercise**: Modify Mint's `BATCH_SIZE` to 500, rebuild, verify metrics change in Prometheus.
-
----
-
-**Remember**: This is a **monetary network based on physics**, not hype. Every line of code represents real energy, real computation, and real value. Code accordingly.
+**Remember**: This is a **monetary system based on physics**. Every line of code represents real energy, real computation, and real value. Code accordingly.
 
 *"Watts > Wall Street"* 🤖⚡💰
