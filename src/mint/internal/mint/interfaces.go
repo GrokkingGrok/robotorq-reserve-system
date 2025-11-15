@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/nats-io/nats.go"
 )
 
 // ─────────────────────────────────────────────────────────────
@@ -151,6 +153,10 @@ type DistoDamClient interface {
 
 	// IsConnected returns current connection status.
 	IsConnected() bool
+
+	// GetConnection returns the underlying NATS connection.
+	// Used by IngotReceiver to subscribe to mint.ingots topic.
+	GetConnection() *nats.Conn
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -164,18 +170,28 @@ type DistoDamClient interface {
 //   - Energy proof (JouleTorq - always 3600)
 //   - Robot stake paid (RoboTorq)
 //   - Sale value in USD (Price)
-//   - Metadata for traceability (ContractID, DiggerID, Timestamp, Hash)
+//   - Metadata for traceability (IngotID, ContractIDs, Hashes, MintedAt)
 type TokenTorqIngot struct {
-	// Core values
-	JouleTorq float64 `json:"joule"` // Always 3600.0 (1 kWh of work)
-	RoboTorq  float64 `json:"robo"`  // Robot stake paid for this work
-	Price     float64 `json:"price"` // Sale value in USD (for accounting)
+	// IngotID is a unique identifier for this ingot
+	IngotID string `json:"ingot_id"`
 
-	// Metadata for traceability and merkle leaves
-	ContractID string    `json:"contract_id"` // BRLA contract identifier
-	DiggerID   string    `json:"digger_id"`   // Robot that performed work
-	Timestamp  time.Time `json:"timestamp"`   // When ingot was created
-	Hash       string    `json:"hash"`        // Refinery's hash of this ingot
+	// JouleTorqTotal is the total joules in this ingot (MUST be exactly 3600)
+	JouleTorqTotal uint64 `json:"joule_torq"`
+
+	// RoboStakeTotal is the accumulated RoboTorq from all contributing ore
+	RoboStakeTotal float64 `json:"robo_stake"`
+
+	// PricePerRT is the average price in tokens per RoboTorq
+	PricePerRT float64 `json:"price"`
+
+	// ContractIDs lists all contracts that contributed to this ingot
+	ContractIDs []string `json:"contract_ids"`
+
+	// JouleTorqHashes contains SHA256 hashes of each ore contribution
+	JouleTorqHashes []string `json:"joule_hashes"`
+
+	// MintedAt is when this ingot was assembled by Refinery
+	MintedAt time.Time `json:"minted_at"`
 }
 
 // MintEvent is the OUTPUT from Mint - published to DistoDam via NATS.

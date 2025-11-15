@@ -140,9 +140,10 @@ func initializeComponents(cfg *config.Config, logger *slog.Logger) (*Components,
 		"flush_interval", cfg.FlushInterval,
 	)
 
-	// Create IngotReceiver
-	receiver := mint.NewIngotReceiver(buffer, cfg.HTTPPort, logger)
-	logger.Info("IngotReceiver initialized", "http_port", cfg.HTTPPort)
+	// Create IngotReceiver (pass NATS connection for subscription)
+	// The receiver will accept ingots from both HTTP and NATS
+	receiver := mint.NewIngotReceiver(buffer, client.GetConnection(), cfg.HTTPPort, logger)
+	logger.Info("IngotReceiver initialized", "http_port", cfg.HTTPPort, "nats_topic", "mint.ingots")
 
 	return &Components{
 		Buffer:     buffer,

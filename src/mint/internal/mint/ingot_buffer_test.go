@@ -71,14 +71,14 @@ func TestIngotBuffer_PopSuccess(t *testing.T) {
 	ctx := context.Background()
 
 	original := validIngot()
-	original.ContractID = "test-123"
+	original.IngotID = "test-123"
 
 	buffer.Push(original)
 
 	popped, err := buffer.Pop(ctx)
 	assert.NoError(t, err)
 	assert.NotNil(t, popped)
-	assert.Equal(t, "test-123", popped.ContractID)
+	assert.Equal(t, "test-123", popped.IngotID)
 	assert.Equal(t, 0, buffer.Len())
 }
 
@@ -314,7 +314,7 @@ func TestIngotBuffer_FIFOOrder(t *testing.T) {
 	ids := []string{"first", "second", "third"}
 	for _, id := range ids {
 		ingot := validIngot()
-		ingot.ContractID = id
+		ingot.IngotID = id
 		buffer.Push(ingot)
 	}
 
@@ -322,7 +322,7 @@ func TestIngotBuffer_FIFOOrder(t *testing.T) {
 	for _, expectedID := range ids {
 		ingot, err := buffer.Pop(ctx)
 		require.NoError(t, err)
-		assert.Equal(t, expectedID, ingot.ContractID)
+		assert.Equal(t, expectedID, ingot.IngotID)
 	}
 }
 
@@ -336,7 +336,7 @@ func TestIngotBuffer_GracefulShutdown(t *testing.T) {
 	// Simulate production scenario: ingots arrive
 	for i := 0; i < 25; i++ {
 		ingot := validIngot()
-		ingot.ContractID = "contract-" + string(rune('A'+i))
+		ingot.IngotID = "ingot-" + string(rune('A'+i))
 		buffer.Push(ingot)
 	}
 
@@ -350,8 +350,8 @@ func TestIngotBuffer_GracefulShutdown(t *testing.T) {
 
 	// Verify all ingots preserved
 	for i, ingot := range drained {
-		expected := "contract-" + string(rune('A'+i))
-		assert.Equal(t, expected, ingot.ContractID)
+		expected := "ingot-" + string(rune('A'+i))
+		assert.Equal(t, expected, ingot.IngotID)
 	}
 }
 

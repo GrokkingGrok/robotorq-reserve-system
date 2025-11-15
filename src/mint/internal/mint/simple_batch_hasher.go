@@ -50,7 +50,11 @@ func (h *simpleBatchHasher) Hash(batch []*TokenTorqIngot) (string, float64, floa
 	sorted := make([]*TokenTorqIngot, len(batch))
 	copy(sorted, batch)
 	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Hash < sorted[j].Hash
+		// Sort by first hash in JouleTorqHashes array, fallback to IngotID
+		if len(sorted[i].JouleTorqHashes) > 0 && len(sorted[j].JouleTorqHashes) > 0 {
+			return sorted[i].JouleTorqHashes[0] < sorted[j].JouleTorqHashes[0]
+		}
+		return sorted[i].IngotID < sorted[j].IngotID
 	})
 
 	// Concatenate ingot data for hashing
@@ -60,19 +64,18 @@ func (h *simpleBatchHasher) Hash(batch []*TokenTorqIngot) (string, float64, floa
 
 	for _, ingot := range sorted {
 		// Accumulate totals
-		totalRobo += ingot.RoboTorq
-		totalSale += ingot.Price
+		totalRobo += ingot.RoboStakeTotal
+		totalSale += ingot.PricePerRT * ingot.RoboStakeTotal // Total sale = price per RT * total RT
 
-		// Build hash input: Hash|Joule|Robo|Price|ContractID|DiggerID|Timestamp
-		// Include all fields for complete data integrity
-		fmt.Fprintf(&builder, "%s|%.2f|%.2f|%.2f|%s|%s|%s\n",
-			ingot.Hash,
-			ingot.JouleTorq,
-			ingot.RoboTorq,
-			ingot.Price,
-			ingot.ContractID,
-			ingot.DiggerID,
-			ingot.Timestamp.UTC().Format("2006-01-02T15:04:05.000Z"),
+		// Build hash input: IngotID|JouleTorq|RoboStake|Price|Contracts|Hashes|MintedAt
+		fmt.Fprintf(&builder, "%s|%d|%.6f|%.2f|%s|%s|%s\n",
+			ingot.IngotID,
+			ingot.JouleTorqTotal,
+			ingot.RoboStakeTotal,
+			ingot.PricePerRT,
+			strings.Join(ingot.ContractIDs, ","),
+			strings.Join(ingot.JouleTorqHashes, ","),
+			ingot.MintedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 		)
 	}
 

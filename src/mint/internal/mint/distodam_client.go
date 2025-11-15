@@ -274,3 +274,9 @@ func (c *distoDamClient) Close() error {
 func (c *distoDamClient) IsConnected() bool {
 	return c.conn != nil && c.conn.IsConnected()
 }
+
+// GetConnection returns the underlying NATS connection.
+// Used by IngotReceiver to subscribe to mint.ingots topic.
+func (c *distoDamClient) GetConnection() *nats.Conn {
+	return c.conn
+}

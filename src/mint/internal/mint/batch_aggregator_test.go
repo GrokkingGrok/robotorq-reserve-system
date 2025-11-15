@@ -56,7 +56,7 @@ func (m *mockMintEngine) ProcessBatch(ctx context.Context, batch []*TokenTorqIng
 	m.totalIngots += int64(len(batch))
 
 	for _, ingot := range batch {
-		m.totalRobo += ingot.RoboTorq
+		m.totalRobo += ingot.RoboStakeTotal
 	}
 
 	return nil
@@ -240,7 +240,7 @@ func TestBatchAggregator_CarryoverBetweenBatches(t *testing.T) {
 	// Push 23 ingots (2 full batches + 3 carryover)
 	for i := 0; i < 23; i++ {
 		ingot := validIngot()
-		ingot.ContractID = "ingot-" + string(rune('A'+i))
+		ingot.IngotID = "ingot-" + string(rune('A'+i))
 		buffer.Push(ingot)
 	}
 
@@ -257,12 +257,12 @@ func TestBatchAggregator_CarryoverBetweenBatches(t *testing.T) {
 	assert.Equal(t, 10, len(engine.processedBatches[1]))
 
 	// First batch should be ingots 0-9
-	assert.Equal(t, "ingot-A", engine.processedBatches[0][0].ContractID)
-	assert.Equal(t, "ingot-J", engine.processedBatches[0][9].ContractID)
+	assert.Equal(t, "ingot-A", engine.processedBatches[0][0].IngotID)
+	assert.Equal(t, "ingot-J", engine.processedBatches[0][9].IngotID)
 
 	// Second batch should be ingots 10-19
-	assert.Equal(t, "ingot-K", engine.processedBatches[1][0].ContractID)
-	assert.Equal(t, "ingot-T", engine.processedBatches[1][9].ContractID)
+	assert.Equal(t, "ingot-K", engine.processedBatches[1][0].IngotID)
+	assert.Equal(t, "ingot-T", engine.processedBatches[1][9].IngotID)
 	engine.mu.Unlock()
 }
 

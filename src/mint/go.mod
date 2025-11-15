@@ -4,8 +4,8 @@ go 1.24.0
 
 require (
 	github.com/google/uuid v1.6.0
+	github.com/nats-io/nats-server/v2 v2.12.2
 	github.com/stretchr/testify v1.11.1
-	google.golang.org/grpc v1.76.0
 )
 
 require (
@@ -16,7 +16,6 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/minio/highwayhash v1.0.4-0.20251030100505-070ab1a87a76 // indirect
 	github.com/nats-io/jwt/v2 v2.8.0 // indirect
-	github.com/nats-io/nats-server/v2 v2.12.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
@@ -39,9 +38,6 @@ require (
 
 require (
 	github.com/nats-io/nats.go v1.47.0
-	golang.org/x/net v0.45.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
-	golang.org/x/text v0.30.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 )

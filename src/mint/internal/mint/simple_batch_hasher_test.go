@@ -17,22 +17,22 @@ func TestSimpleBatchHasher_BasicHashing(t *testing.T) {
 
 	batch := []*TokenTorqIngot{
 		{
-			JouleTorq:  3600,
-			RoboTorq:   100.0,
-			Price:      50.0,
-			Hash:       "hash1",
-			ContractID: "contract1",
-			DiggerID:   "digger1",
-			Timestamp:  time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
+			IngotID:         "ingot1",
+			JouleTorqTotal:  3600,
+			RoboStakeTotal:  100.0,
+			PricePerRT:      0.5,
+			JouleTorqHashes: []string{"hash1"},
+			ContractIDs:     []string{"contract1"},
+			MintedAt:        time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
 		},
 		{
-			JouleTorq:  3600,
-			RoboTorq:   200.0,
-			Price:      75.0,
-			Hash:       "hash2",
-			ContractID: "contract2",
-			DiggerID:   "digger2",
-			Timestamp:  time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
+			IngotID:         "ingot2",
+			JouleTorqTotal:  3600,
+			RoboStakeTotal:  200.0,
+			PricePerRT:      0.375,
+			JouleTorqHashes: []string{"hash2"},
+			ContractIDs:     []string{"contract2"},
+			MintedAt:        time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
 		},
 	}
 
@@ -40,9 +40,9 @@ func TestSimpleBatchHasher_BasicHashing(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, batchHash)
-	assert.Equal(t, 300.0, totalRobo) // 100 + 200
-	assert.Equal(t, 125.0, totalSale) // 50 + 75
-	assert.Len(t, batchHash, 64)      // SHA256 hex string is 64 chars
+	assert.Equal(t, 300.0, totalRobo)         // 100 + 200
+	assert.InDelta(t, 125.0, totalSale, 0.01) // (0.5*100) + (0.375*200) = 50 + 75 = 125
+	assert.Len(t, batchHash, 64)              // SHA256 hex string is 64 chars
 }
 
 func TestSimpleBatchHasher_EmptyBatch(t *testing.T) {
@@ -67,9 +67,9 @@ func TestSimpleBatchHasher_TotalRoboCalculation(t *testing.T) {
 	hasher := NewSimpleBatchHasher()
 
 	batch := []*TokenTorqIngot{
-		{RoboTorq: 123.45, Price: 10.0, Hash: "h1", Timestamp: time.Now()},
-		{RoboTorq: 678.90, Price: 20.0, Hash: "h2", Timestamp: time.Now()},
-		{RoboTorq: 234.56, Price: 30.0, Hash: "h3", Timestamp: time.Now()},
+		{RoboStakeTotal: 123.45, PricePerRT: 1.0, JouleTorqHashes: []string{"h1"}, MintedAt: time.Now()},
+		{RoboStakeTotal: 678.90, PricePerRT: 1.0, JouleTorqHashes: []string{"h2"}, MintedAt: time.Now()},
+		{RoboStakeTotal: 234.56, PricePerRT: 1.0, JouleTorqHashes: []string{"h3"}, MintedAt: time.Now()},
 	}
 
 	_, totalRobo, _, err := hasher.Hash(batch)
@@ -82,23 +82,23 @@ func TestSimpleBatchHasher_TotalSaleCalculation(t *testing.T) {
 	hasher := NewSimpleBatchHasher()
 
 	batch := []*TokenTorqIngot{
-		{RoboTorq: 100.0, Price: 49.99, Hash: "h1", Timestamp: time.Now()},
-		{RoboTorq: 100.0, Price: 99.99, Hash: "h2", Timestamp: time.Now()},
-		{RoboTorq: 100.0, Price: 149.99, Hash: "h3", Timestamp: time.Now()},
+		{RoboStakeTotal: 100.0, PricePerRT: 0.4999, JouleTorqHashes: []string{"h1"}, MintedAt: time.Now()},
+		{RoboStakeTotal: 100.0, PricePerRT: 0.9999, JouleTorqHashes: []string{"h2"}, MintedAt: time.Now()},
+		{RoboStakeTotal: 100.0, PricePerRT: 1.4999, JouleTorqHashes: []string{"h3"}, MintedAt: time.Now()},
 	}
 
 	_, _, totalSale, err := hasher.Hash(batch)
 
 	require.NoError(t, err)
-	assert.InDelta(t, 299.97, totalSale, 0.01) // 49.99 + 99.99 + 149.99
+	assert.InDelta(t, 299.97, totalSale, 0.01) // (0.4999*100) + (0.9999*100) + (1.4999*100)
 }
 
 func TestSimpleBatchHasher_ZeroValues(t *testing.T) {
 	hasher := NewSimpleBatchHasher()
 
 	batch := []*TokenTorqIngot{
-		{RoboTorq: 0.0, Price: 0.0, Hash: "h1", Timestamp: time.Now()},
-		{RoboTorq: 0.0, Price: 0.0, Hash: "h2", Timestamp: time.Now()},
+		{RoboStakeTotal: 0.0, PricePerRT: 0.0, JouleTorqHashes: []string{"h1"}, MintedAt: time.Now()},
+		{RoboStakeTotal: 0.0, PricePerRT: 0.0, JouleTorqHashes: []string{"h2"}, MintedAt: time.Now()},
 	}
 
 	batchHash, totalRobo, totalSale, err := hasher.Hash(batch)
@@ -119,22 +119,22 @@ func TestSimpleBatchHasher_Determinism(t *testing.T) {
 	// Same batch should produce same hash every time
 	batch := []*TokenTorqIngot{
 		{
-			JouleTorq:  3600,
-			RoboTorq:   100.0,
-			Price:      50.0,
-			Hash:       "hash1",
-			ContractID: "contract1",
-			DiggerID:   "digger1",
-			Timestamp:  time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
+			IngotID:         "ingot1",
+			JouleTorqTotal:  3600,
+			RoboStakeTotal:  100.0,
+			PricePerRT:      0.5,
+			JouleTorqHashes: []string{"hash1"},
+			ContractIDs:     []string{"contract1"},
+			MintedAt:        time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
 		},
 		{
-			JouleTorq:  3600,
-			RoboTorq:   200.0,
-			Price:      75.0,
-			Hash:       "hash2",
-			ContractID: "contract2",
-			DiggerID:   "digger2",
-			Timestamp:  time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
+			IngotID:         "ingot2",
+			JouleTorqTotal:  3600,
+			RoboStakeTotal:  200.0,
+			PricePerRT:      0.375,
+			JouleTorqHashes: []string{"hash2"},
+			ContractIDs:     []string{"contract2"},
+			MintedAt:        time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
 		},
 	}
 
@@ -157,15 +157,15 @@ func TestSimpleBatchHasher_OrderIndependence(t *testing.T) {
 
 	// Two batches with same ingots but different order
 	batch1 := []*TokenTorqIngot{
-		{RoboTorq: 100.0, Price: 50.0, Hash: "aaa", Timestamp: time.Now()},
-		{RoboTorq: 200.0, Price: 75.0, Hash: "bbb", Timestamp: time.Now()},
-		{RoboTorq: 300.0, Price: 100.0, Hash: "ccc", Timestamp: time.Now()},
+		{RoboStakeTotal: 100.0, PricePerRT: 0.5, JouleTorqHashes: []string{"aaa"}, MintedAt: time.Now()},
+		{RoboStakeTotal: 200.0, PricePerRT: 0.375, JouleTorqHashes: []string{"bbb"}, MintedAt: time.Now()},
+		{RoboStakeTotal: 300.0, PricePerRT: 0.333, JouleTorqHashes: []string{"ccc"}, MintedAt: time.Now()},
 	}
 
 	batch2 := []*TokenTorqIngot{
-		{RoboTorq: 300.0, Price: 100.0, Hash: "ccc", Timestamp: time.Now()},
-		{RoboTorq: 100.0, Price: 50.0, Hash: "aaa", Timestamp: time.Now()},
-		{RoboTorq: 200.0, Price: 75.0, Hash: "bbb", Timestamp: time.Now()},
+		{RoboStakeTotal: 300.0, PricePerRT: 0.333, JouleTorqHashes: []string{"ccc"}, MintedAt: time.Now()},
+		{RoboStakeTotal: 100.0, PricePerRT: 0.5, JouleTorqHashes: []string{"aaa"}, MintedAt: time.Now()},
+		{RoboStakeTotal: 200.0, PricePerRT: 0.375, JouleTorqHashes: []string{"bbb"}, MintedAt: time.Now()},
 	}
 
 	hash1, _, _, err1 := hasher.Hash(batch1)
@@ -174,7 +174,7 @@ func TestSimpleBatchHasher_OrderIndependence(t *testing.T) {
 	require.NoError(t, err1)
 	require.NoError(t, err2)
 
-	// Should produce same hash because hasher sorts by ingot.Hash
+	// Should produce same hash because hasher sorts by JouleTorqHashes[0]
 	assert.Equal(t, hash1, hash2, "Hash should be order-independent (sorted)")
 }
 
@@ -187,11 +187,12 @@ func TestSimpleBatchHasher_SingleIngot(t *testing.T) {
 
 	batch := []*TokenTorqIngot{
 		{
-			JouleTorq: 3600,
-			RoboTorq:  500.0,
-			Price:     250.0,
-			Hash:      "single",
-			Timestamp: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			IngotID:         "single",
+			JouleTorqTotal:  3600,
+			RoboStakeTotal:  500.0,
+			PricePerRT:      0.5,
+			JouleTorqHashes: []string{"single"},
+			MintedAt:        time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 		},
 	}
 
@@ -200,7 +201,7 @@ func TestSimpleBatchHasher_SingleIngot(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, batchHash)
 	assert.Equal(t, 500.0, totalRobo)
-	assert.Equal(t, 250.0, totalSale)
+	assert.InDelta(t, 250.0, totalSale, 0.01) // 500 * 0.5
 }
 
 func TestSimpleBatchHasher_LargeBatch(t *testing.T) {
@@ -213,18 +214,18 @@ func TestSimpleBatchHasher_LargeBatch(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		robo := float64(i) * 10.0
-		price := float64(i) * 5.0
+		price := 0.5 // Fixed price per RT
 		batch[i] = &TokenTorqIngot{
-			JouleTorq:  3600,
-			RoboTorq:   robo,
-			Price:      price,
-			Hash:       string(rune('a' + (i % 26))),
-			ContractID: "contract",
-			DiggerID:   "digger",
-			Timestamp:  time.Now(),
+			IngotID:         "ingot-" + string(rune('a'+(i%26))),
+			JouleTorqTotal:  3600,
+			RoboStakeTotal:  robo,
+			PricePerRT:      price,
+			JouleTorqHashes: []string{string(rune('a' + (i % 26)))},
+			ContractIDs:     []string{"contract"},
+			MintedAt:        time.Now(),
 		}
 		expectedRobo += robo
-		expectedSale += price
+		expectedSale += price * robo // Sale = PricePerRT * RoboStakeTotal
 	}
 
 	batchHash, totalRobo, totalSale, err := hasher.Hash(batch)
@@ -243,11 +244,11 @@ func TestSimpleBatchHasher_DifferentBatchesDifferentHashes(t *testing.T) {
 	hasher := NewSimpleBatchHasher()
 
 	batch1 := []*TokenTorqIngot{
-		{RoboTorq: 100.0, Price: 50.0, Hash: "hash1", Timestamp: time.Now()},
+		{RoboStakeTotal: 100.0, PricePerRT: 0.5, JouleTorqHashes: []string{"hash1"}, MintedAt: time.Now()},
 	}
 
 	batch2 := []*TokenTorqIngot{
-		{RoboTorq: 200.0, Price: 50.0, Hash: "hash2", Timestamp: time.Now()},
+		{RoboStakeTotal: 200.0, PricePerRT: 0.5, JouleTorqHashes: []string{"hash2"}, MintedAt: time.Now()},
 	}
 
 	hash1, _, _, err1 := hasher.Hash(batch1)
@@ -264,19 +265,19 @@ func TestSimpleBatchHasher_DifferentTimestampsSameData(t *testing.T) {
 	// Same data but different timestamps
 	batch1 := []*TokenTorqIngot{
 		{
-			RoboTorq:  100.0,
-			Price:     50.0,
-			Hash:      "hash1",
-			Timestamp: time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
+			RoboStakeTotal:  100.0,
+			PricePerRT:      0.5,
+			JouleTorqHashes: []string{"hash1"},
+			MintedAt:        time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
 		},
 	}
 
 	batch2 := []*TokenTorqIngot{
 		{
-			RoboTorq:  100.0,
-			Price:     50.0,
-			Hash:      "hash1",
-			Timestamp: time.Date(2024, 1, 2, 12, 0, 0, 0, time.UTC), // Different day
+			RoboStakeTotal:  100.0,
+			PricePerRT:      0.5,
+			JouleTorqHashes: []string{"hash1"},
+			MintedAt:        time.Date(2024, 1, 2, 12, 0, 0, 0, time.UTC), // Different day
 		},
 	}
 
@@ -303,13 +304,13 @@ func TestSimpleBatchHasher_Performance(t *testing.T) {
 	batch := make([]*TokenTorqIngot, 1000)
 	for i := 0; i < 1000; i++ {
 		batch[i] = &TokenTorqIngot{
-			JouleTorq:  3600,
-			RoboTorq:   float64(i),
-			Price:      float64(i) * 0.5,
-			Hash:       string(rune('a' + (i % 26))),
-			ContractID: "contract",
-			DiggerID:   "digger",
-			Timestamp:  time.Now(),
+			IngotID:         "ingot-" + string(rune('a'+(i%26))),
+			JouleTorqTotal:  3600,
+			RoboStakeTotal:  float64(i),
+			PricePerRT:      0.5,
+			JouleTorqHashes: []string{string(rune('a' + (i % 26)))},
+			ContractIDs:     []string{"contract"},
+			MintedAt:        time.Now(),
 		}
 	}
 

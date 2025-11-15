@@ -67,13 +67,13 @@ func (m *mockIngotBuffer) Drain() []*TokenTorqIngot {
 // validIngot returns a valid TokenTorqIngot for testing.
 func validIngot() *TokenTorqIngot {
 	return &TokenTorqIngot{
-		JouleTorq:  3600.0,
-		RoboTorq:   0.123456,
-		Price:      50.00,
-		ContractID: "contract-123",
-		DiggerID:   "digger-456",
-		Timestamp:  time.Now().UTC(),
-		Hash:       "hash-abc",
+		IngotID:         "ingot-test-123",
+		JouleTorqTotal:  3600,
+		RoboStakeTotal:  0.123456,
+		PricePerRT:      50.00,
+		ContractIDs:     []string{"contract-123"},
+		JouleTorqHashes: []string{"hash-abc"},
+		MintedAt:        time.Now().UTC(),
 	}
 }
 
@@ -84,7 +84,7 @@ func setupTestReceiver(bufferCap int) (IngotReceiver, *mockIngotBuffer) {
 
 	buffer := newMockIngotBuffer(bufferCap)
 	logger := slog.New(slog.NewJSONHandler(bytes.NewBuffer(nil), nil))
-	receiver := NewIngotReceiver(buffer, "8080", logger)
+	receiver := NewIngotReceiver(buffer, nil, "8080", logger) // nil NATS conn for unit tests
 
 	return receiver, buffer
 }
@@ -107,10 +107,10 @@ func TestValidateIngot_InvalidJouleTorq(t *testing.T) {
 	r := receiver.(*ingotReceiver)
 
 	ingot := validIngot()
-	ingot.JouleTorq = 1800.0 // Wrong value
+	ingot.JouleTorqTotal = 1800 // Wrong value
 	err := r.validateIngot(ingot)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid JouleTorq")
+	assert.Contains(t, err.Error(), "invalid JouleTorqTotal")
 }
 
 func TestValidateIngot_NegativeRoboTorq(t *testing.T) {
@@ -118,10 +118,10 @@ func TestValidateIngot_NegativeRoboTorq(t *testing.T) {
 	r := receiver.(*ingotReceiver)
 
 	ingot := validIngot()
-	ingot.RoboTorq = -0.5 // Negative
+	ingot.RoboStakeTotal = -0.5 // Negative
 	err := r.validateIngot(ingot)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid RoboTorq")
+	assert.Contains(t, err.Error(), "invalid RoboStakeTotal")
 }
 
 func TestValidateIngot_ZeroPrice(t *testing.T) {
@@ -129,10 +129,10 @@ func TestValidateIngot_ZeroPrice(t *testing.T) {
 	r := receiver.(*ingotReceiver)
 
 	ingot := validIngot()
-	ingot.Price = 0 // Zero price
+	ingot.PricePerRT = 0 // Zero price
 	err := r.validateIngot(ingot)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid Price")
+	assert.Contains(t, err.Error(), "invalid PricePerRT")
 }
 
 func TestValidateIngot_NegativePrice(t *testing.T) {
@@ -140,10 +140,10 @@ func TestValidateIngot_NegativePrice(t *testing.T) {
 	r := receiver.(*ingotReceiver)
 
 	ingot := validIngot()
-	ingot.Price = -10.0 // Negative price
+	ingot.PricePerRT = -10.0 // Negative price
 	err := r.validateIngot(ingot)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid Price")
+	assert.Contains(t, err.Error(), "invalid PricePerRT")
 }
 
 func TestValidateIngot_EmptyContractID(t *testing.T) {
@@ -151,10 +151,10 @@ func TestValidateIngot_EmptyContractID(t *testing.T) {
 	r := receiver.(*ingotReceiver)
 
 	ingot := validIngot()
-	ingot.ContractID = "" // Empty
+	ingot.ContractIDs = []string{} // Empty
 	err := r.validateIngot(ingot)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "contract ID")
+	assert.Contains(t, err.Error(), "contract IDs")
 }
 
 func TestValidateIngot_EmptyDiggerID(t *testing.T) {
@@ -162,10 +162,10 @@ func TestValidateIngot_EmptyDiggerID(t *testing.T) {
 	r := receiver.(*ingotReceiver)
 
 	ingot := validIngot()
-	ingot.DiggerID = "" // Empty
+	ingot.IngotID = "" // Empty
 	err := r.validateIngot(ingot)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "digger ID")
+	assert.Contains(t, err.Error(), "ingot ID")
 }
 
 func TestValidateIngot_EmptyHash(t *testing.T) {
@@ -173,10 +173,10 @@ func TestValidateIngot_EmptyHash(t *testing.T) {
 	r := receiver.(*ingotReceiver)
 
 	ingot := validIngot()
-	ingot.Hash = "" // Empty
+	ingot.JouleTorqHashes = []string{} // Empty
 	err := r.validateIngot(ingot)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "hash")
+	assert.Contains(t, err.Error(), "joule hashes")
 }
 
 func TestValidateIngot_ZeroTimestamp(t *testing.T) {
@@ -184,10 +184,10 @@ func TestValidateIngot_ZeroTimestamp(t *testing.T) {
 	r := receiver.(*ingotReceiver)
 
 	ingot := validIngot()
-	ingot.Timestamp = time.Time{} // Zero time
+	ingot.MintedAt = time.Time{} // Zero time
 	err := r.validateIngot(ingot)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "timestamp")
+	assert.Contains(t, err.Error(), "minted_at")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -207,7 +207,7 @@ func TestReceiveIngot_ValidationFailure(t *testing.T) {
 	receiver, buffer := setupTestReceiver(100)
 
 	ingot := validIngot()
-	ingot.JouleTorq = 1800.0 // Invalid
+	ingot.JouleTorqTotal = 1800 // Invalid
 	err := receiver.ReceiveIngot(ingot)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "validation failed")
@@ -242,7 +242,7 @@ func TestReceiveIngot_MetricsUpdated(t *testing.T) {
 
 	// Validation failure
 	invalidIngot := validIngot()
-	invalidIngot.JouleTorq = 1800.0
+	invalidIngot.JouleTorqTotal = 1800
 	receiver.ReceiveIngot(invalidIngot)
 
 	rejected := testutil.ToFloat64(r.metrics.ingotsRejected)
@@ -302,7 +302,7 @@ func TestHandleIngot_ValidationError(t *testing.T) {
 	r := receiver.(*ingotReceiver)
 
 	ingot := validIngot()
-	ingot.JouleTorq = 1800.0 // Invalid
+	ingot.JouleTorqTotal = 1800 // Invalid
 	body, _ := json.Marshal(ingot)
 
 	req := httptest.NewRequest(http.MethodPost, "/mint-tokentorq", bytes.NewReader(body))
