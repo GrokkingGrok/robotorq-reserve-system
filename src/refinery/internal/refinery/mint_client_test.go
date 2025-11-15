@@ -6,6 +6,7 @@ package refinery
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -16,11 +17,39 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+// createStubIngotForTest creates a test ingot with stub JouleTorqUnits
+// This is a helper for testing during the currency refactor
+func createStubIngotForTest(contractID string, totalJoules, totalRobo float64) *models.TokenTorqIngot {
+	stubUnits := make([]*models.JouleTorqUnit, 3600)
+	joulesPerUnit := totalJoules / 3600.0
+	roboPerUnit := totalRobo / 3600.0
+
+	for i := 0; i < 3600; i++ {
+		stubUnits[i] = &models.JouleTorqUnit{
+			TokenID:        fmt.Sprintf("%s-0-%d", contractID, i),
+			ContractID:     contractID,
+			MilestoneIndex: 0,
+			TokenIndex:     i,
+			JoulesConsumed: joulesPerUnit,
+			RoboStakePaid:  roboPerUnit,
+			DiggerID:       "test-digger",
+			Timestamp:      time.Now().UTC(),
+			Signature:      "",
+			DiggerPubKey:   "",
+			Hash:           fmt.Sprintf("test-hash-%d", i),
+		}
+	}
+
+	ingot, _ := models.NewTokenTorqIngot(stubUnits)
+	return ingot
+}
+
 // startTestNATSServer starts an embedded NATS server for testing
 func startTestNATSServer(t *testing.T) (*server.Server, string) {
 	opts := &server.Options{
-		Host: "127.0.0.1",
-		Port: -1, // Random port
+		Host:       "127.0.0.1",
+		Port:       -1, // Random port
+		MaxPayload: 10 * 1024 * 1024, // 10MB (allows 3,600 JouleTorqUnits per ingot)
 	}
 
 	ns, err := server.NewServer(opts)
@@ -150,22 +179,16 @@ func TestMintClient_PublishBatch(t *testing.T) {
 		{
 			name: "single_ingot",
 			ingots: []*models.TokenTorqIngot{
-				models.NewTokenTorqIngot(
-					3600,
-					100.0,
-					10.0,
-					[]string{"contract-001"},
-					[]string{"hash-001"},
-				),
+				createStubIngotForTest("contract-001", 3600, 100.0),
 			},
 			shouldError: false,
 		},
 		{
 			name: "multiple_ingots",
 			ingots: []*models.TokenTorqIngot{
-				models.NewTokenTorqIngot(3600, 100.0, 10.0, []string{"c1"}, []string{"h1"}),
-				models.NewTokenTorqIngot(3600, 200.0, 20.0, []string{"c2"}, []string{"h2"}),
-				models.NewTokenTorqIngot(3600, 300.0, 30.0, []string{"c3"}, []string{"h3"}),
+				createStubIngotForTest("c1", 3600, 100.0),
+				createStubIngotForTest("c2", 3600, 200.0),
+				createStubIngotForTest("c3", 3600, 300.0),
 			},
 			shouldError: false,
 		},
@@ -275,7 +298,7 @@ func TestMintClient_ContextCancellation(t *testing.T) {
 	defer client.Close()
 
 	ingots := []*models.TokenTorqIngot{
-		models.NewTokenTorqIngot(3600, 100.0, 10.0, []string{"test"}, []string{"hash"}),
+		createStubIngotForTest("test", 3600, 100.0),
 	}
 
 	// First publish should succeed (before cancellation)
@@ -396,7 +419,7 @@ func TestMintClient_BatchEnvelope(t *testing.T) {
 
 	// Publish batch
 	ingots := []*models.TokenTorqIngot{
-		models.NewTokenTorqIngot(3600, 100.0, 10.0, []string{"c1", "c2"}, []string{"h1", "h2"}),
+		createStubIngotForTest("c1", 3600, 100.0),
 	}
 
 	err = client.PublishBatch(ingots)
@@ -477,7 +500,7 @@ func BenchmarkMintClient_PublishBatch(b *testing.B) {
 	defer client.Close()
 
 	ingots := []*models.TokenTorqIngot{
-		models.NewTokenTorqIngot(3600, 100.0, 10.0, []string{"test"}, []string{"hash"}),
+		createStubIngotForTest("test", 3600, 100.0),
 	}
 
 	b.ResetTimer()

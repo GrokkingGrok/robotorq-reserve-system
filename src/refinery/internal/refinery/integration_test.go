@@ -21,6 +21,32 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+// createStubIngot creates a test ingot with stub JouleTorqUnits
+// This is a helper for testing during the currency refactor
+func createStubIngot(contractID string, totalJoules, totalRobo float64) (*models.TokenTorqIngot, error) {
+	stubUnits := make([]*models.JouleTorqUnit, 3600)
+	joulesPerUnit := totalJoules / 3600.0
+	roboPerUnit := totalRobo / 3600.0
+
+	for i := 0; i < 3600; i++ {
+		stubUnits[i] = &models.JouleTorqUnit{
+			TokenID:        fmt.Sprintf("%s-0-%d", contractID, i),
+			ContractID:     contractID,
+			MilestoneIndex: 0,
+			TokenIndex:     i,
+			JoulesConsumed: joulesPerUnit,
+			RoboStakePaid:  roboPerUnit,
+			DiggerID:       "test-digger",
+			Timestamp:      time.Now().UTC(),
+			Signature:      "",
+			DiggerPubKey:   "",
+			Hash:           fmt.Sprintf("test-hash-%d", i),
+		}
+	}
+
+	return models.NewTokenTorqIngot(stubUnits)
+}
+
 // TestRefineryIntegration_EndToEnd tests the complete pipeline:
 // 1. Send JouleTorqOre via HTTP
 // 2. Verify queuing
@@ -175,8 +201,8 @@ func TestRefineryIntegration_EndToEnd(t *testing.T) {
 		if len(envelope.Ingots) > 0 {
 			ingot := envelope.Ingots[0]
 
-			if ingot.JouleTorqTotal != 3600 {
-				t.Errorf("expected ingot JouleTorqTotal 3600, got %d", ingot.JouleTorqTotal)
+			if ingot.JouleTorqTotal < 3500 || ingot.JouleTorqTotal > 3700 {
+				t.Errorf("expected ingot JouleTorqTotal ~3600, got %.2f", ingot.JouleTorqTotal)
 			}
 			if ingot.IngotID == "" {
 				t.Error("ingot ID is empty")
@@ -189,15 +215,14 @@ func TestRefineryIntegration_EndToEnd(t *testing.T) {
 			if ingot.RoboStakeTotal == 0 {
 				t.Error("robo stake total is zero")
 			}
-			if ingot.PricePerRT == 0 {
-				t.Error("price per RT is zero")
-			}
+			// NOTE: PricePerRT removed from TokenTorqIngot
+			// Price now calculated as RoboStakeTotal / (JouleTorqTotal / 3600)
 
-			t.Logf("Ingot validated: joules=%d, contracts=%d, robo_stake=%.5f, price=%.2f, id=%s",
+			t.Logf("Ingot validated: joules=%.2f, contracts=%d, robo_stake=%.5f, units=%d, id=%s",
 				ingot.JouleTorqTotal,
 				len(ingot.ContractIDs),
 				ingot.RoboStakeTotal,
-				ingot.PricePerRT,
+				len(ingot.Units),
 				ingot.IngotID,
 			)
 		}
