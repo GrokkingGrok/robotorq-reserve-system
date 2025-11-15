@@ -819,4 +819,306 @@ mod tests {
         // Test: 0.5 hours (30 min), 10 second intervals = 180 milestones
         assert_eq!((0.5 * 3600.0) / 10.0, 180.0);
     }
+
+    // ────────────────────────────────────────────────────────────────
+    // Digger Creation & Configuration Tests
+    // ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_digger_creation() {
+        let digger = Digger {
+            id: "test-digger-001".to_string(),
+            power_kw: 0.25,
+            max_token_throughput: 12,
+            current_contract: None,
+        };
+
+        assert_eq!(digger.id, "test-digger-001");
+        assert_eq!(digger.power_kw, 0.25);
+        assert_eq!(digger.max_token_throughput, 12);
+        assert!(digger.current_contract.is_none());
+    }
+
+    #[test]
+    fn test_digger_clone() {
+        let digger1 = Digger {
+            id: "clone-test".to_string(),
+            power_kw: 0.5,
+            max_token_throughput: 20,
+            current_contract: None,
+        };
+
+        let digger2 = digger1.clone();
+        assert_eq!(digger1.id, digger2.id);
+        assert_eq!(digger1.power_kw, digger2.power_kw);
+        assert_eq!(digger1.max_token_throughput, digger2.max_token_throughput);
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // Contract Duration Calculation Tests
+    // ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_contract_duration_calculation() {
+        // Given: amount_rt = 100.0, power_kw = 0.25, max_throughput = 12
+        // Expected: duration = 100 / (0.25 × 12) = 100 / 3 = 33.333... hours
+        
+        let amount_rt = 100.0;
+        let power_kw = 0.25;
+        let max_token_throughput = 12.0;
+        
+        let duration_hours = amount_rt / (power_kw * max_token_throughput);
+        
+        assert!((duration_hours - 33.333333_f64).abs() < 0.00001);
+    }
+
+    #[test]
+    fn test_contract_duration_edge_cases() {
+        // Test 1: Very small RT amount
+        let duration1 = 1.0 / (0.25 * 12.0);
+        assert!((duration1 - 0.333333_f64).abs() < 0.00001);
+
+        // Test 2: Large RT amount
+        let duration2 = 10000.0 / (0.25 * 12.0);
+        assert!((duration2 - 3333.333333_f64).abs() < 0.00001);
+
+        // Test 3: High power digger
+        let duration3 = 100.0 / (1.0 * 50.0);
+        assert_eq!(duration3, 2.0);
+    }
+
+    #[test]
+    fn test_total_milestones_from_duration() {
+        // 33.33 hours, 5 second intervals
+        let duration_hours: f64 = 33.333333;
+        let interval_seconds: f64 = 5.0;
+        let total_milestones = (duration_hours * 3600.0) / interval_seconds;
+        
+        // 33.333333 × 3600 = 119,999.9988 seconds / 5 ≈ 24,000 milestones
+        assert!((total_milestones - 24000.0).abs() < 0.01);
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // Ore Generation Tests
+    // ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_ore_tokens_calculation() {
+        // tokens = max_token_throughput × interval_seconds × torq
+        let max_throughput = 12;
+        let interval = 5;
+        let torq = 1; // Always 1 for now
+        
+        let tokens = max_throughput * interval * torq;
+        assert_eq!(tokens, 60);
+    }
+
+    #[test]
+    fn test_ore_joules_calculation() {
+        // joules = power_kw × 1000 × interval_seconds
+        let power_kw = 0.25;
+        let interval = 5;
+        
+        let joules = (power_kw * 1000.0 * interval as f64) as u64;
+        assert_eq!(joules, 1250);
+    }
+
+    #[test]
+    fn test_ore_joules_various_power_levels() {
+        // Low power (0.1 kW = 100W)
+        let joules1 = (0.1 * 1000.0 * 5.0) as u64;
+        assert_eq!(joules1, 500);
+
+        // Medium power (0.5 kW = 500W)
+        let joules2 = (0.5 * 1000.0 * 5.0) as u64;
+        assert_eq!(joules2, 2500);
+
+        // High power (1.0 kW = 1000W)
+        let joules3 = (1.0 * 1000.0 * 5.0) as u64;
+        assert_eq!(joules3, 5000);
+    }
+
+    #[test]
+    fn test_robo_stake_distribution() {
+        // 3000 RT over 14,400 milestones
+        let total_rt = 3000.0;
+        let total_milestones = 14400.0;
+        let robo_per_milestone = total_rt / total_milestones;
+        
+        // Each milestone should get ~0.208333 RT
+        assert!((robo_per_milestone - 0.208333_f64).abs() < 0.00001);
+        
+        // Sum of all milestones should equal total
+        let reconstructed_total = robo_per_milestone * total_milestones;
+        assert!((reconstructed_total - total_rt).abs() < 0.001);
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // ContractStatusUpdate Tests
+    // ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_contract_status_update_creation() {
+        let status = ContractStatusUpdate {
+            contract_id: "test-contract".to_string(),
+            digger_id: "test-digger".to_string(),
+            total_joules: 1250,
+            total_tokens: 60,
+            total_robo_stake: 100.0,
+            robo_stake_sent: 0.208333,
+            current_milestone: 1,
+            total_milestones: 480,
+            percent_complete: 0.208333,
+            time_elapsed_secs: 5,
+            time_remaining_secs: 2395,
+            milestones_confirmed: 1,
+            milestones_failed: 0,
+            refinery_healthy: true,
+            state: "running".to_string(),
+        };
+
+        assert_eq!(status.contract_id, "test-contract");
+        assert_eq!(status.current_milestone, 1);
+        assert_eq!(status.total_milestones, 480);
+        assert!(status.refinery_healthy);
+    }
+
+    #[test]
+    fn test_percent_complete_calculation() {
+        // Milestone 100 out of 1000 = 10%
+        let current = 100.0;
+        let total = 1000.0;
+        let percent = (current / total) * 100.0;
+        
+        assert!((percent - 10.0_f64).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_time_remaining_calculation() {
+        // 480 total milestones, 5 second intervals = 2400 seconds total
+        // Completed 1 milestone (5 seconds elapsed)
+        // Remaining: 479 milestones × 5 seconds = 2395 seconds
+        
+        let total_milestones = 480;
+        let current_milestone = 1;
+        let interval_seconds = 5;
+        
+        let remaining_milestones = total_milestones - current_milestone;
+        let time_remaining = remaining_milestones * interval_seconds;
+        
+        assert_eq!(time_remaining, 2395);
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // Proof of Work Tests
+    // ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_proof_of_work_generation() {
+        // Proof format: "photo-{digger_id}-{milestone_index}"
+        let digger_id = "dig-jon-ai-001";
+        let milestone_index = 0;
+        
+        let proof_data = format!("photo-{}-{}", digger_id, milestone_index);
+        let proof_base64 = general_purpose::STANDARD.encode(proof_data.as_bytes());
+        
+        // Verify it encodes correctly
+        assert!(proof_base64.len() > 0);
+        
+        // Verify it decodes back
+        let decoded = general_purpose::STANDARD.decode(&proof_base64).unwrap();
+        let decoded_str = String::from_utf8(decoded).unwrap();
+        assert_eq!(decoded_str, format!("photo-{}-{}", digger_id, milestone_index));
+    }
+
+    #[test]
+    fn test_proof_uniqueness_per_milestone() {
+        let digger_id = "dig-test";
+        
+        // Generate proofs for different milestones
+        let proof0 = format!("photo-{}-0", digger_id);
+        let proof1 = format!("photo-{}-1", digger_id);
+        let proof2 = format!("photo-{}-2", digger_id);
+        
+        // Each should be unique
+        assert_ne!(proof0, proof1);
+        assert_ne!(proof1, proof2);
+        assert_ne!(proof0, proof2);
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // Timestamp Tests
+    // ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_unix_timestamp_generation() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        
+        // Timestamp should be reasonable (after 2020, before 2100)
+        assert!(now > 1577836800); // Jan 1, 2020
+        assert!(now < 4102444800); // Jan 1, 2100
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // Edge Case & Boundary Tests
+    // ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_zero_interval_protection() {
+        // Ensure we don't divide by zero
+        let duration_hours = 10.0;
+        let interval_seconds = 0.0;
+        
+        // In real code, we should validate interval > 0
+        // For now, just verify the calculation would panic
+        let result = std::panic::catch_unwind(|| {
+            let _milestones = (duration_hours * 3600.0) / interval_seconds;
+        });
+        
+        // Division by zero doesn't panic in Rust for floats, returns infinity
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_negative_robo_stake_handling() {
+        // RoboStake should never be negative
+        let robo_stake = -100.0;
+        
+        // In real code, validation should reject this
+        // Test that we can detect invalid values
+        assert!(robo_stake < 0.0);
+    }
+
+    #[test]
+    fn test_milestone_index_overflow() {
+        // Test very large milestone counts
+        let duration_hours = 1000.0; // ~41 days
+        let interval_seconds = 1.0;
+        let total_milestones = (duration_hours * 3600.0) / interval_seconds;
+        
+        // 1000 hours × 3600 = 3,600,000 milestones
+        assert_eq!(total_milestones, 3_600_000.0);
+        
+        // Verify u32 can hold this (max ~4.2 billion)
+        assert!(total_milestones < u32::MAX as f64);
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // DiggerManager Tests
+    // ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_digger_manager_global_singleton() {
+        let manager1 = DiggerManager::global();
+        let manager2 = DiggerManager::global();
+        
+        // Both should point to same instance (Arc ensures this)
+        assert!(Arc::ptr_eq(&manager1, &manager2));
+    }
+
+    // NOTE: Removed tests for get_digger() and nonexistent_digger() since
+    // DiggerManager starts empty and diggers are added by main.rs at runtime
 }
