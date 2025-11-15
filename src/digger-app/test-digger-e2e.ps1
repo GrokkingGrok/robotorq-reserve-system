@@ -232,21 +232,38 @@ if ($updatedStatus.current_contract -eq $TEST_CONTRACT_ID) {
     Write-Host " Test 2 FAILED: Contract not found" -ForegroundColor Red
 }
 
-# Test 3: Wait for ore to be generated and sent to Refinery
-Write-Host "`n Test 3: Waiting for ore generation (15 seconds)..." -ForegroundColor Yellow
-Write-Host "   Digger should generate milestones every 5 seconds" -ForegroundColor Gray
+# Test 3: Wait for complete ingot assembly (need 12 ores × 300 tokens = 3600 units)
+Write-Host "`n Test 3: Waiting for ingot assembly (65 seconds)..." -ForegroundColor Yellow
+Write-Host "   Digger generates milestones every 5 seconds (300 tokens each)" -ForegroundColor Gray
+Write-Host "   Refinery needs 3600 units (12 ores) to assemble 1 ingot" -ForegroundColor Gray
+Write-Host "   This should take ~60 seconds + buffer" -ForegroundColor Gray
 
-# Monitor Refinery logs for incoming ore
-Start-Sleep -Seconds 15
+# Monitor progress every 15 seconds
+for ($i = 1; $i -le 4; $i++) {
+    Start-Sleep -Seconds 15
+    $health = Get-RefineryHealth
+    if ($null -ne $health -and $null -ne $health.ingot_assembly) {
+        $progress = [math]::Round($health.ingot_assembly.progress_to_next_ingot_percent, 1)
+        $units = $health.ingot_assembly.accumulated_units
+        Write-Host "   [$($i * 15)s] Progress: $progress% ($units/3600 units)" -ForegroundColor Cyan
+    }
+}
 
-# Check Refinery health again to see if it received ore
+# Add 5 more seconds to ensure ingot is sent to Mint
+Start-Sleep -Seconds 5
+
+# Check Refinery health again to see if ingot was assembled
 $finalRefineryHealth = Get-RefineryHealth
 
 if ($null -ne $finalRefineryHealth) {
     Write-Host " Test 3 PASSED: Refinery still healthy after ore delivery" -ForegroundColor Green
     
-    # In a real test, we'd check NATS messages or Refinery metrics
-    # For now, just verify the service is still running
+    if ($null -ne $finalRefineryHealth.ingot_assembly) {
+        $completed = $finalRefineryHealth.ingot_assembly.completed_ingots_pending
+        if ($completed -gt 0) {
+            Write-Host "   ✨ Bonus: $completed ingot(s) assembled and pending delivery to Mint!" -ForegroundColor Green
+        }
+    }
 } else {
     Write-Host " Test 3 FAILED: Refinery became unhealthy" -ForegroundColor Red
 }
@@ -259,28 +276,39 @@ Write-Host "-" * 60
 # Check Refinery logs for received ore
 Write-Host "`n Checking Refinery logs for ore receipts..." -ForegroundColor Yellow
 
-# Check Refinery logs for received ore (from Docker Compose)
-Write-Host "`n Checking Refinery logs for ore receipts..." -ForegroundColor Yellow
-
-$refineryLogs = docker logs robotorq-network-refinery-1 --since 30s 2>&1 | Select-String -Pattern "ore received|unit added|ingot assembled" | Select-Object -Last 10
+$refineryLogs = docker logs robotorq-network-refinery-1 --since 90s 2>&1 | Select-String -Pattern "ore received|unit added|ingot assembled" | Select-Object -Last 15
 
 if ($refineryLogs.Count -gt 0) {
     Write-Host " Found ore processing logs:" -ForegroundColor Green
     $refineryLogs | ForEach-Object { Write-Host "   $_" -ForegroundColor Gray }
+    
+    # Check specifically for ingot assembly
+    $ingotLogs = $refineryLogs | Select-String -Pattern "ingot assembled"
+    if ($ingotLogs.Count -gt 0) {
+        Write-Host "`n   🎉 SUCCESS: Ingot(s) assembled!" -ForegroundColor Green
+    } else {
+        Write-Host "`n   ⚠️  No ingots assembled yet (may need more time)" -ForegroundColor Yellow
+    }
 } else {
     Write-Host "  No ore processing logs found (may need more time)" -ForegroundColor Yellow
 }
 
 # Check Mint logs for batch creation
-Write-Host "`n Checking Mint logs for batch creation..." -ForegroundColor Yellow
+Write-Host "`n Checking Mint logs for ingot receipt & batch creation..." -ForegroundColor Yellow
 
-$mintLogs = docker logs robotorq-network-mint-1 --since 30s 2>&1 | Select-String -Pattern "ingot received|batch created|batch sent" | Select-Object -Last 10
+$mintLogs = docker logs robotorq-network-mint-1 --since 90s 2>&1 | Select-String -Pattern "ingot received|batch created|batch sent" | Select-Object -Last 10
 
 if ($mintLogs.Count -gt 0) {
-    Write-Host " Found batch processing logs:" -ForegroundColor Green
+    Write-Host " Found Mint processing logs:" -ForegroundColor Green
     $mintLogs | ForEach-Object { Write-Host "   $_" -ForegroundColor Gray }
+    
+    # Check for batch creation
+    $batchLogs = $mintLogs | Select-String -Pattern "batch created|batch sent"
+    if ($batchLogs.Count -gt 0) {
+        Write-Host "`n   🎉 SUCCESS: Batch(es) created by Mint!" -ForegroundColor Green
+    }
 } else {
-    Write-Host "  No batch processing logs found (may need more time)" -ForegroundColor Yellow
+    Write-Host "  No Mint logs found yet (batches created after 1000 ingots)" -ForegroundColor Yellow
 }
 
 # 
