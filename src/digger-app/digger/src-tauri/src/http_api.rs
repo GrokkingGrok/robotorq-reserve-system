@@ -58,11 +58,30 @@ struct StakeResponse {
 /// Start the HTTP server on port 9000
 pub fn start_http_server() {
     std::thread::spawn(|| {
-        let server = Server::http("0.0.0.0:9000").unwrap();
-        println!("🌐 Digger HTTP API listening on :9000");
+        println!("🔧 Attempting to bind HTTP server to 127.0.0.1:9000...");
+        
+        let server = match Server::http("127.0.0.1:9000") {
+            Ok(s) => {
+                println!("✅ HTTP server successfully bound to 127.0.0.1:9000");
+                s
+            }
+            Err(e) => {
+                eprintln!("❌ FATAL: Failed to bind HTTP server to 127.0.0.1:9000");
+                eprintln!("   Error: {}", e);
+                eprintln!("   Possible causes:");
+                eprintln!("   - Port 9000 already in use by another process");
+                eprintln!("   - Permission denied (try running as administrator)");
+                eprintln!("   - Firewall blocking the port");
+                panic!("Cannot start HTTP server: {}", e);
+            }
+        };
+        
+        println!("🌐 Digger HTTP API now listening on 127.0.0.1:9000");
+        println!("   Ready to accept requests...");
 
         for request in server.incoming_requests() {
             let url = request.url().to_string();
+            println!("📥 Received {} {}", request.method(), url);
             
             match (request.method().as_str(), url.as_str()) {
                 ("GET", "/robot/status") => handle_robot_status(request),
@@ -187,12 +206,25 @@ fn handle_stake(mut request: tiny_http::Request) {
     // Start contract execution (if contract starter is set)
     if let Some(starter) = CONTRACT_STARTER.lock().unwrap().as_ref() {
         println!("🚀 Starting contract execution for {}", contract.id);
-        starter(
-            "dig-jon-ai-001".to_string(),
-            power_kw,
-            max_token_throughput,
-            contract.clone(),
-        );
+        
+        // Call the starter (this spawns an async task in headless_executor)
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            starter(
+                "dig-jon-ai-001".to_string(),
+                power_kw,
+                max_token_throughput,
+                contract.clone(),
+            );
+        })) {
+            Ok(_) => println!("✅ Contract executor started successfully"),
+            Err(e) => {
+                eprintln!("❌ Contract starter panicked: {:?}", e);
+                let response = Response::from_string("Internal error starting contract")
+                    .with_status_code(500);
+                let _ = request.respond(response);
+                return;
+            }
+        }
     } else {
         println!("⚠️  No contract starter registered - contract will not execute");
     }
