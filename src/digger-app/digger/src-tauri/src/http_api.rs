@@ -11,6 +11,25 @@ use serde::{Deserialize, Serialize};
 use tiny_http::{Response, Server};
 #[allow(unused_imports)] // False positive: Read trait used by request.as_reader().read_to_string()
 use std::io::Read;
+use std::sync::{Arc, Mutex};
+
+// Type alias for contract starter function
+// In GUI mode: calls digger.start_contract with AppHandle
+// In headless mode: calls headless_executor::start_headless_contract
+type ContractStarter = Arc<Mutex<Option<Box<dyn Fn(String, f64, u64, Contract) + Send + 'static>>>>;
+
+// Global contract starter (set by main.rs or headless.rs)
+lazy_static::lazy_static! {
+    static ref CONTRACT_STARTER: ContractStarter = Arc::new(Mutex::new(None));
+}
+
+/// Set the contract starter function (called from main or headless binary)
+pub fn set_contract_starter<F>(starter: F)
+where
+    F: Fn(String, f64, u64, Contract) + Send + 'static,
+{
+    *CONTRACT_STARTER.lock().unwrap() = Some(Box::new(starter));
+}
 
 /// Response for /robot/status
 #[derive(Serialize)]
@@ -159,10 +178,24 @@ fn handle_stake(mut request: tiny_http::Request) {
     contract.id = stake_req.contract_id.clone(); // Update contract ID to match stake request
     contract.robo_stake_total = stake_req.amount_rt;
     contract.duration_hours = duration_hours;
+    contract.interval_seconds = 5; // 5 second milestones for testing
     
     // Store updated contract in the digger
-    digger.current_contract = Some(contract);
-    drop(digger_lock); // Release lock
+    digger.current_contract = Some(contract.clone());
+    drop(digger_lock); // Release lock before starting execution
+
+    // Start contract execution (if contract starter is set)
+    if let Some(starter) = CONTRACT_STARTER.lock().unwrap().as_ref() {
+        println!("🚀 Starting contract execution for {}", contract.id);
+        starter(
+            "dig-jon-ai-001".to_string(),
+            power_kw,
+            max_token_throughput,
+            contract.clone(),
+        );
+    } else {
+        println!("⚠️  No contract starter registered - contract will not execute");
+    }
 
     let resp = StakeResponse {
         status: "accepted".to_string(),

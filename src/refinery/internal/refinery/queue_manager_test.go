@@ -153,6 +153,7 @@ func TestQueueManager_ContextCancellation(t *testing.T) {
 
 	// Also test that GetUnit returns error when context is canceled
 	_, err = qm.GetUnit()
+	// TODO: See why this is being flagged as a warning
 	// GetUnit should succeed since queue has items, so we need to drain it first
 	// Skip this part as the select will prefer reading from channel over context
 }

@@ -31,8 +31,13 @@ mod crypto;
 #[path = "../refinery_client.rs"]
 mod refinery_client;
 
+#[path = "../headless_executor.rs"]
+mod headless_executor;
+
 use digger::DiggerManager;
 use types::Contract;
+use ore_storage::OreStorage;
+use std::sync::{Arc, Mutex};
 
 #[tokio::main]
 async fn main() {
@@ -43,10 +48,6 @@ async fn main() {
     println!("🤖 Starting Headless Digger...");
     println!("   Mode: HTTP API only (no GUI)");
     println!("   Port: 9000");
-    println!("   Endpoints:");
-    println!("     GET  /robot/status");
-    println!("     POST /stake");
-    println!("     GET  /health");
     
     // Initialize test digger (same as main.rs)
     {
@@ -76,15 +77,37 @@ async fn main() {
         println!("   Max Throughput: 12 tokens/sec");
     }
     
-    // Start HTTP server in background task
-    tokio::spawn(async {
-        println!("\n🚀 Starting HTTP server...");
-        http_api::start_http_server();
+    // Create OreStorage for headless contract execution
+    let ore_store = OreStorage::global();
+    let ore_store_for_callback = Arc::clone(&ore_store);
+
+    // Register contract starter callback (dependency injection)
+    http_api::set_contract_starter(move |digger_id, power_kw, max_token_throughput, contract| {
+        println!("🎯 Contract starter invoked for {} (contract: {})", digger_id, contract.id);
+        headless_executor::start_headless_contract(
+            digger_id,
+            power_kw,
+            max_token_throughput,
+            contract,
+            ore_store_for_callback.clone(),
+        );
     });
+
+    println!("✅ Contract starter registered");
     
-    println!("✅ Headless Digger ready for requests\n");
+    // Start HTTP server (it spawns its own thread)
+    println!("\n🚀 Starting HTTP server...");
+    http_api::start_http_server();
     
-    // Keep main thread alive
-    tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
-    println!("\n🛑 Shutting down Headless Digger...");
+    println!("✅ Headless Digger ready for requests");
+    println!("📋 Endpoints:");
+    println!("   GET  /robot/status    - Digger status");
+    println!("   GET  /health          - Health check");
+    println!("   POST /stake           - Accept RoboTorq stake for contract");
+    println!("\n🛑 Press Ctrl+C to shutdown gracefully\n");
+    
+    // Keep main thread alive - simple loop instead of signal (which requires feature flag)
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    }
 }

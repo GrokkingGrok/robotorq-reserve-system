@@ -59,6 +59,7 @@ func (o *OreReceiver) ReceiveOre(ore *models.JouleTorqOre) error {
 
 	// Convert signature bytes to hex string (empty if nil)
 	signatureHex := ""
+	// TODO: See why this is being flagged as a warning
 	if ore.Signature != nil && len(ore.Signature) > 0 {
 		signatureHex = hex.EncodeToString(ore.Signature)
 	}
