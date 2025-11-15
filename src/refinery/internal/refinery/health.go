@@ -11,10 +11,8 @@ import (
 
 // HealthChecker defines the interface for checking service health
 type HealthChecker interface {
-	GetJouleQueueSize() int
-	GetRoboQueueSize() int
-	GetJouleCapacity() int
-	GetRoboCapacity() int
+	GetQueueSize() int
+	GetCapacity() int
 }
 
 // MintHealthChecker defines the interface for checking Mint client health
@@ -25,7 +23,7 @@ type MintHealthChecker interface {
 
 // AssemblerHealthChecker defines the interface for checking assembler health
 type AssemblerHealthChecker interface {
-	GetAccumulatedJoules() float64
+	GetAccumulatedUnits() int
 	GetCompletedIngotsCount() int
 }
 
@@ -33,19 +31,16 @@ type AssemblerHealthChecker interface {
 type HealthResponse struct {
 	Status        string              `json:"status"`
 	Timestamp     time.Time           `json:"timestamp"`
-	Queues        QueueHealth         `json:"queues"`
+	Queue         QueueHealth         `json:"queue"`
 	NATS          NATSHealth          `json:"nats"`
 	IngotAssembly IngotAssemblyHealth `json:"ingot_assembly"`
 }
 
 // QueueHealth represents queue status
 type QueueHealth struct {
-	JouleQueueSize     int     `json:"joule_queue_size"`
-	JouleQueueCapacity int     `json:"joule_queue_capacity"`
-	JouleQueueUsage    float64 `json:"joule_queue_usage_percent"`
-	RoboQueueSize      int     `json:"robo_queue_size"`
-	RoboQueueCapacity  int     `json:"robo_queue_capacity"`
-	RoboQueueUsage     float64 `json:"robo_queue_usage_percent"`
+	UnitQueueSize     int     `json:"unit_queue_size"`
+	UnitQueueCapacity int     `json:"unit_queue_capacity"`
+	UnitQueueUsage    float64 `json:"unit_queue_usage_percent"`
 }
 
 // NATSHealth represents NATS connection status
@@ -56,9 +51,9 @@ type NATSHealth struct {
 
 // IngotAssemblyHealth represents ingot assembly status
 type IngotAssemblyHealth struct {
-	AccumulatedJoules float64 `json:"accumulated_joules"`
-	CompletedIngots   int     `json:"completed_ingots_pending"`
-	ProgressPercent   float64 `json:"progress_to_next_ingot_percent"`
+	AccumulatedUnits int     `json:"accumulated_units"`
+	CompletedIngots  int     `json:"completed_ingots_pending"`
+	ProgressPercent  float64 `json:"progress_to_next_ingot_percent"`
 }
 
 // HealthHandler provides health check functionality
@@ -89,29 +84,23 @@ func (hh *HealthHandler) HTTPHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Gather health metrics
-	jouleSize := hh.queueMgr.GetJouleQueueSize()
-	jouleCapacity := hh.queueMgr.GetJouleCapacity()
-	roboSize := hh.queueMgr.GetRoboQueueSize()
-	roboCapacity := hh.queueMgr.GetRoboCapacity()
+	unitSize := hh.queueMgr.GetQueueSize()
+	unitCapacity := hh.queueMgr.GetCapacity()
 
-	// Calculate queue usage percentages
-	jouleUsage := 0.0
-	if jouleCapacity > 0 {
-		jouleUsage = (float64(jouleSize) / float64(jouleCapacity)) * 100
-	}
-	roboUsage := 0.0
-	if roboCapacity > 0 {
-		roboUsage = (float64(roboSize) / float64(roboCapacity)) * 100
+	// Calculate queue usage percentage
+	unitUsage := 0.0
+	if unitCapacity > 0 {
+		unitUsage = (float64(unitSize) / float64(unitCapacity)) * 100
 	}
 
 	// Get assembler metrics
-	accumulatedJoules := hh.assembler.GetAccumulatedJoules()
+	accumulatedUnits := hh.assembler.GetAccumulatedUnits()
 	completedIngots := hh.assembler.GetCompletedIngotsCount()
 
-	// Calculate progress toward next ingot (3600 threshold)
+	// Calculate progress toward next ingot (3600 units threshold)
 	progressPercent := 0.0
-	if accumulatedJoules > 0 {
-		progressPercent = (accumulatedJoules / 3600.0) * 100
+	if accumulatedUnits > 0 {
+		progressPercent = (float64(accumulatedUnits) / 3600.0) * 100
 		if progressPercent > 100 {
 			progressPercent = 100 // Cap at 100%
 		}
@@ -121,29 +110,26 @@ func (hh *HealthHandler) HTTPHandler(w http.ResponseWriter, req *http.Request) {
 	status := "healthy"
 	if !hh.mintClient.IsConnected() {
 		status = "degraded" // NATS disconnected
-	} else if jouleUsage > 90 || roboUsage > 90 {
-		status = "warning" // Queues near capacity
+	} else if unitUsage > 90 {
+		status = "warning" // Queue near capacity
 	}
 
 	health := HealthResponse{
 		Status:    status,
 		Timestamp: time.Now().UTC(),
-		Queues: QueueHealth{
-			JouleQueueSize:     jouleSize,
-			JouleQueueCapacity: jouleCapacity,
-			JouleQueueUsage:    jouleUsage,
-			RoboQueueSize:      roboSize,
-			RoboQueueCapacity:  roboCapacity,
-			RoboQueueUsage:     roboUsage,
+		Queue: QueueHealth{
+			UnitQueueSize:     unitSize,
+			UnitQueueCapacity: unitCapacity,
+			UnitQueueUsage:    unitUsage,
 		},
 		NATS: NATSHealth{
 			Connected: hh.mintClient.IsConnected(),
 			Status:    hh.mintClient.GetStatus(),
 		},
 		IngotAssembly: IngotAssemblyHealth{
-			AccumulatedJoules: accumulatedJoules,
-			CompletedIngots:   completedIngots,
-			ProgressPercent:   progressPercent,
+			AccumulatedUnits: accumulatedUnits,
+			CompletedIngots:  completedIngots,
+			ProgressPercent:  progressPercent,
 		},
 	}
 

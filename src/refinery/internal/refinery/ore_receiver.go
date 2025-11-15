@@ -4,7 +4,6 @@
 package refinery
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,10 +14,9 @@ import (
 	"b2b/refinery/internal/models"
 )
 
-// QueueAdder defines the interface for adding items to queues
+// QueueAdder defines the interface for adding units to queue
 type QueueAdder interface {
-	AddJoule(item *models.JouleQueueItem) error
-	AddRobo(item *models.RoboQueueItem) error
+	AddUnit(unit *models.JouleTorqUnit) error
 }
 
 // OreReceiver handles incoming JouleTorqOre from Digger
@@ -33,7 +31,7 @@ func NewOreReceiver(queueMgr QueueAdder) *OreReceiver {
 	}
 }
 
-// ReceiveOre processes incoming ore and adds to queues
+// ReceiveOre processes incoming ore and creates JouleTorqUnits
 func (o *OreReceiver) ReceiveOre(ore *models.JouleTorqOre) error {
 	// Validate the ore structure
 	if err := ore.Validate(); err != nil {
@@ -49,58 +47,47 @@ func (o *OreReceiver) ReceiveOre(ore *models.JouleTorqOre) error {
 		"tokens", ore.TokensGenerated,
 	)
 
-	// Compute hash of the joule contribution (for merkle tree)
-	jouleHash := hashOre(ore)
-
-	// Create JouleQueueItem and add to queue
-	jouleItem := models.NewJouleQueueItem(
-		float64(ore.Joules),
-		ore.ContractID,
-		jouleHash,
-	)
-	if err := o.queueMgr.AddJoule(&jouleItem); err != nil {
-		slog.Warn("joule queue full",
-			"contract", ore.ContractID,
-			"amount", jouleItem.Amount,
-			"error", err,
-		)
-		return fmt.Errorf("joule queue full: %w", err)
+	// Convert JouleTorqOre (batch of work) → multiple JouleTorqUnits (atomic units)
+	// Each unit represents processing of 1 token
+	// Distribute joules and robo stake evenly across all tokens generated
+	if ore.TokensGenerated == 0 {
+		return fmt.Errorf("no tokens generated in ore")
 	}
 
-	// Calculate price (tokens generated per RoboTorq staked)
-	price := ore.CalculatePrice()
+	joulesPerToken := float64(ore.Joules) / float64(ore.TokensGenerated)
+	roboPerToken := ore.RoboStakeAmount / float64(ore.TokensGenerated)
 
-	// Create RoboQueueItem and add to queue
-	roboItem := models.NewRoboQueueItem(
-		ore.RoboStakeAmount,
-		price,
-		ore.ContractID,
-	)
-	if err := o.queueMgr.AddRobo(&roboItem); err != nil {
-		slog.Warn("robo queue full",
-			"contract", ore.ContractID,
-			"amount", roboItem.Amount,
-			"price", roboItem.Price,
-			"error", err,
+	// Convert signature bytes to hex string (empty if nil)
+	signatureHex := ""
+	if ore.Signature != nil && len(ore.Signature) > 0 {
+		signatureHex = hex.EncodeToString(ore.Signature)
+	}
+
+	// Create one JouleTorqUnit for each token generated
+	for tokenIndex := 0; tokenIndex < int(ore.TokensGenerated); tokenIndex++ {
+		unit := models.NewJouleTorqUnit(
+			ore.ContractID,
+			int(ore.MilestoneIndex),
+			tokenIndex,
+			joulesPerToken,
+			roboPerToken,
+			ore.DiggerID,
+			signatureHex, // Stub: Ore doesn't have per-token signatures yet
+			"",           // Stub: Ore doesn't include digger public key yet
 		)
-		return fmt.Errorf("robo queue full: %w", err)
+
+		// Add unit to queue
+		if err := o.queueMgr.AddUnit(unit); err != nil {
+			slog.Warn("unit queue full",
+				"contract", ore.ContractID,
+				"token_id", unit.TokenID,
+				"error", err,
+			)
+			return fmt.Errorf("unit queue full: %w", err)
+		}
 	}
 
 	return nil
-}
-
-// hashOre computes a SHA256 hash of the ore data for merkle tree
-func hashOre(ore *models.JouleTorqOre) string {
-	// Create a consistent representation for hashing
-	data := fmt.Sprintf("%s:%s:%d:%d:%d",
-		ore.ContractID,
-		ore.DiggerID,
-		ore.MilestoneIndex,
-		ore.Joules,
-		ore.Timestamp,
-	)
-	hash := sha256.Sum256([]byte(data))
-	return hex.EncodeToString(hash[:])
 }
 
 // HTTPHandler creates an HTTP handler for the /receive-ore endpoint

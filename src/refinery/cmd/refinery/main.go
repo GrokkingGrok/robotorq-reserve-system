@@ -53,11 +53,10 @@ func main() {
 	// 3. Initialize Core Components
 	// ─────────────────────────────────────────────────────────────
 
-	// Queue Manager: Thread-safe buffering for joules and robo
-	queueMgr := refinery.NewQueueManager(ctx, cfg.JouleQueueSize, cfg.RoboQueueSize)
+	// Queue Manager: Thread-safe buffering for JouleTorqUnits
+	queueMgr := refinery.NewQueueManager(ctx, cfg.JouleQueueSize)
 	slog.Info("queue manager initialized",
-		"joule_capacity", cfg.JouleQueueSize,
-		"robo_capacity", cfg.RoboQueueSize,
+		"unit_capacity", cfg.JouleQueueSize,
 	)
 
 	// Mint Client: NATS connection with retry logic

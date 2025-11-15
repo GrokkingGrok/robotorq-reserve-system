@@ -14,73 +14,65 @@ import (
 )
 
 var (
-	// jouleQueueGauge tracks current joule queue size
-	jouleQueueGauge = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "refinery_joule_queue_size",
-		Help: "Current number of items in the joule queue",
+	// unitQueueGauge tracks current JouleTorqUnit queue size
+	unitQueueGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "refinery_unit_queue_size",
+		Help: "Current number of JouleTorqUnits in the queue",
 	})
 
-	// roboQueueGauge tracks current robo queue size
-	roboQueueGauge = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "refinery_robo_queue_size",
-		Help: "Current number of items in the robo queue",
+	// unitsQueuedTotal tracks total units added to queue
+	unitsQueuedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "refinery_units_queued_total",
+		Help: "Total JouleTorqUnits queued for processing",
 	})
 
-	// joulesQueuedTotal tracks total joules added to queue
+	// joulesQueuedTotal tracks cumulative joules queued
 	joulesQueuedTotal = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "refinery_joules_queued_total",
-		Help: "Total JouleTorq units queued for processing",
-	})
-
-	// roboQueuedTotal tracks total robo added to queue
-	roboQueuedTotal = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "refinery_robo_queued_total",
-		Help: "Total RoboTorq units queued for processing",
+		Help: "Total joules from queued units",
 	})
 )
 
 func init() {
 	// Register Prometheus metrics
-	prometheus.MustRegister(jouleQueueGauge)
-	prometheus.MustRegister(roboQueueGauge)
+	prometheus.MustRegister(unitQueueGauge)
+	prometheus.MustRegister(unitsQueuedTotal)
 	prometheus.MustRegister(joulesQueuedTotal)
-	prometheus.MustRegister(roboQueuedTotal)
 }
 
-// QueueManager handles buffered queues for joules and RoboStake
+// QueueManager handles buffered queue for JouleTorqUnits
 type QueueManager struct {
-	jouleQueue chan *models.JouleQueueItem
-	roboQueue  chan *models.RoboQueueItem
-	ctx        context.Context
-	mu         sync.RWMutex
+	unitQueue chan *models.JouleTorqUnit
+	ctx       context.Context
+	mu        sync.RWMutex
 }
 
-// NewQueueManager creates a new queue manager with specified capacities
-func NewQueueManager(ctx context.Context, jouleCapacity, roboCapacity int) *QueueManager {
+// NewQueueManager creates a new queue manager with specified capacity
+func NewQueueManager(ctx context.Context, capacity int) *QueueManager {
 	slog.Info("initializing queue manager",
-		"joule_capacity", jouleCapacity,
-		"robo_capacity", roboCapacity,
+		"unit_capacity", capacity,
 	)
 
 	return &QueueManager{
-		jouleQueue: make(chan *models.JouleQueueItem, jouleCapacity),
-		roboQueue:  make(chan *models.RoboQueueItem, roboCapacity),
-		ctx:        ctx,
+		unitQueue: make(chan *models.JouleTorqUnit, capacity),
+		ctx:       ctx,
 	}
 }
 
-// AddJoule adds a joule item to the queue (non-blocking with backpressure)
-func (qm *QueueManager) AddJoule(item *models.JouleQueueItem) error {
+// AddUnit adds a JouleTorqUnit to the queue (non-blocking with backpressure)
+func (qm *QueueManager) AddUnit(unit *models.JouleTorqUnit) error {
 	select {
-	case qm.jouleQueue <- item:
+	case qm.unitQueue <- unit:
 		// Update metrics
-		joulesQueuedTotal.Add(item.Amount)
-		jouleQueueGauge.Set(float64(len(qm.jouleQueue)))
+		unitsQueuedTotal.Inc()
+		joulesQueuedTotal.Add(unit.JoulesConsumed)
+		unitQueueGauge.Set(float64(len(qm.unitQueue)))
 
-		slog.Debug("joule added to queue",
-			"contract", item.ContractID,
-			"amount", item.Amount,
-			"queue_size", len(qm.jouleQueue),
+		slog.Debug("unit added to queue",
+			"contract", unit.ContractID,
+			"token_id", unit.TokenID,
+			"joules", unit.JoulesConsumed,
+			"queue_size", len(qm.unitQueue),
 		)
 		return nil
 
@@ -89,102 +81,47 @@ func (qm *QueueManager) AddJoule(item *models.JouleQueueItem) error {
 
 	default:
 		// Queue is full, reject with backpressure
-		slog.Warn("joule queue full, rejecting item",
-			"contract", item.ContractID,
-			"amount", item.Amount,
-			"queue_size", len(qm.jouleQueue),
+		slog.Warn("unit queue full, rejecting item",
+			"contract", unit.ContractID,
+			"token_id", unit.TokenID,
+			"queue_size", len(qm.unitQueue),
 		)
 		return models.ErrQueueFull
 	}
 }
 
-// AddRobo adds a robo item to the queue (non-blocking with backpressure)
-func (qm *QueueManager) AddRobo(item *models.RoboQueueItem) error {
+// GetUnit retrieves a JouleTorqUnit from the queue (blocking until available)
+func (qm *QueueManager) GetUnit() (*models.JouleTorqUnit, error) {
 	select {
-	case qm.roboQueue <- item:
-		// Update metrics
-		roboQueuedTotal.Add(item.Amount)
-		roboQueueGauge.Set(float64(len(qm.roboQueue)))
-
-		slog.Debug("robo added to queue",
-			"contract", item.ContractID,
-			"amount", item.Amount,
-			"price", item.Price,
-			"queue_size", len(qm.roboQueue),
-		)
-		return nil
-
-	case <-qm.ctx.Done():
-		return models.ErrQueueShuttingDown
-
-	default:
-		// Queue is full, reject with backpressure
-		slog.Warn("robo queue full, rejecting item",
-			"contract", item.ContractID,
-			"amount", item.Amount,
-			"queue_size", len(qm.roboQueue),
-		)
-		return models.ErrQueueFull
-	}
-}
-
-// GetJoule retrieves a joule item from the queue (blocking until available)
-func (qm *QueueManager) GetJoule() (*models.JouleQueueItem, error) {
-	select {
-	case item := <-qm.jouleQueue:
-		jouleQueueGauge.Set(float64(len(qm.jouleQueue)))
-		return item, nil
+	case unit := <-qm.unitQueue:
+		unitQueueGauge.Set(float64(len(qm.unitQueue)))
+		return unit, nil
 	case <-qm.ctx.Done():
 		return nil, models.ErrQueueEmpty
 	}
 }
 
-// GetRobo retrieves a robo item from the queue (blocking until available)
-func (qm *QueueManager) GetRobo() (*models.RoboQueueItem, error) {
-	select {
-	case item := <-qm.roboQueue:
-		roboQueueGauge.Set(float64(len(qm.roboQueue)))
-		return item, nil
-	case <-qm.ctx.Done():
-		return nil, models.ErrQueueEmpty
-	}
-}
-
-// GetJouleQueueSize returns current joule queue size (thread-safe)
-func (qm *QueueManager) GetJouleQueueSize() int {
+// GetQueueSize returns current queue size (thread-safe)
+func (qm *QueueManager) GetQueueSize() int {
 	qm.mu.RLock()
 	defer qm.mu.RUnlock()
-	return len(qm.jouleQueue)
+	return len(qm.unitQueue)
 }
 
-// GetRoboQueueSize returns current robo queue size (thread-safe)
-func (qm *QueueManager) GetRoboQueueSize() int {
-	qm.mu.RLock()
-	defer qm.mu.RUnlock()
-	return len(qm.roboQueue)
-}
-
-// GetJouleCapacity returns the total capacity of the joule queue
-func (qm *QueueManager) GetJouleCapacity() int {
-	return cap(qm.jouleQueue)
-}
-
-// GetRoboCapacity returns the total capacity of the robo queue
-func (qm *QueueManager) GetRoboCapacity() int {
-	return cap(qm.roboQueue)
+// GetCapacity returns the total capacity of the queue
+func (qm *QueueManager) GetCapacity() int {
+	return cap(qm.unitQueue)
 }
 
 // Close gracefully shuts down the queue manager
 func (qm *QueueManager) Close() {
 	slog.Info("closing queue manager",
-		"joule_remaining", len(qm.jouleQueue),
-		"robo_remaining", len(qm.roboQueue),
+		"units_remaining", len(qm.unitQueue),
 	)
 
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
 
-	// Close channels to signal no more items will be added
-	close(qm.jouleQueue)
-	close(qm.roboQueue)
+	// Close channel to signal no more items will be added
+	close(qm.unitQueue)
 }

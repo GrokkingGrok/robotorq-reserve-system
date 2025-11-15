@@ -48,7 +48,7 @@ func createStubIngotForTest(contractID string, totalJoules, totalRobo float64) *
 func startTestNATSServer(t *testing.T) (*server.Server, string) {
 	opts := &server.Options{
 		Host:       "127.0.0.1",
-		Port:       -1, // Random port
+		Port:       -1,               // Random port
 		MaxPayload: 10 * 1024 * 1024, // 10MB (allows 3,600 JouleTorqUnits per ingot)
 	}
 

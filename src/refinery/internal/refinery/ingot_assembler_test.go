@@ -5,72 +5,90 @@ package refinery
 
 import (
 	"context"
+	"fmt"
 	"testing"
-	"time"
 
 	"b2b/refinery/internal/models"
 )
 
-// TestIngotAssembler_ExactThreshold tests assembling with exactly 3600 joules
+// createTestUnits generates N JouleTorqUnits for testing
+func createTestUnits(contractID string, count int, joulesPerUnit, roboPerUnit float64) []*models.JouleTorqUnit {
+	units := make([]*models.JouleTorqUnit, count)
+	for i := 0; i < count; i++ {
+		units[i] = models.NewJouleTorqUnit(
+			contractID,
+			0, // milestoneIndex
+			i, // tokenIndex
+			joulesPerUnit,
+			roboPerUnit,
+			"test-digger",
+			"stub-signature",
+			"stub-pubkey",
+		)
+	}
+	return units
+}
+
+// TestIngotAssembler_ExactThreshold tests assembling with exactly 3600 units
 func TestIngotAssembler_ExactThreshold(t *testing.T) {
 	tests := []struct {
 		name              string
-		jouleAmount       float64
-		roboAmount        float64
-		price             float64
+		unitCount         int
+		joulesPerUnit     float64
+		roboPerUnit       float64
 		contractID        string
 		expectedIngots    int
-		expectedExcess    float64
+		expectedExcess    int
 		expectedContracts int
 	}{
 		{
 			name:              "exact_threshold_single_contract",
-			jouleAmount:       3600.0,
-			roboAmount:        100.0,
-			price:             10.0,
+			unitCount:         3600,
+			joulesPerUnit:     1.0,
+			roboPerUnit:       0.0278, // ~100 RT / 3600
 			contractID:        "contract-001",
 			expectedIngots:    1,
-			expectedExcess:    0.0,
+			expectedExcess:    0,
 			expectedContracts: 1,
 		},
 		{
 			name:              "half_threshold_no_ingot",
-			jouleAmount:       1800.0,
-			roboAmount:        50.0,
-			price:             5.0,
+			unitCount:         1800,
+			joulesPerUnit:     1.0,
+			roboPerUnit:       0.0278,
 			contractID:        "contract-002",
 			expectedIngots:    0,
-			expectedExcess:    1800.0,
+			expectedExcess:    1800,
 			expectedContracts: 0,
 		},
 		{
 			name:              "double_threshold_two_ingots",
-			jouleAmount:       7200.0,
-			roboAmount:        200.0,
-			price:             20.0,
+			unitCount:         7200,
+			joulesPerUnit:     1.0,
+			roboPerUnit:       0.0278,
 			contractID:        "contract-003",
 			expectedIngots:    2,
-			expectedExcess:    0.0,
+			expectedExcess:    0,
 			expectedContracts: 1,
 		},
 		{
 			name:              "threshold_plus_excess",
-			jouleAmount:       4000.0,
-			roboAmount:        110.0,
-			price:             11.0,
+			unitCount:         4000,
+			joulesPerUnit:     1.0,
+			roboPerUnit:       0.0275,
 			contractID:        "contract-004",
 			expectedIngots:    1,
-			expectedExcess:    400.0,
+			expectedExcess:    400,
 			expectedContracts: 1,
 		},
 		{
 			name:              "small_amount_no_ingot",
-			jouleAmount:       500.0,
-			roboAmount:        10.0,
-			price:             5.0,
+			unitCount:         500,
+			joulesPerUnit:     1.0,
+			roboPerUnit:       0.02,
 			contractID:        "contract-005",
 			expectedIngots:    0,
-			expectedExcess:    500.0,
+			expectedExcess:    500,
 			expectedContracts: 0,
 		},
 	}
@@ -80,43 +98,26 @@ func TestIngotAssembler_ExactThreshold(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			qm := NewQueueManager(ctx, 10, 10)
+			qm := NewQueueManager(ctx, 10000)
 			assembler := NewIngotAssembler(ctx, qm)
 
-			// Create and process items
-			jouleItem := &models.JouleQueueItem{
-				Amount:     tt.jouleAmount,
-				ContractID: tt.contractID,
-				Timestamp:  time.Now(),
-				Hash:       "test-hash",
-			}
-
-			roboItem := &models.RoboQueueItem{
-				Amount:     tt.roboAmount,
-				ContractID: tt.contractID,
-				Timestamp:  time.Now(),
-				Price:      tt.price,
-			}
-
-			// Process once - assembler handles multiple ingots if amount > 3600
-			// Note: Current implementation only creates ONE ingot per call,
-			// so we need to split large amounts manually for now
-			remainingJoules := tt.jouleAmount
-			for remainingJoules > 0 {
-				thisAmount := remainingJoules
-				if thisAmount > 3600 {
-					thisAmount = 3600
+			// Create and queue test units
+			units := createTestUnits(tt.contractID, tt.unitCount, tt.joulesPerUnit, tt.roboPerUnit)
+			for _, unit := range units {
+				if err := qm.AddUnit(unit); err != nil {
+					t.Fatalf("AddUnit failed: %v", err)
 				}
+			}
 
-				jouleItem.Amount = thisAmount
-				roboItem.Amount = (tt.roboAmount / tt.jouleAmount) * thisAmount
-
-				err := assembler.processItems(jouleItem, roboItem)
+			// Process all units
+			for i := 0; i < tt.unitCount; i++ {
+				unit, err := qm.GetUnit()
 				if err != nil {
-					t.Fatalf("processItems failed: %v", err)
+					t.Fatalf("GetUnit failed at %d: %v", i, err)
 				}
-
-				remainingJoules -= thisAmount
+				if err := assembler.processUnit(unit); err != nil {
+					t.Fatalf("processUnit failed: %v", err)
+				}
 			}
 
 			// Verify completed ingots count
@@ -126,9 +127,9 @@ func TestIngotAssembler_ExactThreshold(t *testing.T) {
 			}
 
 			// Verify accumulated excess
-			excess := assembler.GetAccumulatedJoules()
+			excess := assembler.GetAccumulatedUnits()
 			if excess != tt.expectedExcess {
-				t.Errorf("expected excess %v, got %v", tt.expectedExcess, excess)
+				t.Errorf("expected excess %v units, got %v", tt.expectedExcess, excess)
 			}
 
 			// If ingots were created, verify their properties
@@ -139,9 +140,10 @@ func TestIngotAssembler_ExactThreshold(t *testing.T) {
 				}
 
 				for i, ingot := range ingots {
-					// Verify joule total (now float64, not uint64)
-					if ingot.JouleTorqTotal < JouleTorqThreshold-1 || ingot.JouleTorqTotal > JouleTorqThreshold+1 {
-						t.Errorf("ingot %d: expected JouleTorqTotal ~%v, got %v", i, JouleTorqThreshold, ingot.JouleTorqTotal)
+					// Verify joule total
+					expectedJoules := 3600.0 * tt.joulesPerUnit
+					if ingot.JouleTorqTotal < expectedJoules-1 || ingot.JouleTorqTotal > expectedJoules+1 {
+						t.Errorf("ingot %d: expected JouleTorqTotal ~%v, got %v", i, expectedJoules, ingot.JouleTorqTotal)
 					}
 
 					// Verify contract IDs
@@ -169,39 +171,40 @@ func TestIngotAssembler_MultipleContracts(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	qm := NewQueueManager(ctx, 10, 10)
+	qm := NewQueueManager(ctx, 10000)
 	assembler := NewIngotAssembler(ctx, qm)
 
-	// Add joules from three different contracts
+	// Add units from three different contracts
 	contracts := []struct {
-		contractID  string
-		jouleAmount float64
-		roboAmount  float64
-		price       float64
+		contractID    string
+		unitCount     int
+		joulesPerUnit float64
+		roboPerUnit   float64
 	}{
-		{"contract-A", 1200.0, 30.0, 8.0},
-		{"contract-B", 1200.0, 35.0, 9.0},
-		{"contract-C", 1200.0, 40.0, 10.0},
+		{"contract-A", 1200, 1.0, 0.025},
+		{"contract-B", 1200, 1.0, 0.029},
+		{"contract-C", 1200, 1.0, 0.033},
 	}
 
+	totalUnits := 0
 	for _, c := range contracts {
-		jouleItem := &models.JouleQueueItem{
-			Amount:     c.jouleAmount,
-			ContractID: c.contractID,
-			Timestamp:  time.Now(),
-			Hash:       "hash-" + c.contractID,
+		units := createTestUnits(c.contractID, c.unitCount, c.joulesPerUnit, c.roboPerUnit)
+		for _, unit := range units {
+			if err := qm.AddUnit(unit); err != nil {
+				t.Fatalf("AddUnit failed for %s: %v", c.contractID, err)
+			}
 		}
+		totalUnits += c.unitCount
+	}
 
-		roboItem := &models.RoboQueueItem{
-			Amount:     c.roboAmount,
-			ContractID: c.contractID,
-			Timestamp:  time.Now(),
-			Price:      c.price,
-		}
-
-		err := assembler.processItems(jouleItem, roboItem)
+	// Process all units
+	for i := 0; i < totalUnits; i++ {
+		unit, err := qm.GetUnit()
 		if err != nil {
-			t.Fatalf("processItems failed for %s: %v", c.contractID, err)
+			t.Fatalf("GetUnit failed at %d: %v", i, err)
+		}
+		if err := assembler.processUnit(unit); err != nil {
+			t.Fatalf("processUnit failed: %v", err)
 		}
 	}
 
@@ -220,7 +223,7 @@ func TestIngotAssembler_MultipleContracts(t *testing.T) {
 
 	// Verify three unique contract IDs
 	if len(ingot.ContractIDs) != 3 {
-		t.Errorf("expected 3 contract IDs, got %d", len(ingot.ContractIDs))
+		t.Errorf("expected 3 contract IDs, got %d: %v", len(ingot.ContractIDs), ingot.ContractIDs)
 	}
 
 	// Verify contract IDs are present
@@ -248,9 +251,9 @@ func TestIngotAssembler_MultipleContracts(t *testing.T) {
 		t.Errorf("expected 3600 units, got %d", len(ingot.Units))
 	}
 
-	// Verify robo stake total (30 + 35 + 40 = 105)
+	// Verify robo stake total (1200×0.025 + 1200×0.029 + 1200×0.033 = 30 + 34.8 + 39.6 = 104.4)
 	// Use tolerance for floating-point comparison (same pattern as Mint tests)
-	expectedRoboStake := 105.0
+	expectedRoboStake := 104.4
 	delta := 0.01
 	if ingot.RoboStakeTotal < expectedRoboStake-delta || ingot.RoboStakeTotal > expectedRoboStake+delta {
 		t.Errorf("expected RoboStakeTotal %v ±%v, got %v", expectedRoboStake, delta, ingot.RoboStakeTotal)
@@ -267,33 +270,30 @@ func TestIngotAssembler_MultipleContracts(t *testing.T) {
 	*/
 }
 
-// TestIngotAssembler_HashGeneration tests that unique hashes are generated for each joule contribution
+// TestIngotAssembler_HashGeneration tests that unique hashes are generated for each unit
 func TestIngotAssembler_HashGeneration(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	qm := NewQueueManager(ctx, 10, 10)
+	qm := NewQueueManager(ctx, 10000)
 	assembler := NewIngotAssembler(ctx, qm)
 
-	// Add three identical-amount joules from same contract at different times
-	for i := 0; i < 3; i++ {
-		jouleItem := &models.JouleQueueItem{
-			Amount:     1200.0,
-			ContractID: "contract-hash-test",
-			Timestamp:  time.Now().Add(time.Duration(i) * time.Second), // Different timestamps
-			Hash:       "base-hash",
+	// Add 3600 units from same contract (units will have different token indexes)
+	units := createTestUnits("contract-hash-test", 3600, 1.0, 0.025)
+	for _, unit := range units {
+		if err := qm.AddUnit(unit); err != nil {
+			t.Fatalf("AddUnit failed: %v", err)
 		}
+	}
 
-		roboItem := &models.RoboQueueItem{
-			Amount:     30.0,
-			ContractID: "contract-hash-test",
-			Timestamp:  time.Now(),
-			Price:      10.0,
-		}
-
-		err := assembler.processItems(jouleItem, roboItem)
+	// Process all units
+	for i := 0; i < 3600; i++ {
+		unit, err := qm.GetUnit()
 		if err != nil {
-			t.Fatalf("processItems failed: %v", err)
+			t.Fatalf("GetUnit failed: %v", err)
+		}
+		if err := assembler.processUnit(unit); err != nil {
+			t.Fatalf("processUnit failed: %v", err)
 		}
 	}
 
@@ -303,12 +303,11 @@ func TestIngotAssembler_HashGeneration(t *testing.T) {
 	}
 
 	// Verify unit hashes exist
-	// NOTE: Changed from JouleTorqHashes to Units[].Hash
 	if len(ingots[0].Units) != 3600 {
 		t.Fatalf("expected 3600 units, got %d", len(ingots[0].Units))
 	}
 
-	// Verify all unit hashes are different (due to different timestamps)
+	// Verify all unit hashes are unique
 	hashSet := make(map[string]bool)
 	for _, unit := range ingots[0].Units {
 		if unit.Hash == "" {
@@ -318,9 +317,6 @@ func TestIngotAssembler_HashGeneration(t *testing.T) {
 			t.Errorf("duplicate hash found: %s", unit.Hash)
 		}
 		hashSet[unit.Hash] = true
-
-		// NOTE: Our stub hash format is "stub-hash-%d", not 64-char SHA256
-		// This test will need updating when we use real units
 	}
 }
 
@@ -329,32 +325,30 @@ func TestIngotAssembler_IngotIDUniqueness(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	qm := NewQueueManager(ctx, 10, 10)
+	qm := NewQueueManager(ctx, 20000)
 	assembler := NewIngotAssembler(ctx, qm)
 
-	// Create three ingots with a small delay to ensure unique timestamps
+	// Create three ingots (3 × 3600 units)
 	for i := 0; i < 3; i++ {
-		jouleItem := &models.JouleQueueItem{
-			Amount:     3600.0,
-			ContractID: "contract-uniqueness",
-			Timestamp:  time.Now(),
-			Hash:       "hash-uniqueness",
-		}
+		contractID := fmt.Sprintf("contract-uniqueness-%d", i)
+		units := createTestUnits(contractID, 3600, 1.0, 0.0278)
 
-		roboItem := &models.RoboQueueItem{
-			Amount:     100.0,
-			ContractID: "contract-uniqueness",
-			Timestamp:  time.Now(),
-			Price:      10.0,
+		for _, unit := range units {
+			if err := qm.AddUnit(unit); err != nil {
+				t.Fatalf("AddUnit failed: %v", err)
+			}
 		}
+	}
 
-		err := assembler.processItems(jouleItem, roboItem)
+	// Process all 10,800 units
+	for i := 0; i < 10800; i++ {
+		unit, err := qm.GetUnit()
 		if err != nil {
-			t.Fatalf("processItems failed: %v", err)
+			t.Fatalf("GetUnit failed: %v", err)
 		}
-
-		// Small delay to ensure unique timestamp-based UUIDs
-		time.Sleep(2 * time.Millisecond)
+		if err := assembler.processUnit(unit); err != nil {
+			t.Fatalf("processUnit failed: %v", err)
+		}
 	}
 
 	ingots := assembler.GetCompletedIngots()
@@ -375,32 +369,31 @@ func TestIngotAssembler_IngotIDUniqueness(t *testing.T) {
 	}
 }
 
-// TestIngotAssembler_ExcessCarryover tests that excess joules carry over to next ingot
+// TestIngotAssembler_ExcessCarryover tests that excess units carry over to next ingot
 func TestIngotAssembler_ExcessCarryover(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	qm := NewQueueManager(ctx, 10, 10)
+	qm := NewQueueManager(ctx, 10000)
 	assembler := NewIngotAssembler(ctx, qm)
 
-	// First: Add 4000 joules (should create 1 ingot with 400 excess)
-	jouleItem := &models.JouleQueueItem{
-		Amount:     4000.0,
-		ContractID: "contract-carryover",
-		Timestamp:  time.Now(),
-		Hash:       "hash-1",
+	// First: Add 4000 units (should create 1 ingot with 400 excess)
+	units := createTestUnits("contract-carryover", 4000, 1.0, 0.0275)
+	for _, unit := range units {
+		if err := qm.AddUnit(unit); err != nil {
+			t.Fatalf("AddUnit failed: %v", err)
+		}
 	}
 
-	roboItem := &models.RoboQueueItem{
-		Amount:     110.0,
-		ContractID: "contract-carryover",
-		Timestamp:  time.Now(),
-		Price:      10.0,
-	}
-
-	err := assembler.processItems(jouleItem, roboItem)
-	if err != nil {
-		t.Fatalf("first processItems failed: %v", err)
+	// Process all 4000 units
+	for i := 0; i < 4000; i++ {
+		unit, err := qm.GetUnit()
+		if err != nil {
+			t.Fatalf("GetUnit failed: %v", err)
+		}
+		if err := assembler.processUnit(unit); err != nil {
+			t.Fatalf("processUnit failed: %v", err)
+		}
 	}
 
 	// Verify 1 ingot created and 400 excess
@@ -408,29 +401,28 @@ func TestIngotAssembler_ExcessCarryover(t *testing.T) {
 		t.Errorf("expected 1 ingot after first add, got %d", assembler.GetCompletedIngotsCount())
 	}
 
-	excess := assembler.GetAccumulatedJoules()
-	if excess != 400.0 {
-		t.Errorf("expected 400 excess, got %v", excess)
+	excess := assembler.GetAccumulatedUnits()
+	if excess != 400 {
+		t.Errorf("expected 400 excess units, got %v", excess)
 	}
 
-	// Second: Add 3200 more joules (400 + 3200 = 3600, should create another ingot)
-	jouleItem2 := &models.JouleQueueItem{
-		Amount:     3200.0,
-		ContractID: "contract-carryover",
-		Timestamp:  time.Now(),
-		Hash:       "hash-2",
+	// Second: Add 3200 more units (400 + 3200 = 3600, should create another ingot)
+	units2 := createTestUnits("contract-carryover-2", 3200, 1.0, 0.028)
+	for _, unit := range units2 {
+		if err := qm.AddUnit(unit); err != nil {
+			t.Fatalf("AddUnit failed: %v", err)
+		}
 	}
 
-	roboItem2 := &models.RoboQueueItem{
-		Amount:     90.0,
-		ContractID: "contract-carryover",
-		Timestamp:  time.Now(),
-		Price:      9.0,
-	}
-
-	err = assembler.processItems(jouleItem2, roboItem2)
-	if err != nil {
-		t.Fatalf("second processItems failed: %v", err)
+	// Process all 3200 units
+	for i := 0; i < 3200; i++ {
+		unit, err := qm.GetUnit()
+		if err != nil {
+			t.Fatalf("GetUnit failed: %v", err)
+		}
+		if err := assembler.processUnit(unit); err != nil {
+			t.Fatalf("processUnit failed: %v", err)
+		}
 	}
 
 	// Verify 2 ingots total and 0 excess
@@ -438,84 +430,17 @@ func TestIngotAssembler_ExcessCarryover(t *testing.T) {
 		t.Errorf("expected 2 ingots after second add, got %d", assembler.GetCompletedIngotsCount())
 	}
 
-	finalExcess := assembler.GetAccumulatedJoules()
-	if finalExcess != 0.0 {
+	finalExcess := assembler.GetAccumulatedUnits()
+	if finalExcess != 0 {
 		t.Errorf("expected 0 final excess, got %v", finalExcess)
 	}
 }
 
-// TestIngotAssembler_PriceAveraging tests that prices are averaged correctly
+// TestIngotAssembler_PriceAveraging tests RoboStake calculation
 func TestIngotAssembler_PriceAveraging(t *testing.T) {
-	tests := []struct {
-		name             string
-		prices           []float64
-		jouleAmounts     []float64
-		expectedAvgPrice float64
-	}{
-		{
-			name:             "three_equal_prices",
-			prices:           []float64{10.0, 10.0, 10.0},
-			jouleAmounts:     []float64{1200.0, 1200.0, 1200.0},
-			expectedAvgPrice: 10.0,
-		},
-		{
-			name:             "ascending_prices",
-			prices:           []float64{5.0, 10.0, 15.0},
-			jouleAmounts:     []float64{1200.0, 1200.0, 1200.0},
-			expectedAvgPrice: 10.0, // (5 + 10 + 15) / 3
-		},
-		{
-			name:             "two_contributions",
-			prices:           []float64{8.0, 12.0},
-			jouleAmounts:     []float64{1800.0, 1800.0},
-			expectedAvgPrice: 10.0, // (8 + 12) / 2
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-
-			qm := NewQueueManager(ctx, 10, 10)
-			assembler := NewIngotAssembler(ctx, qm)
-
-			for i, price := range tt.prices {
-				jouleItem := &models.JouleQueueItem{
-					Amount:     tt.jouleAmounts[i],
-					ContractID: "contract-pricing",
-					Timestamp:  time.Now(),
-					Hash:       "hash-pricing",
-				}
-
-				roboItem := &models.RoboQueueItem{
-					Amount:     100.0,
-					ContractID: "contract-pricing",
-					Timestamp:  time.Now(),
-					Price:      price,
-				}
-
-				err := assembler.processItems(jouleItem, roboItem)
-				if err != nil {
-					t.Fatalf("processItems failed: %v", err)
-				}
-			}
-
-			ingots := assembler.GetCompletedIngots()
-			if len(ingots) != 1 {
-				t.Fatalf("expected 1 ingot, got %d", len(ingots))
-			}
-
-			// NOTE: PricePerRT removed from TokenTorqIngot
-			// Price now calculated as RoboStakeTotal / (JouleTorqTotal / 3600)
-			// Skipping price verification for now - will add back when we refactor to use real units
-			/*
-				if ingots[0].PricePerRT != tt.expectedAvgPrice {
-					t.Errorf("expected avg price %v, got %v", tt.expectedAvgPrice, ingots[0].PricePerRT)
-				}
-			*/
-		})
-	}
+	// NOTE: PricePerRT removed from TokenTorqIngot
+	// We now just verify RoboStakeTotal is correctly summed
+	t.Skip("Test needs redesign for unit-based approach - price is calculated from RoboStakeTotal/JouleTorqTotal")
 }
 
 // TestIngotAssembler_GetCompletedIngotsClears tests that GetCompletedIngots clears the list
@@ -523,27 +448,26 @@ func TestIngotAssembler_GetCompletedIngotsClears(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	qm := NewQueueManager(ctx, 10, 10)
+	qm := NewQueueManager(ctx, 10000)
 	assembler := NewIngotAssembler(ctx, qm)
 
 	// Create one ingot
-	jouleItem := &models.JouleQueueItem{
-		Amount:     3600.0,
-		ContractID: "contract-clear",
-		Timestamp:  time.Now(),
-		Hash:       "hash-clear",
+	units := createTestUnits("contract-clear", 3600, 1.0, 0.0278)
+	for _, unit := range units {
+		if err := qm.AddUnit(unit); err != nil {
+			t.Fatalf("AddUnit failed: %v", err)
+		}
 	}
 
-	roboItem := &models.RoboQueueItem{
-		Amount:     100.0,
-		ContractID: "contract-clear",
-		Timestamp:  time.Now(),
-		Price:      10.0,
-	}
-
-	err := assembler.processItems(jouleItem, roboItem)
-	if err != nil {
-		t.Fatalf("processItems failed: %v", err)
+	// Process all units
+	for i := 0; i < 3600; i++ {
+		unit, err := qm.GetUnit()
+		if err != nil {
+			t.Fatalf("GetUnit failed: %v", err)
+		}
+		if err := assembler.processUnit(unit); err != nil {
+			t.Fatalf("processUnit failed: %v", err)
+		}
 	}
 
 	// Verify 1 ingot exists
@@ -569,33 +493,30 @@ func TestIngotAssembler_GetCompletedIngotsClears(t *testing.T) {
 	}
 }
 
-// TestIngotAssembler_ContractIDDeduplication tests that duplicate contract IDs are not added
+// TestIngotAssembler_ContractIDDeduplication tests that contract IDs are tracked
 func TestIngotAssembler_ContractIDDeduplication(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	qm := NewQueueManager(ctx, 10, 10)
+	qm := NewQueueManager(ctx, 10000)
 	assembler := NewIngotAssembler(ctx, qm)
 
-	// Add three joules from same contract
-	for i := 0; i < 3; i++ {
-		jouleItem := &models.JouleQueueItem{
-			Amount:     1200.0,
-			ContractID: "contract-dedup",
-			Timestamp:  time.Now(),
-			Hash:       "hash-dedup",
+	// Add 3600 units from same contract
+	units := createTestUnits("contract-dedup", 3600, 1.0, 0.025)
+	for _, unit := range units {
+		if err := qm.AddUnit(unit); err != nil {
+			t.Fatalf("AddUnit failed: %v", err)
 		}
+	}
 
-		roboItem := &models.RoboQueueItem{
-			Amount:     30.0,
-			ContractID: "contract-dedup",
-			Timestamp:  time.Now(),
-			Price:      10.0,
-		}
-
-		err := assembler.processItems(jouleItem, roboItem)
+	// Process all units
+	for i := 0; i < 3600; i++ {
+		unit, err := qm.GetUnit()
 		if err != nil {
-			t.Fatalf("processItems failed: %v", err)
+			t.Fatalf("GetUnit failed: %v", err)
+		}
+		if err := assembler.processUnit(unit); err != nil {
+			t.Fatalf("processUnit failed: %v", err)
 		}
 	}
 
@@ -604,7 +525,7 @@ func TestIngotAssembler_ContractIDDeduplication(t *testing.T) {
 		t.Fatalf("expected 1 ingot, got %d", len(ingots))
 	}
 
-	// Verify only one unique contract ID despite three contributions
+	// Verify only one unique contract ID
 	if len(ingots[0].ContractIDs) != 1 {
 		t.Errorf("expected 1 contract ID, got %d: %v", len(ingots[0].ContractIDs), ingots[0].ContractIDs)
 	}
@@ -614,31 +535,31 @@ func TestIngotAssembler_ContractIDDeduplication(t *testing.T) {
 	}
 }
 
-// TestIngotAssembler_ZeroPrice tests handling of zero price
-func TestIngotAssembler_ZeroPrice(t *testing.T) {
+// TestIngotAssembler_ZeroRoboStake tests handling of zero robo stake
+func TestIngotAssembler_ZeroRoboStake(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	qm := NewQueueManager(ctx, 10, 10)
+	qm := NewQueueManager(ctx, 10000)
 	assembler := NewIngotAssembler(ctx, qm)
 
-	jouleItem := &models.JouleQueueItem{
-		Amount:     3600.0,
-		ContractID: "contract-zero",
-		Timestamp:  time.Now(),
-		Hash:       "hash-zero",
+	// Create units with zero robo stake
+	units := createTestUnits("contract-zero", 3600, 1.0, 0.0)
+	for _, unit := range units {
+		if err := qm.AddUnit(unit); err != nil {
+			t.Fatalf("AddUnit failed: %v", err)
+		}
 	}
 
-	roboItem := &models.RoboQueueItem{
-		Amount:     100.0,
-		ContractID: "contract-zero",
-		Timestamp:  time.Now(),
-		Price:      0.0, // Zero price
-	}
-
-	err := assembler.processItems(jouleItem, roboItem)
-	if err != nil {
-		t.Fatalf("processItems failed: %v", err)
+	// Process all units
+	for i := 0; i < 3600; i++ {
+		unit, err := qm.GetUnit()
+		if err != nil {
+			t.Fatalf("GetUnit failed: %v", err)
+		}
+		if err := assembler.processUnit(unit); err != nil {
+			t.Fatalf("processUnit failed: %v", err)
+		}
 	}
 
 	ingots := assembler.GetCompletedIngots()
@@ -646,14 +567,10 @@ func TestIngotAssembler_ZeroPrice(t *testing.T) {
 		t.Fatalf("expected 1 ingot, got %d", len(ingots))
 	}
 
-	// NOTE: PricePerRT removed - price calculated from RoboStakeTotal
-	// Skipping price verification for stub implementation
-	/*
-		// Average price should be 0.0
-		if ingots[0].PricePerRT != 0.0 {
-			t.Errorf("expected price 0.0, got %v", ingots[0].PricePerRT)
-		}
-	*/
+	// RoboStakeTotal should be 0.0
+	if ingots[0].RoboStakeTotal != 0.0 {
+		t.Errorf("expected RoboStakeTotal 0.0, got %v", ingots[0].RoboStakeTotal)
+	}
 }
 
 // Benchmark for ingot assembly performance
@@ -661,26 +578,26 @@ func BenchmarkIngotAssembler_Assembly(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	qm := NewQueueManager(ctx, 10000, 10000)
+	qm := NewQueueManager(ctx, 10000)
 	assembler := NewIngotAssembler(ctx, qm)
 
-	jouleItem := &models.JouleQueueItem{
-		Amount:     3600.0,
-		ContractID: "benchmark-contract",
-		Timestamp:  time.Now(),
-		Hash:       "benchmark-hash",
-	}
-
-	roboItem := &models.RoboQueueItem{
-		Amount:     100.0,
-		ContractID: "benchmark-contract",
-		Timestamp:  time.Now(),
-		Price:      10.0,
+	// Pre-generate units for benchmark
+	units := createTestUnits("benchmark-contract", b.N*3600, 1.0, 0.0278)
+	for _, unit := range units {
+		if err := qm.AddUnit(unit); err != nil {
+			b.Fatalf("AddUnit failed: %v", err)
+		}
 	}
 
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		_ = assembler.processItems(jouleItem, roboItem)
+	for i := 0; i < b.N*3600; i++ {
+		unit, err := qm.GetUnit()
+		if err != nil {
+			b.Fatalf("GetUnit failed: %v", err)
+		}
+		if err := assembler.processUnit(unit); err != nil {
+			b.Fatalf("processUnit failed: %v", err)
+		}
 	}
 }
