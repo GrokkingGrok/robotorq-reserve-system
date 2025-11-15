@@ -51,24 +51,24 @@ func NewBatchAggregator(
 ) BatchAggregator {
 	metrics := &batchAggregatorMetrics{
 		batchesProcessed: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "mint_batches_processed_total",
-			Help: "Total number of batches processed",
+			Name: "mint_aggregator_batches_total",
+			Help: "Total number of batches aggregated by BatchAggregator",
 		}),
 		batchLatency: prometheus.NewHistogram(prometheus.HistogramOpts{
-			Name:    "mint_batch_latency_seconds",
+			Name:    "mint_aggregator_batch_latency_seconds",
 			Help:    "Time from first ingot in batch to processing (seconds)",
 			Buckets: []float64{0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0},
 		}),
 		partialFlushes: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "mint_partial_flushes_total",
+			Name: "mint_aggregator_partial_flushes_total",
 			Help: "Total number of partial batch flushes (interval-based)",
 		}),
 		fullBatches: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "mint_full_batches_total",
+			Name: "mint_aggregator_full_batches_total",
 			Help: "Total number of full batches (threshold-based)",
 		}),
 		shutdownFlushes: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "mint_shutdown_flushes_total",
+			Name: "mint_aggregator_shutdown_flushes_total",
 			Help: "Total number of shutdown flushes",
 		}),
 	}
