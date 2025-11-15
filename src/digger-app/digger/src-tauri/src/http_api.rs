@@ -57,16 +57,16 @@ struct StakeResponse {
 
 /// Start the HTTP server on port 9000
 pub fn start_http_server() {
-    std::thread::spawn(|| {
-        println!("🔧 Attempting to bind HTTP server to 127.0.0.1:9000...");
+    let handle = std::thread::spawn(|| {
+        println!("🔧 [HTTP Thread] Thread started, attempting to bind HTTP server to 127.0.0.1:9000...");
         
         let server = match Server::http("127.0.0.1:9000") {
             Ok(s) => {
-                println!("✅ HTTP server successfully bound to 127.0.0.1:9000");
+                println!("✅ [HTTP Thread] HTTP server successfully bound to 127.0.0.1:9000");
                 s
             }
             Err(e) => {
-                eprintln!("❌ FATAL: Failed to bind HTTP server to 127.0.0.1:9000");
+                eprintln!("❌ [HTTP Thread] FATAL: Failed to bind HTTP server to 127.0.0.1:9000");
                 eprintln!("   Error: {}", e);
                 eprintln!("   Possible causes:");
                 eprintln!("   - Port 9000 already in use by another process");
@@ -76,27 +76,40 @@ pub fn start_http_server() {
             }
         };
         
-        println!("🌐 Digger HTTP API now listening on 127.0.0.1:9000");
-        println!("   Ready to accept requests...");
+        println!("🌐 [HTTP Thread] Digger HTTP API now listening on 127.0.0.1:9000");
+        println!("   [HTTP Thread] Ready to accept requests...");
+        println!("   [HTTP Thread] Entering request loop...");
 
-        for request in server.incoming_requests() {
+        for (idx, request) in server.incoming_requests().enumerate() {
             let url = request.url().to_string();
-            println!("📥 Received {} {}", request.method(), url);
+            println!("📥 [HTTP Thread] Request #{}: {} {}", idx + 1, request.method(), url);
             
             match (request.method().as_str(), url.as_str()) {
-                ("GET", "/robot/status") => handle_robot_status(request),
-                ("POST", "/stake") => handle_stake(request),
+                ("GET", "/robot/status") => {
+                    println!("   [HTTP Thread] Handling /robot/status");
+                    handle_robot_status(request)
+                }
+                ("POST", "/stake") => {
+                    println!("   [HTTP Thread] Handling /stake");
+                    handle_stake(request)
+                }
                 ("GET", "/health") => {
+                    println!("   [HTTP Thread] Handling /health");
                     let response = Response::from_string("ok");
                     let _ = request.respond(response);
                 }
                 _ => {
+                    println!("   [HTTP Thread] 404 Not Found");
                     let response = Response::from_string("Not Found").with_status_code(404);
                     let _ = request.respond(response);
                 }
             }
         }
+        
+        println!("⚠️ [HTTP Thread] Request loop exited (this should never happen!)");
     });
+    
+    println!("📤 [Main Thread] HTTP server thread spawned, handle: {:?}", handle.thread().id());
 }
 
 fn handle_robot_status(request: tiny_http::Request) {

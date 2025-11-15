@@ -20,7 +20,15 @@ pub fn start_headless_contract(
     contract: Contract,
     ore_store: Arc<Mutex<OreStorage>>,
 ) {
+    println!("🎬 start_headless_contract() called!");
+    println!("   Digger: {}", digger_id);
+    println!("   Contract: {}", contract.id);
+    println!("   Power: {} kW", power_kw);
+    println!("   Throughput: {} tokens/sec", max_token_throughput);
+    println!("   Duration: {} hours", contract.duration_hours);
+    
     tokio::spawn(async move {
+        println!("🚀 Tokio task spawned! About to execute contract loop...");
         execute_contract_loop(
             digger_id,
             power_kw,
@@ -29,7 +37,10 @@ pub fn start_headless_contract(
             ore_store,
         )
         .await;
+        println!("✅ Contract loop completed");
     });
+    
+    println!("📤 Tokio spawn returned (task is running in background)");
 }
 
 async fn execute_contract_loop(
@@ -39,6 +50,11 @@ async fn execute_contract_loop(
     contract: Contract,
     ore_store: Arc<Mutex<OreStorage>>,
 ) {
+    println!("🔄 execute_contract_loop() ENTERED");
+    println!("   Contract ID: {}", contract.id);
+    println!("   Duration: {:.2} hours", contract.duration_hours);
+    println!("   Interval: {} seconds", contract.interval_seconds);
+    
     let mut milestone_index: u32 = 0;
     
     // Calculate throughput (tokens per update)
@@ -74,13 +90,21 @@ async fn execute_contract_loop(
     let mut total_tokens: u64 = 0;
     let mut robo_stake_sent: f64 = 0.0;
     
+    println!("🔁 Entering main execution loop...");
+    
     // Main execution loop
+    let mut loop_count = 0;
     loop {
+        loop_count += 1;
+        println!("🔄 Loop iteration {}", loop_count);
+        
         // Check contract state (pause/stop)
         let state = state_manager
             .lock()
             .unwrap()
             .get_state(&contract.id);
+        
+        println!("   State: {:?}", state);
         
         match state {
             ContractControl::Stopped | ContractControl::Completed => {
