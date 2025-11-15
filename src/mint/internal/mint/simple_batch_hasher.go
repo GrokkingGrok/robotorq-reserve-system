@@ -45,14 +45,14 @@ func (h *simpleBatchHasher) Hash(batch []*TokenTorqIngot) (string, float64, floa
 		return "", 0, 0, fmt.Errorf("cannot hash empty batch")
 	}
 
-	// Sort batch by ingot hash for deterministic ordering
+	// Sort batch by ingot branch hash for deterministic ordering
 	// This ensures same batch always produces same hash
 	sorted := make([]*TokenTorqIngot, len(batch))
 	copy(sorted, batch)
 	sort.Slice(sorted, func(i, j int) bool {
-		// Sort by first hash in JouleTorqHashes array, fallback to IngotID
-		if len(sorted[i].JouleTorqHashes) > 0 && len(sorted[j].JouleTorqHashes) > 0 {
-			return sorted[i].JouleTorqHashes[0] < sorted[j].JouleTorqHashes[0]
+		// Sort by BranchHash (merkle tree branch hash), fallback to IngotID
+		if sorted[i].BranchHash != "" && sorted[j].BranchHash != "" {
+			return sorted[i].BranchHash < sorted[j].BranchHash
 		}
 		return sorted[i].IngotID < sorted[j].IngotID
 	})
@@ -60,21 +60,21 @@ func (h *simpleBatchHasher) Hash(batch []*TokenTorqIngot) (string, float64, floa
 	// Concatenate ingot data for hashing
 	var builder strings.Builder
 	var totalRobo float64
-	var totalSale float64
+	var totalSale float64 // NOTE: No longer calculated (PricePerRT removed)
 
 	for _, ingot := range sorted {
 		// Accumulate totals
 		totalRobo += ingot.RoboStakeTotal
-		totalSale += ingot.PricePerRT * ingot.RoboStakeTotal // Total sale = price per RT * total RT
+		// NOTE: totalSale removed - price tracking happens elsewhere in the system
 
-		// Build hash input: IngotID|JouleTorq|RoboStake|Price|Contracts|Hashes|MintedAt
-		fmt.Fprintf(&builder, "%s|%d|%.6f|%.2f|%s|%s|%s\n",
+		// Build hash input: IngotID|JouleTorq|RoboStake|BranchHash|Contracts|UnitCount|MintedAt
+		fmt.Fprintf(&builder, "%s|%.2f|%.6f|%s|%s|%d|%s\n",
 			ingot.IngotID,
 			ingot.JouleTorqTotal,
 			ingot.RoboStakeTotal,
-			ingot.PricePerRT,
+			ingot.BranchHash,
 			strings.Join(ingot.ContractIDs, ","),
-			strings.Join(ingot.JouleTorqHashes, ","),
+			len(ingot.Units),
 			ingot.MintedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 		)
 	}

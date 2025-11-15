@@ -66,15 +66,7 @@ func (m *mockIngotBuffer) Drain() []*TokenTorqIngot {
 
 // validIngot returns a valid TokenTorqIngot for testing.
 func validIngot() *TokenTorqIngot {
-	return &TokenTorqIngot{
-		IngotID:         "ingot-test-123",
-		JouleTorqTotal:  3600,
-		RoboStakeTotal:  0.123456,
-		PricePerRT:      50.00,
-		ContractIDs:     []string{"contract-123"},
-		JouleTorqHashes: []string{"hash-abc"},
-		MintedAt:        time.Now().UTC(),
-	}
+	return createStubIngotForMintTests("ingot-test-123", "contract-123", 3600, 0.123456)
 }
 
 // setupTestReceiver creates a test IngotReceiver with mock buffer.
@@ -124,6 +116,9 @@ func TestValidateIngot_NegativeRoboTorq(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid RoboStakeTotal")
 }
 
+// NOTE: PricePerRT removed from TokenTorqIngot - price tracking moved elsewhere
+// Commenting out these tests as they're no longer relevant
+/*
 func TestValidateIngot_ZeroPrice(t *testing.T) {
 	receiver, _ := setupTestReceiver(100)
 	r := receiver.(*ingotReceiver)
@@ -145,6 +140,7 @@ func TestValidateIngot_NegativePrice(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid PricePerRT")
 }
+*/
 
 func TestValidateIngot_EmptyContractID(t *testing.T) {
 	receiver, _ := setupTestReceiver(100)
@@ -168,15 +164,15 @@ func TestValidateIngot_EmptyDiggerID(t *testing.T) {
 	assert.Contains(t, err.Error(), "ingot ID")
 }
 
-func TestValidateIngot_EmptyHash(t *testing.T) {
+func TestValidateIngot_EmptyBranchHash(t *testing.T) {
 	receiver, _ := setupTestReceiver(100)
 	r := receiver.(*ingotReceiver)
 
 	ingot := validIngot()
-	ingot.JouleTorqHashes = []string{} // Empty
+	ingot.BranchHash = "" // Empty branch hash
 	err := r.validateIngot(ingot)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "joule hashes")
+	assert.Contains(t, err.Error(), "branch hash")
 }
 
 func TestValidateIngot_ZeroTimestamp(t *testing.T) {

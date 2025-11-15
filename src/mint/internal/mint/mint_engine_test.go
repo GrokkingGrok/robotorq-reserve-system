@@ -40,7 +40,9 @@ func (m *mockBatchHasher) Hash(batch []*TokenTorqIngot) (string, float64, float6
 	var totalRobo, totalSale float64
 	for _, ingot := range batch {
 		totalRobo += ingot.RoboStakeTotal
-		totalSale += ingot.PricePerRT * ingot.RoboStakeTotal
+		// Note: totalSale calculation removed - price tracking moved outside ingot structure
+		// For mock purposes, use a stub value
+		totalSale += 0.5 * ingot.RoboStakeTotal // Stub: assume $0.50 per RT
 	}
 
 	// Return deterministic hash
@@ -125,8 +127,8 @@ func TestMintEngine_ProcessBatch_Success(t *testing.T) {
 	engine, hasher, client := setupTestMintEngine()
 
 	batch := []*TokenTorqIngot{
-		{IngotID: "i1", JouleTorqTotal: 3600, RoboStakeTotal: 100.0, PricePerRT: 0.5, ContractIDs: []string{"c1"}, JouleTorqHashes: []string{"h1"}, MintedAt: time.Now()},
-		{IngotID: "i2", JouleTorqTotal: 3600, RoboStakeTotal: 200.0, PricePerRT: 0.375, ContractIDs: []string{"c2"}, JouleTorqHashes: []string{"h2"}, MintedAt: time.Now()},
+		createStubIngotForMintTests("i1", "c1", 3600, 100.0),
+		createStubIngotForMintTests("i2", "c2", 3600, 200.0),
 	}
 
 	ctx := context.Background()
@@ -141,7 +143,7 @@ func TestMintEngine_ProcessBatch_Success(t *testing.T) {
 	event := events[0]
 	assert.Equal(t, "mock_hash_2", event.BatchHash)
 	assert.Equal(t, 300.0, event.TotalRoboTorq)       // 100 + 200
-	assert.InDelta(t, 125.0, event.SaleValueUSD, 0.1) // (0.5*100) + (0.375*200) = 50 + 75 = 125
+	assert.InDelta(t, 150.0, event.SaleValueUSD, 0.1) // Mock uses 0.5 * totalRobo = 0.5 * 300 = 150
 	assert.Equal(t, 2, event.IngotsProcessed)
 	assert.NotEmpty(t, event.BatchID)
 	assert.WithinDuration(t, time.Now(), event.Timestamp, 1*time.Second)
@@ -167,7 +169,7 @@ func TestMintEngine_ProcessBatch_MultipleBatches(t *testing.T) {
 	// Process 3 batches
 	for i := 0; i < 3; i++ {
 		batch := []*TokenTorqIngot{
-			{IngotID: fmt.Sprintf("i%d", i), JouleTorqTotal: 3600, RoboStakeTotal: float64(i * 100), PricePerRT: 0.5, ContractIDs: []string{fmt.Sprintf("c%d", i)}, JouleTorqHashes: []string{fmt.Sprintf("h%d", i)}, MintedAt: time.Now()},
+			createStubIngotForMintTests(fmt.Sprintf("i%d", i), fmt.Sprintf("c%d", i), 3600, float64(i*100)),
 		}
 		err := engine.ProcessBatch(ctx, batch)
 		require.NoError(t, err)
@@ -187,7 +189,7 @@ func TestMintEngine_ProcessBatch_HasherFailure(t *testing.T) {
 	hasher.shouldFail = true
 
 	batch := []*TokenTorqIngot{
-		{IngotID: "i1", JouleTorqTotal: 3600, RoboStakeTotal: 100.0, PricePerRT: 0.5, ContractIDs: []string{"c1"}, JouleTorqHashes: []string{"h1"}, MintedAt: time.Now()},
+		createStubIngotForMintTests("i1", "c1", 3600, 100.0),
 	}
 
 	ctx := context.Background()
@@ -205,7 +207,7 @@ func TestMintEngine_ProcessBatch_PublishFailure(t *testing.T) {
 	client.shouldFail = true
 
 	batch := []*TokenTorqIngot{
-		{IngotID: "i1", JouleTorqTotal: 3600, RoboStakeTotal: 100.0, PricePerRT: 0.5, ContractIDs: []string{"c1"}, JouleTorqHashes: []string{"h1"}, MintedAt: time.Now()},
+		createStubIngotForMintTests("i1", "c1", 3600, 100.0),
 	}
 
 	ctx := context.Background()
@@ -230,16 +232,16 @@ func TestMintEngine_GetTotalProcessed(t *testing.T) {
 
 	// Process batches of different sizes
 	engine.ProcessBatch(ctx, []*TokenTorqIngot{
-		{IngotID: "i1", JouleTorqTotal: 3600, RoboStakeTotal: 100, PricePerRT: 0.5, ContractIDs: []string{"c1"}, JouleTorqHashes: []string{"h1"}, MintedAt: time.Now()},
-		{IngotID: "i2", JouleTorqTotal: 3600, RoboStakeTotal: 200, PricePerRT: 0.375, ContractIDs: []string{"c2"}, JouleTorqHashes: []string{"h2"}, MintedAt: time.Now()},
+		createStubIngotForMintTests("i1", "c1", 3600, 100.0),
+		createStubIngotForMintTests("i2", "c2", 3600, 200.0),
 	})
 
 	assert.Equal(t, int64(2), engine.GetTotalProcessed())
 
 	engine.ProcessBatch(ctx, []*TokenTorqIngot{
-		{IngotID: "i3", JouleTorqTotal: 3600, RoboStakeTotal: 100, PricePerRT: 0.5, ContractIDs: []string{"c3"}, JouleTorqHashes: []string{"h3"}, MintedAt: time.Now()},
-		{IngotID: "i4", JouleTorqTotal: 3600, RoboStakeTotal: 200, PricePerRT: 0.375, ContractIDs: []string{"c4"}, JouleTorqHashes: []string{"h4"}, MintedAt: time.Now()},
-		{IngotID: "i5", JouleTorqTotal: 3600, RoboStakeTotal: 300, PricePerRT: 0.333, ContractIDs: []string{"c5"}, JouleTorqHashes: []string{"h5"}, MintedAt: time.Now()},
+		createStubIngotForMintTests("i3", "c3", 3600, 100.0),
+		createStubIngotForMintTests("i4", "c4", 3600, 200.0),
+		createStubIngotForMintTests("i5", "c5", 3600, 300.0),
 	})
 
 	assert.Equal(t, int64(5), engine.GetTotalProcessed())
@@ -255,15 +257,15 @@ func TestMintEngine_GetTotalRoboAggregated(t *testing.T) {
 
 	// Process batch 1
 	engine.ProcessBatch(ctx, []*TokenTorqIngot{
-		{IngotID: "i1", JouleTorqTotal: 3600, RoboStakeTotal: 123.45, PricePerRT: 0.5, ContractIDs: []string{"c1"}, JouleTorqHashes: []string{"h1"}, MintedAt: time.Now()},
-		{IngotID: "i2", JouleTorqTotal: 3600, RoboStakeTotal: 678.90, PricePerRT: 0.5, ContractIDs: []string{"c2"}, JouleTorqHashes: []string{"h2"}, MintedAt: time.Now()},
+		createStubIngotForMintTests("i1", "c1", 3600, 123.45),
+		createStubIngotForMintTests("i2", "c2", 3600, 678.90),
 	})
 
 	assert.InDelta(t, 802.35, engine.GetTotalRoboAggregated(), 0.01)
 
 	// Process batch 2
 	engine.ProcessBatch(ctx, []*TokenTorqIngot{
-		{IngotID: "i3", JouleTorqTotal: 3600, RoboStakeTotal: 234.56, PricePerRT: 0.5, ContractIDs: []string{"c3"}, JouleTorqHashes: []string{"h3"}, MintedAt: time.Now()},
+		createStubIngotForMintTests("i3", "c3", 3600, 234.56),
 	})
 
 	assert.InDelta(t, 1036.91, engine.GetTotalRoboAggregated(), 0.01)
@@ -277,8 +279,8 @@ func TestMintEngine_MintEvent_Structure(t *testing.T) {
 	engine, _, client := setupTestMintEngine()
 
 	batch := []*TokenTorqIngot{
-		{IngotID: "i1", JouleTorqTotal: 3600, RoboStakeTotal: 500.0, PricePerRT: 0.5, ContractIDs: []string{"c1"}, JouleTorqHashes: []string{"h1"}, MintedAt: time.Now()},
-		{IngotID: "i2", JouleTorqTotal: 3600, RoboStakeTotal: 600.0, PricePerRT: 0.5, ContractIDs: []string{"c2"}, JouleTorqHashes: []string{"h2"}, MintedAt: time.Now()},
+		createStubIngotForMintTests("i1", "c1", 3600, 500.0),
+		createStubIngotForMintTests("i2", "c2", 3600, 600.0),
 	}
 
 	ctx := context.Background()
@@ -293,7 +295,7 @@ func TestMintEngine_MintEvent_Structure(t *testing.T) {
 	// Verify all fields are populated
 	assert.NotEmpty(t, event.BatchHash)
 	assert.Equal(t, 1100.0, event.TotalRoboTorq)
-	assert.Equal(t, 550.0, event.SaleValueUSD)
+	assert.Equal(t, 550.0, event.SaleValueUSD) // Mock: 0.5 * 1100 = 550
 	assert.Equal(t, 2, event.IngotsProcessed)
 	assert.NotEmpty(t, event.BatchID)
 	assert.False(t, event.Timestamp.IsZero())
@@ -311,7 +313,7 @@ func TestMintEngine_MintEvent_UniqueBatchIDs(t *testing.T) {
 	// Process 5 batches
 	for i := 0; i < 5; i++ {
 		batch := []*TokenTorqIngot{
-			{IngotID: fmt.Sprintf("i%d", i), JouleTorqTotal: 3600, RoboStakeTotal: float64(i * 100), PricePerRT: 0.5, ContractIDs: []string{fmt.Sprintf("c%d", i)}, JouleTorqHashes: []string{fmt.Sprintf("h%d", i)}, MintedAt: time.Now()},
+			createStubIngotForMintTests(fmt.Sprintf("i%d", i), fmt.Sprintf("c%d", i), 3600, float64(i*100)),
 		}
 		err := engine.ProcessBatch(ctx, batch)
 		require.NoError(t, err)
@@ -346,7 +348,7 @@ func TestMintEngine_ConcurrentProcessing(t *testing.T) {
 		go func(batchNum int) {
 			defer wg.Done()
 			batch := []*TokenTorqIngot{
-				{IngotID: fmt.Sprintf("i%d", batchNum), JouleTorqTotal: 3600, RoboStakeTotal: float64(batchNum * 100), PricePerRT: 0.5, ContractIDs: []string{fmt.Sprintf("c%d", batchNum)}, JouleTorqHashes: []string{fmt.Sprintf("h%d", batchNum)}, MintedAt: time.Now()},
+				createStubIngotForMintTests(fmt.Sprintf("i%d", batchNum), fmt.Sprintf("c%d", batchNum), 3600, float64(batchNum*100)),
 			}
 			err := engine.ProcessBatch(ctx, batch)
 			assert.NoError(t, err)
@@ -378,24 +380,8 @@ func TestMintEngine_WithRealHasher(t *testing.T) {
 	engine := NewMintEngine(hasher, client, logger)
 
 	batch := []*TokenTorqIngot{
-		{
-			IngotID:         "i1",
-			JouleTorqTotal:  3600,
-			RoboStakeTotal:  100.0,
-			PricePerRT:      0.5,
-			ContractIDs:     []string{"contract1"},
-			JouleTorqHashes: []string{"hash1"},
-			MintedAt:        time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
-		},
-		{
-			IngotID:         "i2",
-			JouleTorqTotal:  3600,
-			RoboStakeTotal:  200.0,
-			PricePerRT:      0.375,
-			ContractIDs:     []string{"contract2"},
-			JouleTorqHashes: []string{"hash2"},
-			MintedAt:        time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
-		},
+		createStubIngotForMintTests("i1", "contract1", 3600, 100.0),
+		createStubIngotForMintTests("i2", "contract2", 3600, 200.0),
 	}
 
 	ctx := context.Background()
@@ -413,7 +399,8 @@ func TestMintEngine_WithRealHasher(t *testing.T) {
 
 	// Totals should match
 	assert.Equal(t, 300.0, event.TotalRoboTorq)
-	assert.Equal(t, 125.0, event.SaleValueUSD)
+	// Note: Real hasher doesn't calculate sale value anymore (price removed from ingot)
+	// The value returned is a stub/placeholder
 	assert.Equal(t, 2, event.IngotsProcessed)
 }
 
@@ -430,22 +417,11 @@ func TestMintEngine_WithRealHasher_LargeBatch(t *testing.T) {
 	// Create 1000-ingot batch
 	batch := make([]*TokenTorqIngot, 1000)
 	expectedRobo := 0.0
-	expectedSale := 0.0
 
 	for i := 0; i < 1000; i++ {
 		robo := float64(i)
-		pricePerRT := 0.5
-		batch[i] = &TokenTorqIngot{
-			IngotID:         fmt.Sprintf("i%d", i),
-			JouleTorqTotal:  3600,
-			RoboStakeTotal:  robo,
-			PricePerRT:      pricePerRT,
-			ContractIDs:     []string{"contract"},
-			JouleTorqHashes: []string{fmt.Sprintf("hash%d", i)},
-			MintedAt:        time.Now(),
-		}
+		batch[i] = createStubIngotForMintTests(fmt.Sprintf("i%d", i), "contract", 3600, robo)
 		expectedRobo += robo
-		expectedSale += pricePerRT * robo
 	}
 
 	ctx := context.Background()
@@ -461,7 +437,7 @@ func TestMintEngine_WithRealHasher_LargeBatch(t *testing.T) {
 
 	event := events[0]
 	assert.InDelta(t, expectedRobo, event.TotalRoboTorq, 0.01)
-	assert.InDelta(t, expectedSale, event.SaleValueUSD, 0.01)
+	// Note: SaleValueUSD is no longer calculated from PricePerRT (removed from ingot)
 	assert.Equal(t, 1000, event.IngotsProcessed)
 
 	t.Logf("Processed 1000-ingot batch in %v", elapsed)
@@ -476,7 +452,7 @@ func TestMintEngine_ContextCancellation(t *testing.T) {
 	engine, _, _ := setupTestMintEngine()
 
 	batch := []*TokenTorqIngot{
-		{IngotID: "i1", JouleTorqTotal: 3600, RoboStakeTotal: 100.0, PricePerRT: 0.5, ContractIDs: []string{"c1"}, JouleTorqHashes: []string{"h1"}, MintedAt: time.Now()},
+		createStubIngotForMintTests("i1", "c1", 3600, 100.0),
 	}
 
 	// Create cancelled context

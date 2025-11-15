@@ -131,7 +131,7 @@ func (r *ingotReceiver) ReceiveIngot(ingot *TokenTorqIngot) error {
 			"error", err,
 			"joule_total", ingot.JouleTorqTotal,
 			"robo_stake", ingot.RoboStakeTotal,
-			"price", ingot.PricePerRT,
+			"units", len(ingot.Units),
 		)
 		return fmt.Errorf("validation failed: %w", err)
 	}
@@ -152,7 +152,7 @@ func (r *ingotReceiver) ReceiveIngot(ingot *TokenTorqIngot) error {
 		"ingot_id", ingot.IngotID,
 		"joule_total", ingot.JouleTorqTotal,
 		"robo_stake", ingot.RoboStakeTotal,
-		"price", ingot.PricePerRT,
+		"units", len(ingot.Units),
 		"contracts", len(ingot.ContractIDs),
 		"buffer_len", r.buffer.Len(),
 	)
@@ -358,9 +358,9 @@ func (r *ingotReceiver) handleHealth(w http.ResponseWriter, req *http.Request) {
 //   - PricePerRT must be > 0
 //   - IngotID, ContractIDs, JouleTorqHashes must not be empty
 func (r *ingotReceiver) validateIngot(ingot *TokenTorqIngot) error {
-	// Validate JouleTorqTotal (must be exactly 3600)
-	if ingot.JouleTorqTotal != 3600 {
-		return fmt.Errorf("invalid JouleTorqTotal: got %d, expected 3600", ingot.JouleTorqTotal)
+	// Validate JouleTorqTotal (should be ~3600, allow small variance for float accumulation)
+	if ingot.JouleTorqTotal < 3500 || ingot.JouleTorqTotal > 3700 {
+		return fmt.Errorf("invalid JouleTorqTotal: got %.2f, expected ~3600", ingot.JouleTorqTotal)
 	}
 
 	// Validate RoboStakeTotal (must be non-negative)
@@ -368,9 +368,9 @@ func (r *ingotReceiver) validateIngot(ingot *TokenTorqIngot) error {
 		return fmt.Errorf("invalid RoboStakeTotal: must be >= 0, got %.6f", ingot.RoboStakeTotal)
 	}
 
-	// Validate PricePerRT (must be positive)
-	if ingot.PricePerRT <= 0 {
-		return fmt.Errorf("invalid PricePerRT: must be > 0, got %.2f", ingot.PricePerRT)
+	// Validate Units (must have exactly 3600 JouleTorqUnits)
+	if len(ingot.Units) != 3600 {
+		return fmt.Errorf("invalid Units count: must be 3600, got %d", len(ingot.Units))
 	}
 
 	// Validate IngotID (must not be empty)
@@ -383,9 +383,9 @@ func (r *ingotReceiver) validateIngot(ingot *TokenTorqIngot) error {
 		return fmt.Errorf("contract IDs cannot be empty")
 	}
 
-	// Validate JouleTorqHashes (must not be empty)
-	if len(ingot.JouleTorqHashes) == 0 {
-		return fmt.Errorf("joule hashes cannot be empty")
+	// Validate BranchHash (must not be empty - this is the merkle branch hash)
+	if ingot.BranchHash == "" {
+		return fmt.Errorf("branch hash cannot be empty")
 	}
 
 	// Validate MintedAt (must not be zero)

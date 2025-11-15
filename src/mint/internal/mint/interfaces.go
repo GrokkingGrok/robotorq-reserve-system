@@ -166,32 +166,62 @@ type DistoDamClient interface {
 // TokenTorqIngot represents a single ingot received from Refinery.
 // This is the INPUT to Mint - already assembled by Refinery from JouleTorqOre.
 //
-// Structure comes from Refinery's batch envelope, containing:
-//   - Energy proof (JouleTorq - always 3600)
-//   - Robot stake paid (RoboTorq)
-//   - Sale value in USD (Price)
-//   - Metadata for traceability (IngotID, ContractIDs, Hashes, MintedAt)
+// **REFACTORED VERSION** (currency-refactor branch):
+// An ingot now contains 3,600 JouleTorqUnits (atomic token proofs), not just aggregated joules.
+// This enables full merkle tree verification from individual tokens → ingots → RoboTorq.
+//
+// Structure (merkle tree branch):
+//   - Units: 3,600 JouleTorqUnits (leaf nodes in merkle tree)
+//   - BranchHash: SHA256 of all unit hashes (merkle branch)
+//   - Energy proof (JouleTorq - sum of all Units[].JoulesConsumed ≈ 3600J)
+//   - Robot stake paid (sum of all Units[].RoboStakePaid)
+//   - Metadata for traceability (IngotID, ContractIDs, MintedAt)
 type TokenTorqIngot struct {
-	// IngotID is a unique identifier for this ingot
+	// IngotID is a unique identifier for this ingot (UUID)
 	IngotID string `json:"ingot_id"`
 
-	// JouleTorqTotal is the total joules in this ingot (MUST be exactly 3600)
-	JouleTorqTotal uint64 `json:"joule_torq"`
+	// Units contains exactly 3,600 JouleTorqUnits (atomic token proofs)
+	// Each unit represents ~1 joule of robotic work
+	// NOTE: This is a pointer to allow JSON unmarshaling from NATS messages
+	Units []*JouleTorqUnit `json:"units"`
 
-	// RoboStakeTotal is the accumulated RoboTorq from all contributing ore
-	RoboStakeTotal float64 `json:"robo_stake"`
+	// JouleTorqTotal is the total joules in this ingot (~3600J)
+	// Calculated as sum(Units[].JoulesConsumed)
+	JouleTorqTotal float64 `json:"joule_torq_total"`
 
-	// PricePerRT is the average price in tokens per RoboTorq
-	PricePerRT float64 `json:"price"`
+	// RoboStakeTotal is the accumulated RoboTorq from all units
+	// Calculated as sum(Units[].RoboStakePaid)
+	RoboStakeTotal float64 `json:"robo_stake_total"`
 
-	// ContractIDs lists all contracts that contributed to this ingot
+	// ContractIDs lists all unique contracts that contributed to this ingot
+	// Extracted from Units[].ContractID (deduplicated)
 	ContractIDs []string `json:"contract_ids"`
 
-	// JouleTorqHashes contains SHA256 hashes of each ore contribution
-	JouleTorqHashes []string `json:"joule_hashes"`
+	// BranchHash is the SHA256 merkle tree branch hash
+	// Calculated as hash(Units[0].Hash + Units[1].Hash + ... + Units[3599].Hash)
+	// This becomes a leaf in the RoboTorqUnit merkle tree
+	BranchHash string `json:"branch_hash"`
 
 	// MintedAt is when this ingot was assembled by Refinery
 	MintedAt time.Time `json:"minted_at"`
+}
+
+// JouleTorqUnit represents a single atomic proof of robotic work (merkle tree leaf)
+// This is copied from refinery/internal/models for NATS deserialization
+//
+// TODO(currency-refactor): Consider shared models package to avoid duplication
+type JouleTorqUnit struct {
+	TokenID        string    `json:"token_id"`        // Unique identifier
+	ContractID     string    `json:"contract_id"`     // BRLA reference
+	MilestoneIndex int       `json:"milestone_index"` // Progress tracker
+	TokenIndex     int       `json:"token_index"`     // Position in milestone
+	JoulesConsumed float64   `json:"joules_consumed"` // Energy expended (~1J)
+	RoboStakePaid  float64   `json:"robo_stake_paid"` // RT value
+	DiggerID       string    `json:"digger_id"`       // Executor ID
+	Timestamp      time.Time `json:"timestamp"`       // Unix timestamp
+	Signature      string    `json:"signature"`       // Dilithium5 proof
+	DiggerPubKey   string    `json:"digger_pub_key"`  // Verification key
+	Hash           string    `json:"hash"`            // SHA256 merkle leaf hash
 }
 
 // MintEvent is the OUTPUT from Mint - published to DistoDam via NATS.
