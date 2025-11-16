@@ -80,6 +80,14 @@ func main() {
 	oreReceiver := refinery.NewOreReceiver(queueMgr)
 	slog.Info("ore receiver initialized")
 
+	// NATS Subscriber: Listens for hash batches from Diggers (Phase 2)
+	natsSubscriber, err := refinery.NewNATSSubscriber(ctx, mintClient.Connection(), queueMgr)
+	if err != nil {
+		slog.Error("failed to create NATS subscriber", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("NATS subscriber initialized", "subject", "ore.batch")
+
 	// Health Handler: Comprehensive status endpoint
 	healthHandler := refinery.NewHealthHandler(queueMgr, mintClient, assembler)
 	slog.Info("health handler initialized")
@@ -95,6 +103,11 @@ func main() {
 	go func() {
 		slog.Info("starting batch sender...")
 		batchSender.Start()
+	}()
+
+	go func() {
+		slog.Info("starting NATS subscriber...")
+		natsSubscriber.Start()
 	}()
 
 	// ─────────────────────────────────────────────────────────────
@@ -136,6 +149,9 @@ func main() {
 
 	// Cancel context to stop all background workers
 	cancel()
+
+	// Stop NATS subscriber
+	natsSubscriber.Stop()
 
 	// Shutdown HTTP server with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)

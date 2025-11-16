@@ -193,6 +193,12 @@ func (mc *MintClient) IsConnected() bool {
 	return mc.conn != nil && mc.conn.IsConnected()
 }
 
+// Connection returns the underlying NATS connection for sharing with other components
+// This allows the NATSSubscriber to use the same connection as MintClient
+func (mc *MintClient) Connection() *nats.Conn {
+	return mc.conn
+}
+
 // GetStatus returns the current NATS connection status
 func (mc *MintClient) GetStatus() string {
 	if mc.conn == nil {
