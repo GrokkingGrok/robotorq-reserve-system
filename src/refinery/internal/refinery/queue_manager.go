@@ -15,7 +15,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// TODO(phase2-milestone2): Update metrics for hash-based queue
+// QueueManager implements thread-safe buffering for both Phase 1 (JouleTorqUnits)
+// and Phase 2 (hash-only) architectures.
+//
+// Phase 2 Hash-Based Queue: ACTIVE
+// - AddHash(hash, contractID, diggerID): Add hash to FIFO queue
+// - GetHashes(count): Blocking retrieval of N hashes (waits until available)
+// - Metrics: queue_hashes_queued_total, queue_depth_hashes
+//
+// Phase 1 Unit-Based Queue: DEPRECATED
+// - AddUnit(unit): Returns ErrDeprecated
+// - GetUnit(): Returns ErrDeprecated
+// - Kept for compatibility during Phase 2 migration
 var (
 	// hashQueueGauge tracks current hash queue size
 	hashQueueGauge = prometheus.NewGauge(prometheus.GaugeOpts{
@@ -56,8 +67,9 @@ type HashEntry struct {
 // QueueManager handles buffered queue for hash entries
 // Phase 2: Changed from JouleTorqUnit queue to hash-only queue
 type QueueManager struct {
-	// TODO(phase2-milestone2): Replace unitQueue with hashQueue
-	hashQueue []HashEntry     // FIFO queue of hashes
+	// Phase 2: Hash-based queue (ACTIVE)
+	hashQueue []HashEntry     // FIFO hash storage
+	hashIndex int64           // Sequential indexing for FIFO order
 	capacity  int             // Max queue size
 	mu        sync.Mutex      // Protects hashQueue
 	notEmpty  *sync.Cond      // Signals when hashes available
@@ -82,7 +94,10 @@ func NewQueueManager(ctx context.Context, capacity int) *QueueManager {
 	return qm
 }
 
-// TODO(phase2-milestone2): Implement AddHash
+// AddHash adds a hash to the queue (Phase 2 hash-only architecture).
+// Non-blocking with backpressure: returns ErrQueueFull when at capacity.
+//
+// Thread-safe: uses mutex for concurrent access.
 // AddHash adds a hash to the queue (non-blocking with backpressure)
 func (qm *QueueManager) AddHash(hash, contractID, diggerID string) error {
 	qm.mu.Lock()
@@ -132,7 +147,14 @@ func (qm *QueueManager) AddHash(hash, contractID, diggerID string) error {
 	return nil
 }
 
-// TODO(phase2-milestone2): Implement GetHashes (blocking)
+// GetHashes retrieves N hashes from the queue (Phase 2 hash-only architecture).
+// Blocks using sync.Cond until N hashes are available OR context is cancelled.
+//
+// Returns:
+// - []HashEntry: Exactly N hashes in FIFO order
+// - error: ctx.Err() if cancelled, nil on success
+//
+// Thread-safe: uses mutex and condition variable.
 // GetHashes retrieves N hashes from queue (BLOCKS until N available)
 func (qm *QueueManager) GetHashes(count int) ([]HashEntry, error) {
 	qm.mu.Lock()

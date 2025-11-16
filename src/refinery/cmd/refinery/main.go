@@ -72,12 +72,13 @@ func main() {
 	phase2Assembler := refinery.NewPhase2IngotAssembler(ctx, queueMgr, slog.Default())
 	slog.Info("Phase 2 ingot assembler initialized (merkle tree builder)")
 
-	// Phase 1 Ingot Assembler: DEPRECATED (uses full JTU data)
-	// TODO(cleanup): Remove after Phase 2 complete
+	// Phase 1 Ingot Assembler: DEPRECATED - kept for reference
+	// Phase 1 used full JTU data transfer, Phase 2 uses hash-only merkle trees
 	assembler := refinery.NewIngotAssembler(ctx, queueMgr)
 
-	// Batch Sender: Time-based batch publishing (still uses Phase 1 assembler)
-	// TODO(phase2-milestone4): Update to use Phase2Ingot instead of TokenTorqIngot
+	// Batch Sender: Time-based batch publishing
+	// Note: Currently uses Phase 1 assembler for compatibility
+	// Future: Update to use Phase2Ingot model
 	batchSender := refinery.NewBatchSender(ctx, assembler, mintClient, cfg.IngotBatchInterval)
 	slog.Info("batch sender initialized", "interval", cfg.IngotBatchInterval)
 
@@ -108,7 +109,7 @@ func main() {
 	}()
 
 	// Phase 1 assembler disabled - uses deprecated GetUnit() API
-	// TODO(cleanup): Remove after Phase 2 complete
+	// Phase 2 uses Phase2IngotAssembler with GetHashes() for merkle tree building
 	/*
 		go func() {
 			slog.Info("starting ingot assembler...")

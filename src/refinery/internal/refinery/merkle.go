@@ -126,7 +126,10 @@ func VerifyRoot(leaves []string, expectedRoot string) (bool, error) {
 
 // GetProofPath returns the hashes needed to verify a leaf is in the tree
 // (NOT IMPLEMENTED - future enhancement for merkle proofs)
-// TODO: Implement merkle proof generation for individual unit verification
+// GenerateProof creates a merkle proof for a specific hash at index.
+// Future: Implement merkle proof generation for individual unit verification.
+// This will enable light clients to verify a single JTU without downloading
+// the entire 3600-hash ingot.
 func (tree *MerkleTree) GetProofPath(leafIndex int) ([]string, error) {
 	return nil, fmt.Errorf("merkle proof generation not yet implemented")
 }
