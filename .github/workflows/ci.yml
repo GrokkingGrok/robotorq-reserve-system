@@ -116,7 +116,7 @@ jobs:
           docker compose up -d nats
           sleep 5
           cd src/digger
-          NATS_URL="nats://localhost:4222" BATCH_INTERVAL_SEC=10 cargo run --release &
+          DIGGER_ID="ci-test-digger" NATS_URL="nats://localhost:4222" BATCH_INTERVAL_SEC=10 cargo run --release &
           DIGGER_PID=$!
           sleep 15
           curl -f http://localhost:9000/health || exit 1
