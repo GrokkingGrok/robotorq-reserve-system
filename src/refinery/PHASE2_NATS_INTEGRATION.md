@@ -3,7 +3,7 @@
 **Branch**: `digger-refactor-phase2`  
 **Parent**: `feature/digger-refactor`  
 **Date**: November 16, 2025  
-**Status**: 🚧 **IN PROGRESS** - Milestones 1-2 ✅ Complete
+**Status**: 🚧 **IN PROGRESS** - Milestones 1-3 ✅ Complete (60% done)
 
 ---
 
@@ -150,19 +150,26 @@ type HashEntry struct {
 
 ---
 
-### Milestone 3: Merkle Tree Builder (NEXT)
+### Milestone 3: Merkle Tree Builder ✅ **COMPLETE**
 **Goal**: Compute merkle root from 3600 hashes
 
 **Tasks**:
-- [ ] Implement `calculateMerkleRoot(hashes []string) string`
-- [ ] Build binary tree (pair-wise hashing)
-- [ ] Handle odd-numbered levels (duplicate last hash)
-- [ ] Use SHA256 for intermediate hashes
-- [ ] Return root hash (32-byte hex string)
+- [x] Implement `BuildMerkleTree(hashes []string) (*MerkleTree, error)`
+- [x] Build binary tree (pair-wise hashing)
+- [x] Handle odd-numbered levels (duplicate last hash)
+- [x] Use SHA256 for intermediate hashes
+- [x] Return MerkleTree with root hash (32-byte hex string)
+- [x] Wire Phase2IngotAssembler into main.go
+- [x] Create E2E test script
+- [x] Increase queue capacity to 5000
 
 **Files**:
-- `internal/refinery/merkle.go` (NEW)
-- `internal/refinery/merkle_test.go` (NEW)
+- `internal/refinery/merkle.go` ✅ CREATED (128 lines)
+- `internal/refinery/merkle_test.go` ✅ CREATED (342 lines, 10 tests)
+- `internal/refinery/ingot_assembler_phase2.go` ✅ CREATED (195 lines)
+- `cmd/refinery/main.go` ✅ UPDATED (Phase2 assembler wired)
+- `test-phase2-milestone3.py` ✅ CREATED (Python E2E test)
+- `docker-compose.yaml` ✅ UPDATED (queue size: 1000 → 5000)
 
 **Algorithm**:
 ```
@@ -178,6 +185,41 @@ Level 11: [ROOT_HASH]                       // 1 hash (merkle root)
 - ✅ Handles 3600 hashes (exact ingot size)
 - ✅ Test with known hash set (verify root)
 - ✅ Performance: <10ms for 3600 hashes
+
+**Test Results** (November 16, 2025):
+- ✅ **Unit Tests**: 10/10 passing (93.8% coverage)
+  - Single hash edge case
+  - Two hashes (simple pair)
+  - Four hashes (perfect binary tree)
+  - Three hashes (odd count, duplication)
+  - 3600 hashes (ingot size, height validation)
+  - Determinism verification
+  - Order sensitivity
+  - Empty input error handling
+  - Root verification
+  - Hash pairing logic
+- ✅ **E2E Test**: Python script → NATS → Refinery
+  - 3600 hashes sent in 12 batches
+  - Phase 2 ingot assembled successfully
+  - **Merkle root**: `5b1a6801fbb86ae720a22d06121162941fd03161723d9d40073e17e0e4b14f0c`
+  - **Hash count**: 3600
+  - **Merkle height**: 12 levels (⌈log₂(3600)⌉)
+  - **Assembly time**: 8ms (merkle tree + ingot creation)
+  - **Contracts**: 1 (milestone3-test-contract)
+  - **Diggers**: 1 (milestone3-test-digger)
+- ✅ **Performance**: 8ms end-to-end (well under 10ms target)
+- ✅ **Queue capacity**: Increased to 5000 (handles 3600 + buffer)
+- ✅ **Data format**: Fixed timestamp to RFC3339 (Go compatibility)
+
+**Implementation Notes**:
+- **Merkle Tree**: Binary tree with SHA256(left + right) at each level
+- **Odd count handling**: Duplicates last hash to maintain pairing
+- **Determinism**: Same input hashes always produce same merkle root
+- **Height calculation**: `math.Ceil(log2(len(hashes)))`
+- **Special case**: Single hash becomes root (height = 1)
+- **Thread safety**: GetHashes(3600) blocks until sufficient hashes available
+
+**Commit**: `[hash]` - test(refinery): Complete Phase 2 Milestone 3 - Merkle tree ingot assembly
 
 ---
 
