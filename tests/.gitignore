@@ -1,0 +1,19 @@
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Test output files
+*.log
+*.txt
+
+# Coverage reports
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Virtual environments (if created in tests/)
+venv/
+env/
+.venv/
