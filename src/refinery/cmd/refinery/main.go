@@ -68,17 +68,31 @@ func main() {
 	defer mintClient.Close()
 	slog.Info("mint client connected", "nats_url", cfg.NatsURL)
 
-	// Ingot Assembler: Accumulates joules to 3600 threshold
+	// Phase 2 Ingot Assembler: Builds merkle trees from 3600 hashes
+	phase2Assembler := refinery.NewPhase2IngotAssembler(ctx, queueMgr, slog.Default())
+	slog.Info("Phase 2 ingot assembler initialized (merkle tree builder)")
+
+	// Phase 1 Ingot Assembler: DEPRECATED - kept for reference
+	// Phase 1 used full JTU data transfer, Phase 2 uses hash-only merkle trees
 	assembler := refinery.NewIngotAssembler(ctx, queueMgr)
-	slog.Info("ingot assembler initialized")
 
 	// Batch Sender: Time-based batch publishing
+	// Note: Currently uses Phase 1 assembler for compatibility
+	// Future: Update to use Phase2Ingot model
 	batchSender := refinery.NewBatchSender(ctx, assembler, mintClient, cfg.IngotBatchInterval)
 	slog.Info("batch sender initialized", "interval", cfg.IngotBatchInterval)
 
 	// Ore Receiver: HTTP handler for Digger submissions
 	oreReceiver := refinery.NewOreReceiver(queueMgr)
 	slog.Info("ore receiver initialized")
+
+	// NATS Subscriber: Listens for hash batches from Diggers (Phase 2)
+	natsSubscriber, err := refinery.NewNATSSubscriber(ctx, mintClient.Connection(), queueMgr)
+	if err != nil {
+		slog.Error("failed to create NATS subscriber", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("NATS subscriber initialized", "subject", "ore.batch")
 
 	// Health Handler: Comprehensive status endpoint
 	healthHandler := refinery.NewHealthHandler(queueMgr, mintClient, assembler)
@@ -87,14 +101,30 @@ func main() {
 	// ─────────────────────────────────────────────────────────────
 	// 4. Start Background Workers
 	// ─────────────────────────────────────────────────────────────
+
+	// Start Phase 2 Ingot Assembler (merkle tree builder)
 	go func() {
-		slog.Info("starting ingot assembler...")
-		assembler.Start()
+		slog.Info("starting Phase 2 ingot assembler (merkle tree builder)...")
+		phase2Assembler.Start()
 	}()
+
+	// Phase 1 assembler disabled - uses deprecated GetUnit() API
+	// Phase 2 uses Phase2IngotAssembler with GetHashes() for merkle tree building
+	/*
+		go func() {
+			slog.Info("starting ingot assembler...")
+			assembler.Start()
+		}()
+	*/
 
 	go func() {
 		slog.Info("starting batch sender...")
 		batchSender.Start()
+	}()
+
+	go func() {
+		slog.Info("starting NATS subscriber...")
+		natsSubscriber.Start()
 	}()
 
 	// ─────────────────────────────────────────────────────────────
@@ -136,6 +166,9 @@ func main() {
 
 	// Cancel context to stop all background workers
 	cancel()
+
+	// Stop NATS subscriber
+	natsSubscriber.Stop()
 
 	// Shutdown HTTP server with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)

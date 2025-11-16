@@ -570,19 +570,27 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
 
-    fn create_test_state() -> ApiState {
+    async fn create_test_state() -> ApiState {
         let config = DiggerConfig::default_test();
         let contract_manager = ContractStateManager::new();
         let storage_manager = JtuStorageManager::new(
             std::env::temp_dir().join("test_digger_api")
         ).expect("Failed to create test storage");
+        
+        // Create mock NATS client for testing
+        let nats_client = async_nats::connect("nats://localhost:4222")
+            .await
+            .unwrap_or_else(|_| {
+                // If NATS not available, tests will fail on publish but ApiState creation succeeds
+                panic!("NATS server not available for testing - start NATS or mock it")
+            });
 
-        ApiState::new(config, contract_manager, storage_manager)
+        ApiState::new(config, contract_manager, storage_manager, nats_client)
     }
 
     #[tokio::test]
     async fn test_root_endpoint() {
-        let state = create_test_state();
+        let state = create_test_state().await;
         let app = create_router(state);
 
         let response = app
@@ -595,7 +603,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_check() {
-        let state = create_test_state();
+        let state = create_test_state().await;
         let app = create_router(state);
 
         let response = app
@@ -613,7 +621,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_contract() {
-        let state = create_test_state();
+        let state = create_test_state().await;
         let app = create_router(state);
 
         let body = serde_json::json!({
