@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"b2b/mint/internal/crypto"
 	"b2b/mint/internal/models"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -31,6 +32,7 @@ type Phase3RoboTorqUnitAssembler struct {
 	logger          *slog.Logger
 	metrics         *Phase3AssemblerMetrics
 	merkleBuilder   *Level2MerkleBuilder
+	signer          *crypto.SPHINCSPlusSigner
 	unitChannel     chan *models.Phase3RoboTorqUnit
 	channelCapacity int
 }
@@ -112,13 +114,19 @@ func NewPhase3RoboTorqUnitAssembler(
 		channelCapacity = 10 // Default capacity
 	}
 
-	return &Phase3RoboTorqUnitAssembler{
+	// Initialize SPHINCS+ signer for archival signatures
+	signer := crypto.NewSPHINCSPlusSigner()
+
+	a := &Phase3RoboTorqUnitAssembler{
 		logger:          logger,
 		metrics:         metrics,
 		merkleBuilder:   merkleBuilder,
+		signer:          signer,
 		unitChannel:     make(chan *models.Phase3RoboTorqUnit, channelCapacity),
 		channelCapacity: channelCapacity,
 	}
+
+	return a
 }
 
 // Start begins assembling Phase 3 units in a background goroutine
@@ -225,6 +233,26 @@ func (a *Phase3RoboTorqUnitAssembler) assembleUnit(merkleResult *Level2MerkleRes
 	unit, err := models.NewPhase3RoboTorqUnit(merkleResult.MerkleRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create phase3 unit: %w", err)
+	}
+
+	// Sign unit with SPHINCS+ (archival security)
+	signature, publicKey, err := a.signer.SignPhase3Unit(
+		unit.UnitID,
+		unit.MerkleRoot,
+		unit.MintedAt.Format("2006-01-02T15:04:05.000000Z07:00"),
+	)
+	if err != nil {
+		a.logger.Warn("failed to sign phase3 unit (using placeholder)",
+			"error", err,
+			"unit_id", unit.UnitID)
+		// Continue without signature (development mode)
+	} else {
+		unit.Signature = signature
+		unit.PublicKey = publicKey
+		a.logger.Debug("phase3 unit signed with SPHINCS+",
+			"unit_id", unit.UnitID,
+			"signature_len", len(signature),
+			"public_key_len", len(publicKey))
 	}
 
 	// Log metadata for observability (NOT persisted to unit)

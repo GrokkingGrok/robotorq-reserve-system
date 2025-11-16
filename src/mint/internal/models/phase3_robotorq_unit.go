@@ -53,6 +53,15 @@ type Phase3RoboTorqUnit struct {
 
 	// MintedAt is when this RT unit was created
 	MintedAt time.Time `json:"minted_at"`
+
+	// Signature is the SPHINCS+ signature over (UnitID + MerkleRoot + MintedAt)
+	// SPHINCS+ chosen for archival security (stateless, paranoid, quantum-proof)
+	// ~49KB signature size (large but acceptable for long-term storage)
+	Signature string `json:"signature,omitempty"`
+
+	// PublicKey is the Mint's SPHINCS+ public key for verification
+	// Allows anyone to verify this RT unit's authenticity
+	PublicKey string `json:"public_key,omitempty"`
 }
 
 // NewPhase3RoboTorqUnit creates a new Phase 3 RT unit from merkle root
