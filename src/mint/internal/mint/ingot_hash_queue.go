@@ -117,16 +117,19 @@ func (q *IngotHashQueue) AddIngotHash(ctx context.Context, entry *models.IngotHa
 
 	// Block if queue is full (apply backpressure)
 	for len(q.entries) >= q.capacity {
+		// Check context cancellation without blocking
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			q.metrics.AddBlockedTotal.Inc()
-			q.logger.Warn("ingot hash queue full, blocking AddIngotHash",
-				"queue_size", len(q.entries),
-				"capacity", q.capacity)
-			q.notFull.Wait() // Wait for batch to be consumed
+			// Continue to wait
 		}
+
+		q.metrics.AddBlockedTotal.Inc()
+		q.logger.Warn("ingot hash queue full, blocking AddIngotHash",
+			"queue_size", len(q.entries),
+			"capacity", q.capacity)
+		q.notFull.Wait() // Wait releases lock, re-acquires when signaled
 	}
 
 	// Add entry
@@ -164,6 +167,7 @@ func (q *IngotHashQueue) GetIngotHashes(ctx context.Context) ([]*models.IngotHas
 
 	// Block until we have a full batch OR context is cancelled
 	for len(q.entries) < q.batchSize {
+		// Check context cancellation without blocking
 		select {
 		case <-ctx.Done():
 			// Graceful shutdown: return whatever we have
@@ -178,10 +182,11 @@ func (q *IngotHashQueue) GetIngotHashes(ctx context.Context) ([]*models.IngotHas
 				return remaining, nil
 			}
 			return nil, ctx.Err()
-
 		default:
-			q.notFull.Wait() // Block until batch ready
+			// Continue to wait
 		}
+
+		q.notFull.Wait() // Wait releases lock, re-acquires when signaled
 	}
 
 	// Extract exactly batchSize entries
