@@ -373,11 +373,17 @@ Network Broadcast: 32 bytes + signature (~5 KB)
 - [ ] Broadcast only RT hash + signature to network
 - [ ] Remove TotalJoules/TotalRoboStake from RoboTorqUnit
 
-### Phase 4: Cryptography (feature/post-quantum-crypto)
-- [ ] Replace placeholder signatures with real Falcon-1024 (Rust: `pqcrypto-falcon`)
-- [ ] Add SPHINCS+ for Mint archival signatures (Go: CGO bindings or native impl)
-- [ ] Implement signature verification in Refinery/Mint
-- [ ] Add slashing for invalid signatures
+### Phase 4: Cryptography (feature/phase4-crypto) ✅ COMPLETE
+- [x] Replace placeholder signatures with real Falcon-1024 (Rust: `pqcrypto-falcon`)
+- [x] Add SPHINCS+ for Mint archival signatures (Go: `github.com/open-quantum-safe/liboqs-go`)
+- [x] Implement Phase2 batch sender (Refinery → Mint via NATS)
+- [x] Fix Prometheus scraping (Mint metrics on port 9090)
+- [x] Create Grafana crypto pipeline dashboard
+- [ ] Implement signature verification in Refinery/Mint (deferred to Phase 5)
+- [ ] Add slashing for invalid signatures (deferred to Phase 5)
+
+**Status**: Core crypto implemented and flowing. Dashboard shows real-time signatures.  
+**Validation issue**: Mint rejecting Phase2Ingots (expects Phase1 format) - tracked separately.
 
 ### Phase 5: Verification & Dispute (feature/proof-chain-verify)
 - [ ] Implement merkle proof verification
