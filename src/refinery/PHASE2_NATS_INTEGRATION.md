@@ -292,6 +292,64 @@ docker logs robotorq-network-refinery-1 | Select-String "ingot assembled"
 
 ---
 
+## 🧪 Testing Status
+
+### Unit Tests - Phase 1 (DEPRECATED)
+**Status**: ⚠️ **FAILING** (Expected - using deprecated APIs)
+
+All existing `queue_manager_test.go` tests use Phase 1 APIs:
+- `AddUnit(unit *JouleTorqUnit)` → Returns `ErrDeprecated` in Phase 2
+- `GetUnit() (*JouleTorqUnit, error)` → Returns `ErrDeprecated` in Phase 2
+
+**Tests affected**:
+- `TestQueueManager_AddUnit` - Uses AddUnit()
+- `TestQueueManager_GetUnit` - Uses GetUnit()
+- `TestQueueManager_ContextCancellation` - Tests GetUnit() blocking
+- `TestQueueManager_ConcurrentAdds` - Tests AddUnit() concurrency
+- `TestQueueManager_ConcurrentAddAndGet` - Tests AddUnit/GetUnit together
+- `TestQueueManager_SizeTracking` - Uses AddUnit/GetUnit
+- `TestQueueManager_BackpressureHandling` - Tests AddUnit() backpressure
+- `BenchmarkQueueManager_AddUnit` - Benchmarks AddUnit()
+- `BenchmarkQueueManager_GetUnit` - Benchmarks GetUnit()
+
+**Tests passing**:
+- ✅ `TestQueueManager_Capacity` - Tests GetCapacity() (no deprecated API)
+- ✅ `TestQueueManager_Close` - Tests Close() (no deprecated API)
+
+**Decision**: Live with failures during Phase 2 development. These tests validate the OLD architecture (unit-based queue). Phase 2 uses **hash-only queue** with different API surface:
+- `AddHash(hash, contractID, diggerID)` - Add hash to queue
+- `GetHashes(count int) []HashEntry` - Blocking retrieval of N hashes
+
+**New tests needed** (Milestone 2 TODO):
+- `TestQueueManager_AddHash` - Single and concurrent hash adds
+- `TestQueueManager_GetHashes` - Blocking retrieval (waits for 3600)
+- `TestQueueManager_FIFOOrdering` - Verify hash order preserved
+- `TestQueueManager_CapacityLimits` - Test queue full behavior
+- `TestQueueManager_ContextCancellation` - Test graceful shutdown
+- `BenchmarkQueueManager_HashThroughput` - Performance validation
+
+### Integration Tests
+**Status**: ✅ **PASSING**
+
+Python E2E test validates complete hash flow:
+- **File**: `test-phase2-milestone1.py`
+- **Test**: NATS publisher → Refinery subscriber → queue depth verification
+- **Result**: 1000 hashes queued, backpressure working, metrics accurate
+- **Coverage**: Hash batching, NATS integration, queue manager, metrics
+
+### Mint Client Tests
+**Status**: ✅ **PASSING**
+
+All NATS publishing tests still pass:
+- `TestMintClient_PublishBatch` - Publish ingot batches to Mint
+- `TestMintClient_ConnectionRetry` - Retry logic on NATS failure
+- `TestMintClient_BatchValidation` - Validate batch before publish
+- (7 tests total - all green)
+
+**Summary**: Phase 1 unit tests are deprecated but kept as reference. Phase 2 validation relies on Python E2E tests until new Go unit tests are written. Mint client tests prove NATS publishing still works.
+
+---
+
 ## 🔮 Future Phases
 
 - **Phase 3**: Mint batch validation (verify ingot merkle trees)
