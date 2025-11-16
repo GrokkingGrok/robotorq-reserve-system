@@ -76,11 +76,12 @@ func main() {
 	// Phase 1 used full JTU data transfer, Phase 2 uses hash-only merkle trees
 	assembler := refinery.NewIngotAssembler(ctx, queueMgr)
 
-	// Batch Sender: Time-based batch publishing
-	// Note: Currently uses Phase 1 assembler for compatibility
-	// Future: Update to use Phase2Ingot model
-	batchSender := refinery.NewBatchSender(ctx, assembler, mintClient, cfg.IngotBatchInterval)
-	slog.Info("batch sender initialized", "interval", cfg.IngotBatchInterval)
+	// Phase 2 Batch Sender: Time-based batch publishing for Phase2 ingots
+	phase2BatchSender := refinery.NewPhase2BatchSender(ctx, phase2Assembler, mintClient, cfg.IngotBatchInterval)
+	slog.Info("Phase 2 batch sender initialized", "interval", cfg.IngotBatchInterval)
+
+	// Phase 1 Batch Sender: DEPRECATED - removed (not used in Phase 2)
+	// Phase 1 used full JTU data, Phase 2 uses hash-only merkle trees
 
 	// Ore Receiver: HTTP handler for Digger submissions
 	oreReceiver := refinery.NewOreReceiver(queueMgr)
@@ -108,19 +109,25 @@ func main() {
 		phase2Assembler.Start()
 	}()
 
-	// Phase 1 assembler disabled - uses deprecated GetUnit() API
-	// Phase 2 uses Phase2IngotAssembler with GetHashes() for merkle tree building
+	// Start Phase 2 Batch Sender (publishes Phase2 ingots to Mint)
+	go func() {
+		slog.Info("starting Phase 2 batch sender...")
+		phase2BatchSender.Start()
+	}()
+
+	// Phase 1 assembler and batch sender are DISABLED for Phase 2 migration
+	// Phase 1 uses deprecated GetUnit() API which is no longer populated
 	/*
 		go func() {
 			slog.Info("starting ingot assembler...")
 			assembler.Start()
 		}()
-	*/
 
-	go func() {
-		slog.Info("starting batch sender...")
-		batchSender.Start()
-	}()
+		go func() {
+			slog.Info("starting batch sender...")
+			batchSender.Start()
+		}()
+	*/
 
 	go func() {
 		slog.Info("starting NATS subscriber...")
