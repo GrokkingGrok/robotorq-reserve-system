@@ -6,12 +6,14 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod config;
 mod contract_state;
+mod crypto;
 mod http_api;
 mod jtu_hasher;
 mod jtu_storage;
 
 use config::DiggerConfig;
 use contract_state::ContractStateManager;
+use crypto::DiggerKeypair;
 use jtu_storage::JtuStorageManager;
 use http_api::{ApiState, create_router};
 
@@ -61,8 +63,13 @@ async fn main() {
     let storage_manager = JtuStorageManager::new(config.storage_path.clone())
         .expect("Failed to initialize storage manager");
 
+    // Generate Falcon-1024 keypair for signing ore batches
+    tracing::info!("🔐 Generating Falcon-1024 keypair...");
+    let keypair = DiggerKeypair::generate();
+    tracing::info!("✅ Keypair generated (public key: {} bytes)", keypair.public_key_bytes().len());
+
     // Create API state
-    let state = ApiState::new(config.clone(), contract_manager, storage_manager, nats_client);
+    let state = ApiState::new(config.clone(), contract_manager, storage_manager, nats_client, keypair);
 
     // Spawn background task for hash transmission
     let hash_sender_state = state.clone();
@@ -140,7 +147,7 @@ async fn hash_sender_task(state: ApiState, batch_interval_sec: u64) {
             }
             
             // Build NATS message (hash-only, TOON format in Phase 6)
-            let message = serde_json::json!({
+            let message_data = serde_json::json!({
                 "contract_id": contract_id,
                 "digger_id": state.config.digger_id,
                 "hashes": hashes,
@@ -148,14 +155,39 @@ async fn hash_sender_task(state: ApiState, batch_interval_sec: u64) {
                 "timestamp": chrono::Utc::now().to_rfc3339(),
             });
             
+            // Sign the batch (Phase 4: Falcon-1024)
+            // Hash the entire batch for deterministic signing
+            let batch_hash = crate::crypto::hash_ore_for_signing(
+                &contract_id,
+                &state.config.digger_id,
+                0, // milestone index (simplified for now)
+                0.0, // joules (not needed for hash batch)
+                0.0, // robo_stake (not needed for hash batch)
+                &hashes,
+                &chrono::Utc::now().to_rfc3339(),
+            );
+            
+            let signature = state.keypair.sign(&batch_hash);
+            
+            // Complete message with signature
+            let signed_message = serde_json::json!({
+                "contract_id": contract_id,
+                "digger_id": state.config.digger_id,
+                "hashes": hashes,
+                "hash_count": hashes.len(),
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "signature": hex::encode(&signature),
+                "public_key": hex::encode(state.keypair.public_key_bytes()),
+            });
+            
             // Publish to NATS
             match state.nats_client
-                .publish("ore.batch", message.to_string().into())
+                .publish("ore.batch", signed_message.to_string().into())
                 .await 
             {
                 Ok(_) => {
                     tracing::info!(
-                        "✅ Sent {} hashes for contract {} to NATS",
+                        "✅ Sent {} hashes for contract {} to NATS (signed with Falcon-1024)",
                         hashes.len(),
                         contract_id
                     );

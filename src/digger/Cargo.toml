@@ -44,8 +44,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 
-# Crypto (placeholder for now, Falcon in Phase 4)
-# pqcrypto-falcon = "0.3"
+# Post-Quantum Cryptography (Phase 4)
+pqcrypto-falcon = "0.4.1"
+pqcrypto-traits = "0.3"
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }

@@ -21,6 +21,7 @@ use tracing::{info, warn, error};
 
 use crate::config::DiggerConfig;
 use crate::contract_state::{ContractStateManager, ApprovalStatus};
+use crate::crypto::DiggerKeypair;
 use crate::jtu_storage::JtuStorageManager;
 
 // ============================================================================
@@ -33,6 +34,7 @@ pub struct ApiState {
     pub contract_manager: Arc<Mutex<ContractStateManager>>,
     pub storage_manager: Arc<Mutex<JtuStorageManager>>,
     pub nats_client: async_nats::Client,  // NATS client for hash transmission
+    pub keypair: Arc<DiggerKeypair>,      // Falcon-1024 keypair for signing
 }
 
 impl ApiState {
@@ -41,12 +43,14 @@ impl ApiState {
         contract_manager: ContractStateManager,
         storage_manager: JtuStorageManager,
         nats_client: async_nats::Client,
+        keypair: DiggerKeypair,
     ) -> Self {
         Self {
             config: Arc::new(config),
             contract_manager: Arc::new(Mutex::new(contract_manager)),
             storage_manager: Arc::new(Mutex::new(storage_manager)),
             nats_client,
+            keypair: Arc::new(keypair),
         }
     }
 }
