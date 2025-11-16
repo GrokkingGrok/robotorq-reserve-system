@@ -215,6 +215,17 @@ mod tests {
 
     #[test]
     fn test_from_env_with_defaults() {
+        // Clean up any lingering env vars from other tests
+        unsafe {
+            std::env::remove_var("DIGGER_ID");
+            std::env::remove_var("NATS_URL");
+            std::env::remove_var("HTTP_PORT");
+            std::env::remove_var("STORAGE_PATH");
+            std::env::remove_var("BATCH_INTERVAL_SEC");
+            std::env::remove_var("PRUNE_AFTER_DAYS");
+            std::env::remove_var("LOG_LEVEL");
+        }
+        
         // Only set required DIGGER_ID
         unsafe { std::env::set_var("DIGGER_ID", "minimal-digger"); }
         
