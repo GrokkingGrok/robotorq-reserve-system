@@ -52,7 +52,7 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	// Initialize components
-	components, err := initializeComponents(cfg, logger)
+	components, err := initializeComponents(ctx, cfg, logger)
 	if err != nil {
 		logger.Error("Failed to initialize components", "error", err)
 		os.Exit(1)
@@ -96,16 +96,21 @@ func main() {
 
 // Components holds all initialized service components
 type Components struct {
-	Buffer     mint.IngotBuffer
-	Aggregator mint.BatchAggregator
-	Engine     mint.MintEngine
-	Client     mint.DistoDamClient
-	Receiver   mint.IngotReceiver
-	Hasher     mint.BatchHasher
+	Buffer              mint.IngotBuffer
+	Aggregator          mint.BatchAggregator
+	Engine              mint.MintEngine
+	Client              mint.DistoDamClient
+	Receiver            mint.IngotReceiver
+	Hasher              mint.BatchHasher
+	Phase2Receiver      *mint.Phase2IngotReceiver         // Phase 3: Hash-only ingot receiver
+	IngotHashQueue      *mint.IngotHashQueue              // Phase 3 Milestone 2: 1000 ingot hash queue
+	Level2MerkleBuilder *mint.Level2MerkleBuilder         // Phase 3 Milestone 3: Merkle tree builder
+	Phase3Assembler     *mint.Phase3RoboTorqUnitAssembler // Phase 3 Milestone 4: RT unit assembler
+	Phase3Publisher     *mint.Phase3DistoDamPublisher     // Phase 3 Milestone 5: DistoDam publisher
 }
 
 // initializeComponents creates and initializes all service components
-func initializeComponents(cfg *config.Config, logger *slog.Logger) (*Components, error) {
+func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Components, error) {
 	logger.Info("Initializing components...")
 
 	// Create IngotBuffer
@@ -145,13 +150,61 @@ func initializeComponents(cfg *config.Config, logger *slog.Logger) (*Components,
 	receiver := mint.NewIngotReceiver(buffer, client.GetConnection(), cfg.HTTPPort, logger)
 	logger.Info("IngotReceiver initialized", "http_port", cfg.HTTPPort, "nats_topic", "mint.ingots")
 
+	// Create IngotHashQueue (Phase 3 Milestone 2: stores 1000 ingot hashes)
+	ingotHashQueue, err := mint.NewIngotHashQueue(2000, 1000, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create IngotHashQueue: %w", err)
+	}
+	logger.Info("IngotHashQueue initialized",
+		"capacity", 2000,
+		"batch_size", 1000)
+
+	// Create Phase2IngotReceiver (Phase 3: hash-only ingot receiver)
+	phase2Receiver, err := mint.NewPhase2IngotReceiver(client.GetConnection(), ingotHashQueue, ctx, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Phase2IngotReceiver: %w", err)
+	}
+	logger.Info("Phase2IngotReceiver initialized", "nats_topic", "mint.ingots")
+
+	// Create Level2MerkleBuilder (Phase 3 Milestone 3: builds merkle tree from 1000 ingot hashes)
+	level2MerkleBuilder := mint.NewLevel2MerkleBuilder(ingotHashQueue, logger)
+	logger.Info("Level2MerkleBuilder initialized", "batch_size", 1000)
+
+	// Create Phase3AssemblerMetrics (Phase 3 Milestone 4b: Prometheus metrics)
+	phase3Metrics := mint.NewPhase3AssemblerMetrics(nil) // TODO: Register with Prometheus registry
+	logger.Info("Phase3AssemblerMetrics initialized")
+
+	// Create Phase3RoboTorqUnitAssembler (Phase 3 Milestone 4b: RT unit assembler)
+	phase3Assembler := mint.NewPhase3RoboTorqUnitAssembler(
+		logger,
+		phase3Metrics,
+		level2MerkleBuilder,
+		10, // Channel capacity
+	)
+	logger.Info("Phase3RoboTorqUnitAssembler initialized", "channel_capacity", 10)
+
+	// Create Phase3DistoDamPublisher (Phase 3 Milestone 5a: DistoDam publisher)
+	phase3PublisherMetrics := mint.NewPhase3DistoDamPublisherMetrics(nil) // TODO: Register with Prometheus registry
+	phase3Publisher := mint.NewPhase3DistoDamPublisher(
+		client.GetConnection(),
+		phase3Assembler.GetUnitChannel(),
+		logger,
+		phase3PublisherMetrics,
+	)
+	logger.Info("Phase3DistoDamPublisher initialized", "topic", "distodam.units")
+
 	return &Components{
-		Buffer:     buffer,
-		Aggregator: aggregator,
-		Engine:     engine,
-		Client:     client,
-		Receiver:   receiver,
-		Hasher:     hasher,
+		Buffer:              buffer,
+		Aggregator:          aggregator,
+		Engine:              engine,
+		Client:              client,
+		Receiver:            receiver,
+		Hasher:              hasher,
+		Phase2Receiver:      phase2Receiver,
+		IngotHashQueue:      ingotHashQueue,
+		Level2MerkleBuilder: level2MerkleBuilder,
+		Phase3Assembler:     phase3Assembler,
+		Phase3Publisher:     phase3Publisher,
 	}, nil
 }
 
@@ -184,6 +237,21 @@ func startComponents(ctx context.Context, components *Components, errChan chan e
 		}
 	}()
 
+	// Start Phase2IngotReceiver (NATS subscriber for hash-only ingots)
+	if err := components.Phase2Receiver.Start(); err != nil {
+		return fmt.Errorf("failed to start Phase2IngotReceiver: %w", err)
+	}
+
+	// Start Phase3RoboTorqUnitAssembler (Phase 3 Milestone 4b: RT unit assembler)
+	go func() {
+		components.Phase3Assembler.Start(ctx)
+	}()
+
+	// Start Phase3DistoDamPublisher (Phase 3 Milestone 5a: DistoDam publisher)
+	go func() {
+		components.Phase3Publisher.Start(ctx)
+	}()
+
 	// Give components time to start
 	time.Sleep(100 * time.Millisecond)
 
@@ -201,6 +269,15 @@ func gracefulShutdown(ctx context.Context, components *Components, logger *slog.
 		shutdownErr = err
 	} else {
 		logger.Info("IngotReceiver stopped")
+	}
+
+	// Step 1b: Stop Phase2IngotReceiver (NATS subscriber)
+	logger.Info("Stopping Phase2IngotReceiver...")
+	if err := components.Phase2Receiver.Stop(); err != nil {
+		logger.Error("Error stopping Phase2IngotReceiver", "error", err)
+		shutdownErr = err
+	} else {
+		logger.Info("Phase2IngotReceiver stopped")
 	}
 
 	// Step 2: Flush remaining batch (triggers MintEngine)
@@ -243,6 +320,10 @@ func shutdownComponents(components *Components, logger *slog.Logger) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		components.Receiver.Shutdown(ctx)
 		cancel()
+	}
+
+	if components.Phase2Receiver != nil {
+		components.Phase2Receiver.Stop()
 	}
 
 	if components.Client != nil {

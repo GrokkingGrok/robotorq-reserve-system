@@ -307,27 +307,9 @@ Today's session completed:
 
 ---
 
-## 📝 Next Actions
-
-**Immediate**:
-- [ ] Review this status doc
-- [ ] Decide: Merge now or add crypto first?
-- [ ] Create GitHub issues for remaining TODOs
-
-**Short-term**:
-- [ ] Implement Dilithium5 (if Option B)
-- [ ] Rewrite ingot assembler (if Option C)
-- [ ] Document crypto stub warnings in README
-
 **Long-term**:
 - [ ] Proof archive for trustless verification
 - [ ] Optimize hash verification (GPU?)
 - [ ] Scale testing (1000+ concurrent Diggers)
 
----
 
-**Questions?** Check:
-- Mint: `src/mint/MINT_ARCHITECTURE.md`
-- Refinery: `src/refinery/REFINERY_ARCHITECTURE.md`
-- Digger: `src/digger-app/digger/src-tauri/TESTING_README.md`
-- E2E Test: `src/digger-app/test-digger-e2e.ps1`
