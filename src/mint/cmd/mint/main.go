@@ -106,6 +106,7 @@ type Components struct {
 	IngotHashQueue      *mint.IngotHashQueue              // Phase 3 Milestone 2: 1000 ingot hash queue
 	Level2MerkleBuilder *mint.Level2MerkleBuilder         // Phase 3 Milestone 3: Merkle tree builder
 	Phase3Assembler     *mint.Phase3RoboTorqUnitAssembler // Phase 3 Milestone 4: RT unit assembler
+	Phase3Publisher     *mint.Phase3DistoDamPublisher     // Phase 3 Milestone 5: DistoDam publisher
 }
 
 // initializeComponents creates and initializes all service components
@@ -182,6 +183,16 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 	)
 	logger.Info("Phase3RoboTorqUnitAssembler initialized", "channel_capacity", 10)
 
+	// Create Phase3DistoDamPublisher (Phase 3 Milestone 5a: DistoDam publisher)
+	phase3PublisherMetrics := mint.NewPhase3DistoDamPublisherMetrics(nil) // TODO: Register with Prometheus registry
+	phase3Publisher := mint.NewPhase3DistoDamPublisher(
+		client.GetConnection(),
+		phase3Assembler.GetUnitChannel(),
+		logger,
+		phase3PublisherMetrics,
+	)
+	logger.Info("Phase3DistoDamPublisher initialized", "topic", "distodam.units")
+
 	return &Components{
 		Buffer:              buffer,
 		Aggregator:          aggregator,
@@ -193,6 +204,7 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 		IngotHashQueue:      ingotHashQueue,
 		Level2MerkleBuilder: level2MerkleBuilder,
 		Phase3Assembler:     phase3Assembler,
+		Phase3Publisher:     phase3Publisher,
 	}, nil
 }
 
@@ -235,9 +247,10 @@ func startComponents(ctx context.Context, components *Components, errChan chan e
 		components.Phase3Assembler.Start(ctx)
 	}()
 
-	// TODO (Milestone 5): Start DistoDam publisher goroutine to consume from:
-	//   components.Phase3Assembler.GetUnitChannel()
-	// This will publish Phase3RoboTorqUnit to DistoDam via NATS
+	// Start Phase3DistoDamPublisher (Phase 3 Milestone 5a: DistoDam publisher)
+	go func() {
+		components.Phase3Publisher.Start(ctx)
+	}()
 
 	// Give components time to start
 	time.Sleep(100 * time.Millisecond)
