@@ -3,7 +3,7 @@
 **Branch**: `digger-refactor-phase2`  
 **Parent**: `feature/digger-refactor`  
 **Date**: November 16, 2025  
-**Status**: 🚧 **IN PROGRESS**
+**Status**: 🚧 **IN PROGRESS** - Milestone 1 ✅ Complete
 
 ---
 
@@ -65,29 +65,37 @@ Digger                          NATS                    Refinery
 
 ## 📋 Implementation Plan
 
-### Milestone 1: NATS Subscriber (CURRENT)
+### Milestone 1: NATS Subscriber ✅ **COMPLETE**
 **Goal**: Refinery listens to NATS and logs received hash batches
 
 **Tasks**:
-- [ ] Add NATS client to Refinery
-- [ ] Create `NATSSubscriber` component
-- [ ] Subscribe to `ore.batch` subject
-- [ ] Parse `HashBatchMessage` JSON
-- [ ] Log received batches (count, contract_id, digger_id)
+- [x] Add NATS client to Refinery
+- [x] Create `NATSSubscriber` component
+- [x] Subscribe to `ore.batch` subject
+- [x] Parse `HashBatchMessage` JSON
+- [x] Log received batches (count, contract_id, digger_id)
+- [x] E2E test: Digger → NATS → Refinery
 
 **Files**:
-- `internal/refinery/nats_subscriber.go` (NEW)
-- `cmd/refinery/main.go` (UPDATE - add NATS connection)
-- `go.mod` (UPDATE - add `github.com/nats-io/nats.go`)
+- `internal/refinery/nats_subscriber.go` ✅ CREATED (231 lines)
+- `cmd/refinery/main.go` ✅ UPDATED (added NATS subscriber)
+- `internal/refinery/mint_client.go` ✅ UPDATED (exposed Connection())
+- `test-phase2-milestone1.py` ✅ CREATED (Python E2E test)
 
-**Success Criteria**:
+**Test Results** (November 16, 2025):
 - ✅ Refinery connects to NATS on startup
-- ✅ Logs show: "received hash batch: contract_id=X, hash_count=Y"
+- ✅ Digger executes contract → generates 300 JTUs
+- ✅ Hash sender publishes 600 hashes to NATS ore.batch
+- ✅ Refinery receives 4 hash batches (600 hashes each)
+- ✅ Logs show: "received hash batch" with contract_id, digger_id, hash_count
+- ✅ Exit code: 0 (SUCCESS)
 - ✅ No errors on hash batch delivery
+
+**Commit**: `641586e` - test(phase2): Update Milestone 1 test - hash batches confirmed working
 
 ---
 
-### Milestone 2: Hash Queue Manager
+### Milestone 2: Hash Queue Manager (NEXT)
 **Goal**: Store hashes in queue (not full units)
 
 **Tasks**:
