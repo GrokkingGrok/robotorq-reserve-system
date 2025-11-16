@@ -68,11 +68,16 @@ func main() {
 	defer mintClient.Close()
 	slog.Info("mint client connected", "nats_url", cfg.NatsURL)
 
-	// Ingot Assembler: Accumulates joules to 3600 threshold
-	assembler := refinery.NewIngotAssembler(ctx, queueMgr)
-	slog.Info("ingot assembler initialized")
+	// Phase 2 Ingot Assembler: Builds merkle trees from 3600 hashes
+	phase2Assembler := refinery.NewPhase2IngotAssembler(ctx, queueMgr, slog.Default())
+	slog.Info("Phase 2 ingot assembler initialized (merkle tree builder)")
 
-	// Batch Sender: Time-based batch publishing
+	// Phase 1 Ingot Assembler: DEPRECATED (uses full JTU data)
+	// TODO(cleanup): Remove after Phase 2 complete
+	assembler := refinery.NewIngotAssembler(ctx, queueMgr)
+
+	// Batch Sender: Time-based batch publishing (still uses Phase 1 assembler)
+	// TODO(phase2-milestone4): Update to use Phase2Ingot instead of TokenTorqIngot
 	batchSender := refinery.NewBatchSender(ctx, assembler, mintClient, cfg.IngotBatchInterval)
 	slog.Info("batch sender initialized", "interval", cfg.IngotBatchInterval)
 
@@ -96,16 +101,20 @@ func main() {
 	// 4. Start Background Workers
 	// ─────────────────────────────────────────────────────────────
 
-	// TODO(phase2-milestone3): Re-enable with hash-based merkle tree logic
-	// Temporarily disabled - IngotAssembler uses GetUnit() which is deprecated
-	// Milestone 3 will rebuild this to use GetHashes(3600) and merkle trees
+	// Start Phase 2 Ingot Assembler (merkle tree builder)
+	go func() {
+		slog.Info("starting Phase 2 ingot assembler (merkle tree builder)...")
+		phase2Assembler.Start()
+	}()
+
+	// Phase 1 assembler disabled - uses deprecated GetUnit() API
+	// TODO(cleanup): Remove after Phase 2 complete
 	/*
 		go func() {
 			slog.Info("starting ingot assembler...")
 			assembler.Start()
 		}()
 	*/
-	slog.Info("ingot assembler DISABLED - waiting for Milestone 3 (merkle tree)")
 
 	go func() {
 		slog.Info("starting batch sender...")
