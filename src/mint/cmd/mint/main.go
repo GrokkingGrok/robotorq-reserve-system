@@ -52,7 +52,7 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	// Initialize components
-	components, err := initializeComponents(cfg, logger)
+	components, err := initializeComponents(ctx, cfg, logger)
 	if err != nil {
 		logger.Error("Failed to initialize components", "error", err)
 		os.Exit(1)
@@ -106,7 +106,7 @@ type Components struct {
 }
 
 // initializeComponents creates and initializes all service components
-func initializeComponents(cfg *config.Config, logger *slog.Logger) (*Components, error) {
+func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Components, error) {
 	logger.Info("Initializing components...")
 
 	// Create IngotBuffer
@@ -146,9 +146,17 @@ func initializeComponents(cfg *config.Config, logger *slog.Logger) (*Components,
 	receiver := mint.NewIngotReceiver(buffer, client.GetConnection(), cfg.HTTPPort, logger)
 	logger.Info("IngotReceiver initialized", "http_port", cfg.HTTPPort, "nats_topic", "mint.ingots")
 
+	// Create IngotHashQueue (Phase 3 Milestone 2: stores 1000 ingot hashes)
+	ingotHashQueue, err := mint.NewIngotHashQueue(2000, 1000, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create IngotHashQueue: %w", err)
+	}
+	logger.Info("IngotHashQueue initialized",
+		"capacity", 2000,
+		"batch_size", 1000)
+
 	// Create Phase2IngotReceiver (Phase 3: hash-only ingot receiver)
-	// TODO Milestone 2: Pass IngotHashQueue once implemented
-	phase2Receiver, err := mint.NewPhase2IngotReceiver(client.GetConnection(), logger)
+	phase2Receiver, err := mint.NewPhase2IngotReceiver(client.GetConnection(), ingotHashQueue, ctx, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Phase2IngotReceiver: %w", err)
 	}

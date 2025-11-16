@@ -2,6 +2,7 @@
 package mint
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -18,6 +19,7 @@ import (
 // TestNewPhase2IngotReceiver tests receiver creation
 func TestNewPhase2IngotReceiver(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	ctx := context.Background()
 
 	// Connect to NATS (requires NATS running)
 	nc, err := nats.Connect("nats://localhost:4222")
@@ -26,28 +28,36 @@ func TestNewPhase2IngotReceiver(t *testing.T) {
 	}
 	defer nc.Close()
 
-	receiver, err := NewPhase2IngotReceiver(nc, logger)
+	// Create queue
+	queue, err := NewIngotHashQueue(2000, 1000, logger)
+	require.NoError(t, err)
+
+	receiver, err := NewPhase2IngotReceiver(nc, queue, ctx, logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, receiver)
 	assert.NotNil(t, receiver.metrics)
 	assert.NotNil(t, receiver.natsConn)
+	assert.NotNil(t, receiver.queue)
 }
 
 // TestNewPhase2IngotReceiver_NilConnection tests error handling
 func TestNewPhase2IngotReceiver_NilConnection(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	ctx := context.Background()
+	queue, _ := NewIngotHashQueue(2000, 1000, logger)
 
-	receiver, err := NewPhase2IngotReceiver(nil, logger)
+	receiver, err := NewPhase2IngotReceiver(nil, queue, ctx, logger)
 
 	assert.Error(t, err)
 	assert.Nil(t, receiver)
 	assert.Contains(t, err.Error(), "NATS connection cannot be nil")
 }
 
-// TestPhase2IngotReceiver_StartStop tests subscription lifecycle
-func TestPhase2IngotReceiver_StartStop(t *testing.T) {
+// TestNewPhase2IngotReceiver_NilQueue tests queue validation
+func TestNewPhase2IngotReceiver_NilQueue(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	ctx := context.Background()
 
 	nc, err := nats.Connect("nats://localhost:4222")
 	if err != nil {
@@ -55,7 +65,28 @@ func TestPhase2IngotReceiver_StartStop(t *testing.T) {
 	}
 	defer nc.Close()
 
-	receiver, err := NewPhase2IngotReceiver(nc, logger)
+	receiver, err := NewPhase2IngotReceiver(nc, nil, ctx, logger)
+
+	assert.Error(t, err)
+	assert.Nil(t, receiver)
+	assert.Contains(t, err.Error(), "IngotHashQueue cannot be nil")
+}
+
+// TestPhase2IngotReceiver_StartStop tests subscription lifecycle
+func TestPhase2IngotReceiver_StartStop(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	ctx := context.Background()
+
+	nc, err := nats.Connect("nats://localhost:4222")
+	if err != nil {
+		t.Skip("NATS not available, skipping test")
+	}
+	defer nc.Close()
+
+	queue, err := NewIngotHashQueue(2000, 1000, logger)
+	require.NoError(t, err)
+
+	receiver, err := NewPhase2IngotReceiver(nc, queue, ctx, logger)
 	require.NoError(t, err)
 
 	// Start receiver
@@ -71,6 +102,7 @@ func TestPhase2IngotReceiver_StartStop(t *testing.T) {
 // TestPhase2IngotReceiver_ValidIngot tests receiving valid ingot
 func TestPhase2IngotReceiver_ValidIngot(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	ctx := context.Background()
 
 	nc, err := nats.Connect("nats://localhost:4222")
 	if err != nil {
@@ -78,7 +110,10 @@ func TestPhase2IngotReceiver_ValidIngot(t *testing.T) {
 	}
 	defer nc.Close()
 
-	receiver, err := NewPhase2IngotReceiver(nc, logger)
+	queue, err := NewIngotHashQueue(2000, 1000, logger)
+	require.NoError(t, err)
+
+	receiver, err := NewPhase2IngotReceiver(nc, queue, ctx, logger)
 	require.NoError(t, err)
 
 	err = receiver.Start()
@@ -114,6 +149,7 @@ func TestPhase2IngotReceiver_ValidIngot(t *testing.T) {
 // TestPhase2IngotReceiver_InvalidJSON tests unmarshal error handling
 func TestPhase2IngotReceiver_InvalidJSON(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	ctx := context.Background()
 
 	nc, err := nats.Connect("nats://localhost:4222")
 	if err != nil {
@@ -121,7 +157,10 @@ func TestPhase2IngotReceiver_InvalidJSON(t *testing.T) {
 	}
 	defer nc.Close()
 
-	receiver, err := NewPhase2IngotReceiver(nc, logger)
+	queue, err := NewIngotHashQueue(2000, 1000, logger)
+	require.NoError(t, err)
+
+	receiver, err := NewPhase2IngotReceiver(nc, queue, ctx, logger)
 	require.NoError(t, err)
 
 	err = receiver.Start()
@@ -143,6 +182,7 @@ func TestPhase2IngotReceiver_InvalidJSON(t *testing.T) {
 // TestPhase2IngotReceiver_InvalidIngot tests validation error handling
 func TestPhase2IngotReceiver_InvalidIngot(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	ctx := context.Background()
 
 	nc, err := nats.Connect("nats://localhost:4222")
 	if err != nil {
@@ -150,7 +190,10 @@ func TestPhase2IngotReceiver_InvalidIngot(t *testing.T) {
 	}
 	defer nc.Close()
 
-	receiver, err := NewPhase2IngotReceiver(nc, logger)
+	queue, err := NewIngotHashQueue(2000, 1000, logger)
+	require.NoError(t, err)
+
+	receiver, err := NewPhase2IngotReceiver(nc, queue, ctx, logger)
 	require.NoError(t, err)
 
 	err = receiver.Start()

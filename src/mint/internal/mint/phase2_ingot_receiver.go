@@ -4,6 +4,7 @@
 package mint
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -19,7 +20,8 @@ import (
 type Phase2IngotReceiver struct {
 	natsConn     *nats.Conn
 	subscription *nats.Subscription
-	queue        IngotHashQueue // Will be created in Milestone 2
+	queue        *IngotHashQueue
+	ctx          context.Context
 	logger       *slog.Logger
 	metrics      *Phase2IngotMetrics
 }
@@ -64,19 +66,22 @@ func NewPhase2IngotMetrics() *Phase2IngotMetrics {
 }
 
 // NewPhase2IngotReceiver creates a new Phase2IngotReceiver
-// Note: queue parameter will be added in Milestone 2
-func NewPhase2IngotReceiver(nc *nats.Conn, logger *slog.Logger) (*Phase2IngotReceiver, error) {
+func NewPhase2IngotReceiver(nc *nats.Conn, queue *IngotHashQueue, ctx context.Context, logger *slog.Logger) (*Phase2IngotReceiver, error) {
 	if nc == nil {
 		return nil, fmt.Errorf("NATS connection cannot be nil")
+	}
+	if queue == nil {
+		return nil, fmt.Errorf("IngotHashQueue cannot be nil")
 	}
 
 	metrics := NewPhase2IngotMetrics()
 
 	return &Phase2IngotReceiver{
 		natsConn: nc,
+		queue:    queue,
+		ctx:      ctx,
 		logger:   logger,
 		metrics:  metrics,
-		// queue will be added in Milestone 2
 	}, nil
 }
 
@@ -121,12 +126,16 @@ func (pir *Phase2IngotReceiver) handleIngot(msg *nats.Msg) {
 	// Record hash count distribution
 	pir.metrics.IngotHashCountHist.Observe(float64(ingot.HashCount))
 
-	// TODO Milestone 2: Add to queue
-	// if err := pir.queue.AddIngotHash(ingot.BranchHash, &ingot); err != nil {
-	//     pir.logger.Error("failed to queue ingot hash", "error", err, "ingot_id", ingot.ID)
-	//     pir.metrics.QueueErrors.Inc()
-	//     return
-	// }
+	// Convert to IngotHashEntry and add to queue
+	hashEntry := models.NewIngotHashEntry(&ingot)
+	if err := pir.queue.AddIngotHash(pir.ctx, hashEntry); err != nil {
+		pir.logger.Error("failed to queue ingot hash",
+			"error", err,
+			"ingot_id", ingot.ID,
+			"branch_hash", truncateHash(ingot.BranchHash))
+		pir.metrics.QueueErrors.Inc()
+		return
+	}
 
 	// Success
 	pir.metrics.IngotsReceived.Inc()
@@ -135,7 +144,8 @@ func (pir *Phase2IngotReceiver) handleIngot(msg *nats.Msg) {
 		"branch_hash", truncateHash(ingot.BranchHash),
 		"hash_count", ingot.HashCount,
 		"contracts", len(ingot.ContractIDs),
-		"diggers", len(ingot.DiggerIDs))
+		"diggers", len(ingot.DiggerIDs),
+		"queue_depth", pir.queue.Len())
 }
 
 // Stop unsubscribes from NATS and stops receiving ingots
@@ -155,13 +165,4 @@ func truncateHash(hash string) string {
 		return hash[:16] + "..."
 	}
 	return hash
-}
-
-// IngotHashQueue interface placeholder - will be implemented in Milestone 2
-type IngotHashQueue interface {
-	// AddIngotHash adds an ingot hash to the queue
-	// AddIngotHash(hash string, ingot *models.Phase2Ingot) error
-
-	// Len returns current queue depth
-	// Len() int
 }
