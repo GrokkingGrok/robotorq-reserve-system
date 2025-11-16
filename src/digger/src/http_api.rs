@@ -288,6 +288,12 @@ pub async fn pay_stake(
 /// Generates JTUs for the specified duration.
 /// Uses cross product: JTU/sec = (tokens/sec) × (watts)
 ///
+/// TODO(phase-4-crypto): Add robot identity to JTU generation!
+/// - Currently NOT passing digger_id to JTUs (they exist but unused!)
+/// - Need to track which robot(s) generated which JTUs
+/// - Must support multi-robot contracts
+/// - Each JTU must be cryptographically signed by generating robot
+///
 /// Example:
 ///   POST /contracts/execute
 ///   {
@@ -340,6 +346,15 @@ pub async fn execute_contract(
     let tokens_per_sec = 1.0;
     let jtus_per_sec = (tokens_per_sec * contract.power_watts) as i64;
     let jtus_generated = jtus_per_sec * req.duration_seconds as i64;
+    
+    // TODO(phase-4-crypto): Actually CREATE and STORE JTUs here!
+    // - Currently just incrementing counters (no real JTUs!)
+    // - Must call jtu_storage.insert_batch() with real JTUs
+    // - Each JTU must include:
+    //   * digger_id (from config or robot registry)
+    //   * Falcon-1024 signature
+    //   * SHA256 hash of all fields
+    // - Must distribute ore_value across robots proportionally
     
     // Calculate ore value (simplified: 1 JTU = 1 unit of ore value)
     // In real implementation, this would be based on joules and conversion rate

@@ -39,6 +39,12 @@ pub enum ApprovalStatus {
 pub struct ContractState {
     pub contract_id: String,
     
+    // TODO(phase-4-crypto): Add robot identity tracking
+    // - robot_ids: Vec<String>  // Support multi-robot contracts
+    // - robot_contributions: HashMap<String, f64>  // Track ore per robot
+    // - Needed for: accountability, multi-robot coordination, dispute resolution
+    // - Must cross-check robot_id against robot registry (verify power_watts)
+    
     // Economics (CORRECT formula: Ore Target = Torq × RoboStake)
     pub torq: f64,                     // Selling price (goes to citizens)
     pub robo_stake: f64,               // Robot payment (goes to DistoDam Reserve)
@@ -56,6 +62,9 @@ pub struct ContractState {
     
     // Robot specs
     pub power_watts: f64,              // Robot's power (for cross product)
+    // TODO(phase-4-crypto): Replace with robot registry lookup
+    // - power_watts should come from robot_id → registry query
+    // - Each robot in robot_ids has its own power spec
     
     // Timestamps
     pub created_at: i64,               // Contract creation timestamp

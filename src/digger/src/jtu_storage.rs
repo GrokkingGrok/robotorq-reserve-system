@@ -12,8 +12,16 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JouleTorqUnit {
     pub hash: String,              // SHA256 hash (32 bytes, 64 hex chars)
-    pub signature: Vec<u8>,        // Placeholder (64 bytes) or Falcon-1024 (1280 bytes)
-    pub digger_id: String,         // Who did the work
+    pub signature: Vec<u8>,        // TODO(phase-4-crypto): Replace with Falcon-1024!
+                                   // - Currently 64-byte placeholder
+                                   // - Must be 1280 bytes for Falcon-1024
+                                   // - Must be signed by robot's private key
+                                   // - Proves robot identity and work authenticity
+    pub digger_id: String,         // TODO(phase-4-crypto): Wire this up!
+                                   // - Currently unused (not passed from API!)
+                                   // - Must come from robot registry
+                                   // - Critical for multi-robot contracts
+                                   // - Enables accountability and dispute resolution
     pub contract_id: String,       // Which contract
     pub token_index: i64,          // Token number within milestone
     pub milestone_index: i64,      // Milestone number
