@@ -15,6 +15,8 @@ use sha2::{Sha256, Digest};
 /// 
 /// # Example
 /// ```
+/// use digger::jtu_hasher::calculate_jtu_hash;
+/// 
 /// let hash = calculate_jtu_hash(
 ///     "contract-001-m0-t42",
 ///     4.17,      // joules
