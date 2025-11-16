@@ -95,10 +95,17 @@ func main() {
 	// ─────────────────────────────────────────────────────────────
 	// 4. Start Background Workers
 	// ─────────────────────────────────────────────────────────────
-	go func() {
-		slog.Info("starting ingot assembler...")
-		assembler.Start()
-	}()
+
+	// TODO(phase2-milestone3): Re-enable with hash-based merkle tree logic
+	// Temporarily disabled - IngotAssembler uses GetUnit() which is deprecated
+	// Milestone 3 will rebuild this to use GetHashes(3600) and merkle trees
+	/*
+		go func() {
+			slog.Info("starting ingot assembler...")
+			assembler.Start()
+		}()
+	*/
+	slog.Info("ingot assembler DISABLED - waiting for Milestone 3 (merkle tree)")
 
 	go func() {
 		slog.Info("starting batch sender...")

@@ -27,4 +27,5 @@ var (
 	ErrQueueFull         = errors.New("queue is full, cannot accept more items")
 	ErrQueueEmpty        = errors.New("queue is empty, no items to consume")
 	ErrQueueShuttingDown = errors.New("queue is shutting down")
+	ErrDeprecated        = errors.New("deprecated method called - use Phase 2 hash-based API")
 )

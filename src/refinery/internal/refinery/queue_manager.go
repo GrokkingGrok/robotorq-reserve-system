@@ -1,5 +1,6 @@
 // internal/refinery/queue_manager.go
-// Manages joule and RoboStake queues with thread-safe operations
+// Manages hash queue with thread-safe operations
+// Phase 2: Hash-only storage (NO full JTU data)
 
 package refinery
 
@@ -7,121 +8,212 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"b2b/refinery/internal/models"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// TODO(phase2-milestone2): Update metrics for hash-based queue
 var (
-	// unitQueueGauge tracks current JouleTorqUnit queue size
-	unitQueueGauge = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "refinery_unit_queue_size",
-		Help: "Current number of JouleTorqUnits in the queue",
+	// hashQueueGauge tracks current hash queue size
+	hashQueueGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "refinery_hash_queue_size",
+		Help: "Current number of hashes in the queue",
 	})
 
-	// unitsQueuedTotal tracks total units added to queue
-	unitsQueuedTotal = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "refinery_units_queued_total",
-		Help: "Total JouleTorqUnits queued for processing",
+	// hashesQueuedTotal tracks total hashes added to queue
+	hashesQueuedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "refinery_hashes_queued_total",
+		Help: "Total hashes queued for ingot assembly",
 	})
 
-	// joulesQueuedTotal tracks cumulative joules queued
-	joulesQueuedTotal = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "refinery_joules_queued_total",
-		Help: "Total joules from queued units",
+	// hashesDequeuedTotal tracks total hashes consumed
+	hashesDequeuedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "refinery_hashes_dequeued_total",
+		Help: "Total hashes dequeued for merkle tree building",
 	})
 )
 
 func init() {
 	// Register Prometheus metrics
-	prometheus.MustRegister(unitQueueGauge)
-	prometheus.MustRegister(unitsQueuedTotal)
-	prometheus.MustRegister(joulesQueuedTotal)
+	prometheus.MustRegister(hashQueueGauge)
+	prometheus.MustRegister(hashesQueuedTotal)
+	prometheus.MustRegister(hashesDequeuedTotal)
 }
 
-// QueueManager handles buffered queue for JouleTorqUnits
+// HashEntry represents a single hash in the queue
+// Phase 2: Store hashes only, NOT full JTU data (98% bandwidth reduction)
+type HashEntry struct {
+	Hash       string    `json:"hash"`        // 32-byte hex SHA256 hash of JTU
+	ContractID string    `json:"contract_id"` // Which contract generated this hash
+	DiggerID   string    `json:"digger_id"`   // Which Digger sent this hash
+	Timestamp  time.Time `json:"timestamp"`   // When hash was received
+	Index      int64     `json:"index"`       // Sequential index in queue (for FIFO ordering)
+}
+
+// QueueManager handles buffered queue for hash entries
+// Phase 2: Changed from JouleTorqUnit queue to hash-only queue
 type QueueManager struct {
-	unitQueue chan *models.JouleTorqUnit
-	ctx       context.Context
-	mu        sync.RWMutex
+	// TODO(phase2-milestone2): Replace unitQueue with hashQueue
+	hashQueue []HashEntry     // FIFO queue of hashes
+	capacity  int             // Max queue size
+	mu        sync.Mutex      // Protects hashQueue
+	notEmpty  *sync.Cond      // Signals when hashes available
+	ctx       context.Context // Graceful shutdown support
+	nextIndex int64           // Auto-incrementing index for FIFO
 }
 
-// NewQueueManager creates a new queue manager with specified capacity
+// NewQueueManager creates a new hash-based queue manager
 func NewQueueManager(ctx context.Context, capacity int) *QueueManager {
 	slog.Info("initializing queue manager",
-		"unit_capacity", capacity,
+		"hash_capacity", capacity,
 	)
 
-	return &QueueManager{
-		unitQueue: make(chan *models.JouleTorqUnit, capacity),
+	qm := &QueueManager{
+		hashQueue: make([]HashEntry, 0, capacity),
+		capacity:  capacity,
 		ctx:       ctx,
+		nextIndex: 0,
 	}
+	qm.notEmpty = sync.NewCond(&qm.mu)
+
+	return qm
 }
 
-// AddUnit adds a JouleTorqUnit to the queue (non-blocking with backpressure)
-func (qm *QueueManager) AddUnit(unit *models.JouleTorqUnit) error {
+// TODO(phase2-milestone2): Implement AddHash
+// AddHash adds a hash to the queue (non-blocking with backpressure)
+func (qm *QueueManager) AddHash(hash, contractID, diggerID string) error {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+
+	// Check if shutting down
 	select {
-	case qm.unitQueue <- unit:
-		// Update metrics
-		unitsQueuedTotal.Inc()
-		joulesQueuedTotal.Add(unit.JoulesConsumed)
-		unitQueueGauge.Set(float64(len(qm.unitQueue)))
-
-		slog.Debug("unit added to queue",
-			"contract", unit.ContractID,
-			"token_id", unit.TokenID,
-			"joules", unit.JoulesConsumed,
-			"queue_size", len(qm.unitQueue),
-		)
-		return nil
-
 	case <-qm.ctx.Done():
 		return models.ErrQueueShuttingDown
-
 	default:
-		// Queue is full, reject with backpressure
-		slog.Warn("unit queue full, rejecting item",
-			"contract", unit.ContractID,
-			"token_id", unit.TokenID,
-			"queue_size", len(qm.unitQueue),
+	}
+
+	// Check capacity
+	if len(qm.hashQueue) >= qm.capacity {
+		slog.Warn("hash queue full, rejecting item",
+			"contract", contractID,
+			"queue_size", len(qm.hashQueue),
 		)
 		return models.ErrQueueFull
 	}
+
+	// Add hash entry
+	entry := HashEntry{
+		Hash:       hash,
+		ContractID: contractID,
+		DiggerID:   diggerID,
+		Timestamp:  time.Now(),
+		Index:      qm.nextIndex,
+	}
+	qm.nextIndex++
+
+	qm.hashQueue = append(qm.hashQueue, entry)
+
+	// Update metrics
+	hashesQueuedTotal.Inc()
+	hashQueueGauge.Set(float64(len(qm.hashQueue)))
+
+	// Signal waiting consumers
+	qm.notEmpty.Signal()
+
+	slog.Debug("hash added to queue",
+		"contract", contractID,
+		"digger", diggerID,
+		"queue_size", len(qm.hashQueue),
+	)
+
+	return nil
 }
 
-// GetUnit retrieves a JouleTorqUnit from the queue (blocking until available)
-func (qm *QueueManager) GetUnit() (*models.JouleTorqUnit, error) {
-	select {
-	case unit := <-qm.unitQueue:
-		unitQueueGauge.Set(float64(len(qm.unitQueue)))
-		return unit, nil
-	case <-qm.ctx.Done():
-		return nil, models.ErrQueueEmpty
+// TODO(phase2-milestone2): Implement GetHashes (blocking)
+// GetHashes retrieves N hashes from queue (BLOCKS until N available)
+func (qm *QueueManager) GetHashes(count int) ([]HashEntry, error) {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+
+	// Wait until we have enough hashes OR context cancelled
+	for len(qm.hashQueue) < count {
+		select {
+		case <-qm.ctx.Done():
+			// Shutting down - return what we have
+			if len(qm.hashQueue) > 0 {
+				slog.Warn("queue shutting down, returning partial batch",
+					"requested", count,
+					"available", len(qm.hashQueue),
+				)
+				hashes := make([]HashEntry, len(qm.hashQueue))
+				copy(hashes, qm.hashQueue)
+				qm.hashQueue = qm.hashQueue[:0]
+				return hashes, models.ErrQueueShuttingDown
+			}
+			return nil, models.ErrQueueEmpty
+
+		default:
+			// Wait for more hashes
+			qm.notEmpty.Wait()
+		}
 	}
+
+	// Extract first N hashes (FIFO)
+	hashes := make([]HashEntry, count)
+	copy(hashes, qm.hashQueue[:count])
+	qm.hashQueue = qm.hashQueue[count:]
+
+	// Update metrics
+	hashesDequeuedTotal.Add(float64(count))
+	hashQueueGauge.Set(float64(len(qm.hashQueue)))
+
+	slog.Info("hashes dequeued from queue",
+		"count", count,
+		"remaining", len(qm.hashQueue),
+	)
+
+	return hashes, nil
 }
 
 // GetQueueSize returns current queue size (thread-safe)
 func (qm *QueueManager) GetQueueSize() int {
-	qm.mu.RLock()
-	defer qm.mu.RUnlock()
-	return len(qm.unitQueue)
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+	return len(qm.hashQueue)
 }
 
 // GetCapacity returns the total capacity of the queue
 func (qm *QueueManager) GetCapacity() int {
-	return cap(qm.unitQueue)
+	return qm.capacity
 }
 
 // Close gracefully shuts down the queue manager
 func (qm *QueueManager) Close() {
 	slog.Info("closing queue manager",
-		"units_remaining", len(qm.unitQueue),
+		"hashes_remaining", len(qm.hashQueue),
 	)
 
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
 
-	// Close channel to signal no more items will be added
-	close(qm.unitQueue)
+	// Broadcast to all waiting consumers
+	qm.notEmpty.Broadcast()
+}
+
+// DEPRECATED: Old unit-based methods (will be removed after Phase 2 complete)
+// AddUnit - NO LONGER USED in Phase 2
+func (qm *QueueManager) AddUnit(unit *models.JouleTorqUnit) error {
+	slog.Error("AddUnit called but Phase 2 uses hash-only queue",
+		"contract", unit.ContractID,
+	)
+	return models.ErrDeprecated
+}
+
+// GetUnit - NO LONGER USED in Phase 2
+func (qm *QueueManager) GetUnit() (*models.JouleTorqUnit, error) {
+	slog.Error("GetUnit called but Phase 2 uses hash-only queue")
+	return nil, models.ErrDeprecated
 }

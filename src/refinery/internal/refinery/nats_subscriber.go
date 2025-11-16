@@ -171,24 +171,30 @@ func (ns *NATSSubscriber) handleHashBatch(msg *nats.Msg) {
 	ns.metrics.BatchesReceivedTotal.Inc()
 	ns.metrics.HashesReceivedTotal.Add(float64(batch.HashCount))
 	ns.metrics.LastBatchHashCount.Set(float64(batch.HashCount))
-	// TODO: Parse timestamp and set LastBatchTimestamp
 
-	// Add hashes to queue
-	for i, hash := range batch.Hashes {
-		// TODO(phase2-milestone2): Update QueueManager.AddHash() to accept hash entries
-		// For now, just log (queue manager still expects units)
-		if i == 0 || i == len(batch.Hashes)-1 {
-			ns.logger.Debug("processing hash",
-				"index", i,
-				"hash", hash[:16]+"...", // Log first 16 chars
+	// Add hashes to queue (Phase 2 Milestone 2)
+	hashesQueued := 0
+	for _, hash := range batch.Hashes {
+		err := ns.queueMgr.AddHash(hash, batch.ContractID, batch.DiggerID)
+		if err != nil {
+			ns.logger.Error("failed to queue hash",
+				"error", err,
 				"contract_id", batch.ContractID,
+				"digger_id", batch.DiggerID,
+				"hash", hash[:16]+"...",
 			)
+			// Continue processing other hashes even if one fails
+			continue
 		}
+		hashesQueued++
 	}
 
 	ns.logger.Info("hash batch processed",
 		"contract_id", batch.ContractID,
-		"hashes_queued", len(batch.Hashes),
+		"digger_id", batch.DiggerID,
+		"hashes_received", len(batch.Hashes),
+		"hashes_queued", hashesQueued,
+		"queue_size", ns.queueMgr.GetQueueSize(),
 	)
 }
 
