@@ -96,12 +96,13 @@ func main() {
 
 // Components holds all initialized service components
 type Components struct {
-	Buffer     mint.IngotBuffer
-	Aggregator mint.BatchAggregator
-	Engine     mint.MintEngine
-	Client     mint.DistoDamClient
-	Receiver   mint.IngotReceiver
-	Hasher     mint.BatchHasher
+	Buffer         mint.IngotBuffer
+	Aggregator     mint.BatchAggregator
+	Engine         mint.MintEngine
+	Client         mint.DistoDamClient
+	Receiver       mint.IngotReceiver
+	Hasher         mint.BatchHasher
+	Phase2Receiver *mint.Phase2IngotReceiver // Phase 3: Hash-only ingot receiver
 }
 
 // initializeComponents creates and initializes all service components
@@ -145,13 +146,22 @@ func initializeComponents(cfg *config.Config, logger *slog.Logger) (*Components,
 	receiver := mint.NewIngotReceiver(buffer, client.GetConnection(), cfg.HTTPPort, logger)
 	logger.Info("IngotReceiver initialized", "http_port", cfg.HTTPPort, "nats_topic", "mint.ingots")
 
+	// Create Phase2IngotReceiver (Phase 3: hash-only ingot receiver)
+	// TODO Milestone 2: Pass IngotHashQueue once implemented
+	phase2Receiver, err := mint.NewPhase2IngotReceiver(client.GetConnection(), logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Phase2IngotReceiver: %w", err)
+	}
+	logger.Info("Phase2IngotReceiver initialized", "nats_topic", "mint.ingots")
+
 	return &Components{
-		Buffer:     buffer,
-		Aggregator: aggregator,
-		Engine:     engine,
-		Client:     client,
-		Receiver:   receiver,
-		Hasher:     hasher,
+		Buffer:         buffer,
+		Aggregator:     aggregator,
+		Engine:         engine,
+		Client:         client,
+		Receiver:       receiver,
+		Hasher:         hasher,
+		Phase2Receiver: phase2Receiver,
 	}, nil
 }
 
@@ -184,6 +194,11 @@ func startComponents(ctx context.Context, components *Components, errChan chan e
 		}
 	}()
 
+	// Start Phase2IngotReceiver (NATS subscriber for hash-only ingots)
+	if err := components.Phase2Receiver.Start(); err != nil {
+		return fmt.Errorf("failed to start Phase2IngotReceiver: %w", err)
+	}
+
 	// Give components time to start
 	time.Sleep(100 * time.Millisecond)
 
@@ -201,6 +216,15 @@ func gracefulShutdown(ctx context.Context, components *Components, logger *slog.
 		shutdownErr = err
 	} else {
 		logger.Info("IngotReceiver stopped")
+	}
+
+	// Step 1b: Stop Phase2IngotReceiver (NATS subscriber)
+	logger.Info("Stopping Phase2IngotReceiver...")
+	if err := components.Phase2Receiver.Stop(); err != nil {
+		logger.Error("Error stopping Phase2IngotReceiver", "error", err)
+		shutdownErr = err
+	} else {
+		logger.Info("Phase2IngotReceiver stopped")
 	}
 
 	// Step 2: Flush remaining batch (triggers MintEngine)
@@ -243,6 +267,10 @@ func shutdownComponents(components *Components, logger *slog.Logger) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		components.Receiver.Shutdown(ctx)
 		cancel()
+	}
+
+	if components.Phase2Receiver != nil {
+		components.Phase2Receiver.Stop()
 	}
 
 	if components.Client != nil {
