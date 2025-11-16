@@ -3,6 +3,18 @@ global:
   evaluation_interval: 5s
 
 scrape_configs:
+  # ─── Scrape Mint ────────────────────────────────
+  - job_name: 'mint'
+    static_configs:
+      - targets: ['mint:8081']
+    metrics_path: /metrics
+
+  # ─── Scrape Refinery ────────────────────────────
+  - job_name: 'refinery'
+    static_configs:
+      - targets: ['refinery:8082']
+    metrics_path: /metrics
+
   # ─── Scrape DistoDam ────────────────────────────
   - job_name: 'distodam'
     static_configs:
@@ -19,3 +31,4 @@ scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+

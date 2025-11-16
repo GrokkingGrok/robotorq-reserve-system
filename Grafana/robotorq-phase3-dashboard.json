@@ -1,0 +1,392 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "RoboTorq Phase 3 Proof Chain Observability",
+    "tags": ["robotorq", "phase3", "proof-chain", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 2,
+    "refresh": "5s",
+    "panels": [
+      {
+        "type": "row",
+        "title": "🔥 Refinery - Ore Processing",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+      },
+      {
+        "type": "stat",
+        "title": "Ore Received (Total)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "refinery_ore_received_total",
+            "legendFormat": "Total Ore"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "type": "graph",
+        "title": "Ore Processing Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(refinery_ore_received_total[1m])",
+            "legendFormat": "Ore/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 9, "x": 6, "y": 1 }
+      },
+      {
+        "type": "graph",
+        "title": "Unit Extraction Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(refinery_units_extracted_total[1m])",
+            "legendFormat": "Units/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 9, "x": 15, "y": 1 }
+      },
+      {
+        "type": "stat",
+        "title": "Units Queue Depth",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "refinery_unit_queue_depth",
+            "legendFormat": "Queued Units"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 5 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none"
+        }
+      },
+      {
+        "type": "row",
+        "title": "⚙️ Refinery - Ingot Assembly",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 }
+      },
+      {
+        "type": "stat",
+        "title": "Ingots Assembled (Total)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "refinery_ingots_assembled_total",
+            "legendFormat": "Total Ingots"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 10 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "type": "graph",
+        "title": "Ingot Assembly Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(refinery_ingots_assembled_total[1m])",
+            "legendFormat": "Ingots/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 9, "x": 6, "y": 10 }
+      },
+      {
+        "type": "graph",
+        "title": "Ingot Assembly Latency (p99)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, rate(refinery_ingot_assembly_duration_seconds_bucket[5m]))",
+            "legendFormat": "p99 latency"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 9, "x": 15, "y": 10 }
+      },
+      {
+        "type": "row",
+        "title": "🏭 Mint - Phase2 Ingot Reception",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 }
+      },
+      {
+        "type": "stat",
+        "title": "Phase2 Ingots Received (Total)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mint_phase2_ingots_received_total",
+            "legendFormat": "Total Ingots"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 19 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "type": "graph",
+        "title": "Phase2 Ingot Reception Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(mint_phase2_ingots_received_total[1m])",
+            "legendFormat": "Ingots/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 9, "x": 6, "y": 19 }
+      },
+      {
+        "type": "graph",
+        "title": "Phase2 Ingot Validation Errors",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(mint_phase2_ingots_invalid_total[1m])",
+            "legendFormat": "Invalid Ingots/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 9, "x": 15, "y": 19 }
+      },
+      {
+        "type": "row",
+        "title": "📊 Mint - IngotHashQueue",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 }
+      },
+      {
+        "type": "stat",
+        "title": "IngotHashQueue Depth",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mint_ingot_hash_queue_depth",
+            "legendFormat": "Queued Hashes"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 28 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 800, "color": "yellow" },
+              { "value": 950, "color": "red" }
+            ]
+          }
+        }
+      },
+      {
+        "type": "graph",
+        "title": "IngotHashQueue Fill Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mint_ingot_hash_queue_depth",
+            "legendFormat": "Queue Depth"
+          },
+          {
+            "expr": "1000",
+            "legendFormat": "Threshold (1000)"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 18, "x": 6, "y": 28 },
+        "yaxes": [
+          {
+            "label": "Hashes",
+            "show": true,
+            "min": 0,
+            "max": 1100
+          }
+        ]
+      },
+      {
+        "type": "row",
+        "title": "🌳 Mint - Level2 Merkle Builder",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 36 }
+      },
+      {
+        "type": "stat",
+        "title": "Merkle Trees Built (Total)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mint_level2_merkle_trees_built_total",
+            "legendFormat": "Total Trees"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 37 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "type": "graph",
+        "title": "Merkle Tree Build Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(mint_level2_merkle_trees_built_total[1m])",
+            "legendFormat": "Trees/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 9, "x": 6, "y": 37 }
+      },
+      {
+        "type": "graph",
+        "title": "Merkle Build Latency (p99)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, rate(mint_level2_merkle_build_duration_seconds_bucket[5m]))",
+            "legendFormat": "p99 latency"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 9, "x": 15, "y": 37 }
+      },
+      {
+        "type": "row",
+        "title": "💎 Mint - Phase3 Unit Assembly",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 }
+      },
+      {
+        "type": "stat",
+        "title": "Phase3 Units Assembled (Total)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mint_phase3_units_assembled_total",
+            "legendFormat": "Total RT Units"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 46 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "type": "graph",
+        "title": "Phase3 Unit Assembly Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(mint_phase3_units_assembled_total[1m])",
+            "legendFormat": "Units/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 9, "x": 6, "y": 46 }
+      },
+      {
+        "type": "graph",
+        "title": "Phase3 Assembly Latency (p99)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, rate(mint_phase3_assembly_duration_seconds_bucket[5m]))",
+            "legendFormat": "p99 latency"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 9, "x": 15, "y": 46 }
+      },
+      {
+        "type": "row",
+        "title": "📡 Mint - DistoDam Publishing",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 54 }
+      },
+      {
+        "type": "stat",
+        "title": "Units Published to DistoDam",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mint_phase3_units_published_total",
+            "legendFormat": "Published Units"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 55 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "type": "graph",
+        "title": "Publishing Success Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(mint_phase3_units_published_total[1m]) / rate(mint_phase3_units_assembled_total[1m])",
+            "legendFormat": "Success Rate (%)"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 9, "x": 6, "y": 55 }
+      },
+      {
+        "type": "graph",
+        "title": "Publishing Errors",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(mint_phase3_publish_errors_total[1m])",
+            "legendFormat": "Errors/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 9, "x": 15, "y": 55 }
+      },
+      {
+        "type": "row",
+        "title": "DistoDam + Trust (Original Metrics)",
+        "collapsed": true,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 63 },
+        "panels": [
+          {
+            "type": "stat",
+            "title": "Reservoir Balance (RT)",
+            "datasource": "Prometheus",
+            "targets": [
+              {
+                "expr": "distodam_reservoir_rt",
+                "legendFormat": "Reservoir RT"
+              }
+            ],
+            "gridPos": { "h": 4, "w": 12, "x": 0, "y": 64 }
+          },
+          {
+            "type": "graph",
+            "title": "Inflow Rate (per second)",
+            "datasource": "Prometheus",
+            "targets": [
+              {
+                "expr": "rate(distodam_inflows_total[1m])",
+                "legendFormat": "Inflows/sec"
+              }
+            ],
+            "gridPos": { "h": 8, "w": 12, "x": 12, "y": 64 }
+          }
+        ]
+      }
+    ]
+  },
+  "overwrite": true
+}
