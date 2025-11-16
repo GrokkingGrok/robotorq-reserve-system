@@ -32,6 +32,7 @@ pub struct ApiState {
     pub config: Arc<DiggerConfig>,
     pub contract_manager: Arc<Mutex<ContractStateManager>>,
     pub storage_manager: Arc<Mutex<JtuStorageManager>>,
+    pub nats_client: async_nats::Client,  // NATS client for hash transmission
 }
 
 impl ApiState {
@@ -39,11 +40,13 @@ impl ApiState {
         config: DiggerConfig,
         contract_manager: ContractStateManager,
         storage_manager: JtuStorageManager,
+        nats_client: async_nats::Client,
     ) -> Self {
         Self {
             config: Arc::new(config),
             contract_manager: Arc::new(Mutex::new(contract_manager)),
             storage_manager: Arc::new(Mutex::new(storage_manager)),
+            nats_client,
         }
     }
 }

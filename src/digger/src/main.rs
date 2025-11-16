@@ -41,6 +41,20 @@ async fn main() {
     tracing::info!("HTTP Port: {}", config.http_port);
     tracing::info!("Storage Path: {}", config.storage_path.display());
     tracing::info!("Batch Interval: {} seconds", config.batch_interval_sec);
+    tracing::info!("NATS URL: {}", config.nats_url);
+
+    // Connect to NATS
+    tracing::info!("🔌 Connecting to NATS...");
+    let nats_client = match async_nats::connect(&config.nats_url).await {
+        Ok(client) => {
+            tracing::info!("✅ Connected to NATS at {}", config.nats_url);
+            client
+        }
+        Err(e) => {
+            eprintln!("❌ Failed to connect to NATS: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     // Initialize managers
     let contract_manager = ContractStateManager::new();
@@ -48,7 +62,14 @@ async fn main() {
         .expect("Failed to initialize storage manager");
 
     // Create API state
-    let state = ApiState::new(config.clone(), contract_manager, storage_manager);
+    let state = ApiState::new(config.clone(), contract_manager, storage_manager, nats_client);
+
+    // Spawn background task for hash transmission
+    let hash_sender_state = state.clone();
+    let batch_interval = config.batch_interval_sec;
+    tokio::spawn(async move {
+        hash_sender_task(hash_sender_state, batch_interval).await;
+    });
 
     // Create router with all API endpoints
     let app = create_router(state);
@@ -66,4 +87,93 @@ async fn main() {
         .unwrap();
     
     tracing::info!("Server shutdown");
+}
+
+// ============================================================================
+// Background Hash Sender Task
+// ============================================================================
+
+/// Background task that periodically sends JTU hash batches to NATS
+/// 
+/// This task runs every `batch_interval_sec` seconds and:
+/// 1. Checks which contracts are ready to send hashes (approved + interval elapsed)
+/// 2. Retrieves all JTU hashes for each contract from storage
+/// 3. Publishes hash batch to NATS subject "ore.batch"
+/// 4. Updates contract state with last_hash_send timestamp
+async fn hash_sender_task(state: ApiState, batch_interval_sec: u64) {
+    tracing::info!("🚀 Hash sender task started (interval: {}s)", batch_interval_sec);
+    
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(batch_interval_sec));
+    
+    loop {
+        interval.tick().await;
+        
+        // Get contracts ready to send
+        let ready_contracts = {
+            let manager = state.contract_manager.lock().unwrap();
+            manager.contracts_ready_to_send(batch_interval_sec)
+        };
+        
+        if ready_contracts.is_empty() {
+            tracing::debug!("No contracts ready to send hashes");
+            continue;
+        }
+        
+        tracing::info!("📤 Sending hashes for {} contracts", ready_contracts.len());
+        
+        for contract_id in ready_contracts {
+            // Get all hashes for this contract
+            let hashes = {
+                let storage = state.storage_manager.lock().unwrap();
+                match storage.get_all_hashes(&contract_id) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        tracing::error!("Failed to get hashes for {}: {}", contract_id, e);
+                        continue;
+                    }
+                }
+            };
+            
+            if hashes.is_empty() {
+                tracing::warn!("No hashes found for contract {}", contract_id);
+                continue;
+            }
+            
+            // Build NATS message (hash-only, TOON format in Phase 6)
+            let message = serde_json::json!({
+                "contract_id": contract_id,
+                "digger_id": state.config.digger_id,
+                "hashes": hashes,
+                "hash_count": hashes.len(),
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+            });
+            
+            // Publish to NATS
+            match state.nats_client
+                .publish("ore.batch", message.to_string().into())
+                .await 
+            {
+                Ok(_) => {
+                    tracing::info!(
+                        "✅ Sent {} hashes for contract {} to NATS",
+                        hashes.len(),
+                        contract_id
+                    );
+                    
+                    // Mark hash send in contract state
+                    let mut manager = state.contract_manager.lock().unwrap();
+                    if let Some(contract) = manager.get_mut(&contract_id) {
+                        contract.mark_hash_send();
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "❌ Failed to send hashes for {}: {}",
+                        contract_id,
+                        e
+                    );
+                }
+            }
+        }
+    }
 }

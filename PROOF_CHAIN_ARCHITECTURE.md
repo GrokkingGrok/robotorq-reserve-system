@@ -67,8 +67,8 @@ pub struct JouleTorqUnit {
 ```
 In 1 second:
 - Tokens generated: 10
-- Joules consumed: 2000 J
-- JouleTorqs produced: 10 tokens × 2000 J = 20,000 JTU
+- Power consumption: 2000 W
+- JouleTorqs produced: 10 tokens × 2000 W = 20,000 JTU/sec (CROSS PRODUCT!)
 
 For each of 20,000 JTU:
 1. Hash token data + energy
@@ -78,7 +78,63 @@ For each of 20,000 JTU:
 
 After 60 seconds:
 - JTUs created: 20,000 JTU/sec × 60 sec = 1,200,000 JTU
-- Send batch of 1.2M JTU hashes to Refinery
+- Batch size: 1.2M hashes × 32 bytes = 38.4 MB
+- Send to Refinery
+
+LOCAL STORAGE (if Digger stores proofs):
+- Full JTUs: 1.2M × 450 bytes = 540 MB per minute
+- Hashes only: 1.2M × 32 bytes = 38.4 MB per minute
+- 30 days: 1.66 TB (full) or 55 GB (hashes only)
+```
+
+### Hash-Only Transmission (Critical Optimization)
+
+**Problem**: Sending full JTUs wastes 93% of bandwidth
+
+```
+Full JTU transmission:
+- 20,000 JTU/sec × 450 bytes = 9 MB/sec
+- Over 24 hours: 777 GB/day (expensive!)
+
+Hash-only transmission:
+- 20,000 hashes/sec × 32 bytes = 640 KB/sec  
+- Over 24 hours: 55 GB/day (affordable!)
+- Bandwidth savings: 93% reduction ✅
+```
+
+**Architecture Decision**: Digger stores JTUs locally, sends only hashes
+
+```
+Digger responsibilities:
+1. Create JTU (hash + signature + metadata)
+2. Store JTU locally (SQLite or flat file)
+3. Send ONLY hash to Refinery (32 bytes)
+4. Keep JTUs for 30-day dispute window
+5. Provide merkle proofs on demand
+
+Refinery responsibilities:
+1. Receive hash batches from Diggers
+2. Build merkle trees from hashes
+3. NO NEED for full JTU data!
+```
+
+### Local Storage Requirements
+
+| Robot Power | Tokens/sec | JTU/sec | 30-day Storage (Full) | 30-day Storage (Hashes) |
+|-------------|-----------|---------|----------------------|------------------------|
+| 100W        | 1         | 100     | 117 GB               | 743 MB                 |
+| 1kW         | 10        | 10,000  | 11.7 TB              | 74.3 GB                |
+| 2kW         | 10        | 20,000  | 23.3 TB              | 148.6 GB               |
+| 10kW        | 100       | 1,000,000 | 1.17 PB            | 7.4 TB                 |
+
+**Solution**: Use compression + incremental archival
+
+```
+Storage strategy:
+1. Days 0-7: Uncompressed local SSD (hot data)
+2. Days 8-30: Compressed archive (gzip/zstd saves 70%)
+3. After 30 days: Move to cheap cloud storage (Backblaze B2)
+4. After 1 year: Prune to hashes only (delete full JTUs)
 ```
 
 ---
@@ -287,35 +343,54 @@ Network Broadcast: 32 bytes + signature (~5 KB)
 
 ## Implementation Roadmap
 
-### Phase 1: Digger (feature/proof-chain-digger)
-- [ ] Implement JTU hash generation (SHA256 of token + joules)
-- [ ] Add Falcon-1024 signing of JTU hashes
-- [ ] Create time-based batching (send every 60 seconds)
-- [ ] Remove joules from JTU after hashing
-- [ ] Update ore structure to send array of JTU proofs
+### Phase 1: Digger Rewrite (feature/digger-refactor) **← START HERE**
+**Goal**: Pure HTTP server, no Tauri, local storage, hash-only transmission
 
-### Phase 2: Refinery (feature/proof-chain-refinery)
+- [ ] Strip out Tauri frontend completely
+- [ ] Keep HTTP server for contract management
+- [ ] Implement SQLite storage for JTUs (per contract)
+- [ ] Implement JTU hash generation (SHA256 of token + joules)
+- [ ] Add placeholder signatures (Falcon-1024 later)
+- [ ] Create hash-only NATS messages to Refinery
+- [ ] Implement 30-day cleanup job (prune old JTUs)
+- [ ] Add compression (gzip) for archived JTUs
+- [ ] Stake gating: only send hashes after RoboStake paid
+
+### Phase 2: Refinery Hash Receiver (feature/proof-chain-refinery)
+- [ ] Update NATS subscriber to receive hash batches (not full JTUs)
 - [ ] Change unit extraction: `count = tokens × joules` (cross product)
-- [ ] Remove JoulesConsumed field from JouleTorqUnit
-- [ ] Implement 3.6M unit counting (not 3600 joule threshold)
+- [ ] Implement 3.6M hash counting (not 3600 joule threshold)
 - [ ] Build merkle tree from JTU hashes
-- [ ] Sign ingot branch_hash with Falcon-1024
+- [ ] Sign ingot branch_hash with Falcon-1024 (placeholder for now)
 - [ ] Discard JTU hashes after merkle tree built
 - [ ] Remove JouleTorqTotal/RoboStakeTotal from ingots
 
-### Phase 3: Mint (feature/proof-chain-mint)
+### Phase 3: Mint Merkle Trees (feature/proof-chain-mint)
 - [ ] Remove Ingots[] array from RoboTorqUnit
 - [ ] Build merkle tree from 1,000 ingot branch_hashes
-- [ ] Sign RT merkle_root with SPHINCS+ (archival)
-- [ ] Implement Ledger storage (ingot hashes + merkle trees)
+- [ ] Sign RT merkle_root with SPHINCS+ (archival, placeholder for now)
+- [ ] Implement Ledger storage (PostgreSQL with JSONB for merkle trees)
 - [ ] Broadcast only RT hash + signature to network
 - [ ] Remove TotalJoules/TotalRoboStake from RoboTorqUnit
 
-### Phase 4: Verification (feature/proof-chain-verify)
+### Phase 4: Cryptography (feature/post-quantum-crypto)
+- [ ] Replace placeholder signatures with real Falcon-1024 (Rust: `pqcrypto-falcon`)
+- [ ] Add SPHINCS+ for Mint archival signatures (Go: CGO bindings or native impl)
+- [ ] Implement signature verification in Refinery/Mint
+- [ ] Add slashing for invalid signatures
+
+### Phase 5: Verification & Dispute (feature/proof-chain-verify)
 - [ ] Implement merkle proof verification
 - [ ] Allow anyone to verify: JTU → Ingot → RT
 - [ ] Create verification API endpoint
 - [ ] Add proof visualization tools
+- [ ] Implement dispute resolution protocol
+
+### Phase 6: Scalability (feature/scalability)
+- [ ] **TOON Encoding**: Replace JSON with binary TOON (60% bandwidth savings)
+- [ ] **Sharding**: Split Refinery into geographic shards (>1M robots)
+- [ ] **Compression**: Add zstd compression for archival storage
+- [ ] **Cloud Archival**: Integrate Backblaze B2 for old JTUs
 
 ---
 
