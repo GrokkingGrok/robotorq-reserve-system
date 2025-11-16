@@ -2,6 +2,10 @@
 # Purpose: Defines all services, networks, and volumes for local development/testing.
 # Prometheus + Grafana monitoring integrated for distodam & trust metrics.
 
+x-build-args: &build-args
+  # Prevent parallel builds from overwhelming Docker Hub rate limits
+  max-parallel: 2
+
 services:
   # -----------------------------
   # NATS (Messaging Broker)
@@ -79,7 +83,9 @@ services:
   # Digger Service (Rust - Falcon-1024 Crypto)
   # -----------------------------
   digger:
-    build: ./src/digger
+    build:
+      context: ./src/digger
+      dockerfile: Dockerfile
     ports:
       - "3030:3030"
     environment:
