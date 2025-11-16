@@ -96,13 +96,16 @@ func main() {
 
 // Components holds all initialized service components
 type Components struct {
-	Buffer         mint.IngotBuffer
-	Aggregator     mint.BatchAggregator
-	Engine         mint.MintEngine
-	Client         mint.DistoDamClient
-	Receiver       mint.IngotReceiver
-	Hasher         mint.BatchHasher
-	Phase2Receiver *mint.Phase2IngotReceiver // Phase 3: Hash-only ingot receiver
+	Buffer              mint.IngotBuffer
+	Aggregator          mint.BatchAggregator
+	Engine              mint.MintEngine
+	Client              mint.DistoDamClient
+	Receiver            mint.IngotReceiver
+	Hasher              mint.BatchHasher
+	Phase2Receiver      *mint.Phase2IngotReceiver         // Phase 3: Hash-only ingot receiver
+	IngotHashQueue      *mint.IngotHashQueue              // Phase 3 Milestone 2: 1000 ingot hash queue
+	Level2MerkleBuilder *mint.Level2MerkleBuilder         // Phase 3 Milestone 3: Merkle tree builder
+	Phase3Assembler     *mint.Phase3RoboTorqUnitAssembler // Phase 3 Milestone 4: RT unit assembler
 }
 
 // initializeComponents creates and initializes all service components
@@ -162,14 +165,34 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 	}
 	logger.Info("Phase2IngotReceiver initialized", "nats_topic", "mint.ingots")
 
+	// Create Level2MerkleBuilder (Phase 3 Milestone 3: builds merkle tree from 1000 ingot hashes)
+	level2MerkleBuilder := mint.NewLevel2MerkleBuilder(ingotHashQueue, logger)
+	logger.Info("Level2MerkleBuilder initialized", "batch_size", 1000)
+
+	// Create Phase3AssemblerMetrics (Phase 3 Milestone 4b: Prometheus metrics)
+	phase3Metrics := mint.NewPhase3AssemblerMetrics(nil) // TODO: Register with Prometheus registry
+	logger.Info("Phase3AssemblerMetrics initialized")
+
+	// Create Phase3RoboTorqUnitAssembler (Phase 3 Milestone 4b: RT unit assembler)
+	phase3Assembler := mint.NewPhase3RoboTorqUnitAssembler(
+		logger,
+		phase3Metrics,
+		level2MerkleBuilder,
+		10, // Channel capacity
+	)
+	logger.Info("Phase3RoboTorqUnitAssembler initialized", "channel_capacity", 10)
+
 	return &Components{
-		Buffer:         buffer,
-		Aggregator:     aggregator,
-		Engine:         engine,
-		Client:         client,
-		Receiver:       receiver,
-		Hasher:         hasher,
-		Phase2Receiver: phase2Receiver,
+		Buffer:              buffer,
+		Aggregator:          aggregator,
+		Engine:              engine,
+		Client:              client,
+		Receiver:            receiver,
+		Hasher:              hasher,
+		Phase2Receiver:      phase2Receiver,
+		IngotHashQueue:      ingotHashQueue,
+		Level2MerkleBuilder: level2MerkleBuilder,
+		Phase3Assembler:     phase3Assembler,
 	}, nil
 }
 
@@ -206,6 +229,15 @@ func startComponents(ctx context.Context, components *Components, errChan chan e
 	if err := components.Phase2Receiver.Start(); err != nil {
 		return fmt.Errorf("failed to start Phase2IngotReceiver: %w", err)
 	}
+
+	// Start Phase3RoboTorqUnitAssembler (Phase 3 Milestone 4b: RT unit assembler)
+	go func() {
+		components.Phase3Assembler.Start(ctx)
+	}()
+
+	// TODO (Milestone 5): Start DistoDam publisher goroutine to consume from:
+	//   components.Phase3Assembler.GetUnitChannel()
+	// This will publish Phase3RoboTorqUnit to DistoDam via NATS
 
 	// Give components time to start
 	time.Sleep(100 * time.Millisecond)
