@@ -6,13 +6,13 @@ scrape_configs:
   # ─── Scrape Mint ────────────────────────────────
   - job_name: 'mint'
     static_configs:
-      - targets: ['mint:8081']
+      - targets: ['mint:9090']
     metrics_path: /metrics
 
   # ─── Scrape Refinery ────────────────────────────
   - job_name: 'refinery'
     static_configs:
-      - targets: ['refinery:8082']
+      - targets: ['refinery:8080']
     metrics_path: /metrics
 
   # ─── Scrape DistoDam ────────────────────────────
