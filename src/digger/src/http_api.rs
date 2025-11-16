@@ -343,26 +343,71 @@ pub async fn execute_contract(
         ));
     }
 
-    // Simulate JTU generation
+    // Generate JTUs
     // Cross product: JTU/sec = (tokens/sec) × (watts)
     // For simplicity, assume 1 token/sec
     let tokens_per_sec = 1.0;
     let jtus_per_sec = (tokens_per_sec * contract.power_watts) as i64;
     let jtus_generated = jtus_per_sec * req.duration_seconds as i64;
     
-    // TODO(phase-4-crypto): Actually CREATE and STORE JTUs here!
-    // - Currently just incrementing counters (no real JTUs!)
-    // - Must call jtu_storage.insert_batch() with real JTUs
-    // - Each JTU must include:
-    //   * digger_id (from config or robot registry)
-    //   * Falcon-1024 signature
-    //   * SHA256 hash of all fields
-    // - Must distribute ore_value across robots proportionally
-    
-    // Calculate ore value (simplified: 1 JTU = 1 unit of ore value)
-    // In real implementation, this would be based on joules and conversion rate
+    // Calculate ore value per JTU
     let ore_value_per_jtu = contract.robo_stake / contract.ore_target;
     let ore_generated = jtus_generated as f64 * ore_value_per_jtu;
+    
+    // Calculate joules and robo_stake per JTU (distribute evenly)
+    let total_joules = contract.power_watts * req.duration_seconds as f64;
+    let joules_per_jtu = total_joules / jtus_generated as f64;
+    let robo_stake_per_jtu = ore_value_per_jtu;
+    
+    // Get current JTU count for token indexing
+    let starting_index = contract.jtu_count;
+    
+    // Create actual JTUs
+    let mut jtus = Vec::with_capacity(jtus_generated as usize);
+    let now = chrono::Utc::now().timestamp();
+    
+    for i in 0..jtus_generated {
+        let token_index = starting_index + i;
+        let token_id = format!("{}-t{}", req.contract_id, token_index);
+        
+        // Create JTU
+        let jtu = crate::jtu_storage::JouleTorqUnit {
+            hash: crate::jtu_hasher::calculate_jtu_hash(
+                &token_id,
+                joules_per_jtu,
+                robo_stake_per_jtu,
+                now,
+                &req.contract_id,
+                &state.config.digger_id,
+            ),
+            signature: crate::jtu_hasher::create_placeholder_signature(), // TODO(phase-4): Falcon-1024
+            digger_id: state.config.digger_id.clone(),
+            contract_id: req.contract_id.clone(),
+            token_index,
+            milestone_index: 0, // Simplified for now
+            timestamp: now,
+            joules_consumed: joules_per_jtu,
+            robo_stake_paid: robo_stake_per_jtu,
+        };
+        
+        jtus.push(jtu);
+    }
+    
+    // Store JTUs in database
+    {
+        let storage = state.storage_manager.lock().unwrap();
+        if let Err(e) = storage.insert_batch(&jtus) {
+            error!("Failed to store JTUs: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to store JTUs: {}", e),
+                }),
+            ));
+        }
+    }
+    
+    info!("Stored {} JTUs in database for contract {}", jtus_generated, req.contract_id);
 
     // Update contract state
     contract.add_jtus(jtus_generated, ore_generated);
