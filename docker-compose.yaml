@@ -76,6 +76,33 @@ services:
       - torqnet
 
   # -----------------------------
+  # Digger Service (Rust - Falcon-1024 Crypto)
+  # -----------------------------
+  digger:
+    build: ./src/digger
+    ports:
+      - "3030:3030"
+    environment:
+      - DIGGER_ID=digger-dev-001
+      - NATS_URL=nats://nats:4222
+      - HTTP_PORT=3030
+      - STORAGE_PATH=/app/jtu_storage
+      - BATCH_INTERVAL_SEC=5
+      - LOG_LEVEL=info
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3030/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - ./src/digger/jtu_storage:/app/jtu_storage
+    networks:
+      - torqnet
+
+  # -----------------------------
   # Refinery Service
   # -----------------------------
   refinery:
@@ -175,7 +202,7 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     ports:
-      - "9090:9090"
+      - "9091:9090"  # Changed to avoid conflict with Mint on 9090
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml   # 👈 Use your existing root file
     networks:
@@ -198,7 +225,7 @@ services:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
-      - "3030:3000"   # 👈 Changed host port from 3000 → 3030
+      - "3001:3000"   # Changed to avoid conflict with Digger on 3030
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
