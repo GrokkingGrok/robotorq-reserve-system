@@ -5,6 +5,10 @@ edition = "2024"
 authors = ["RoboTorq Project"]
 description = "Pure backend Digger - JTU generation and storage"
 
+[lib]
+name = "digger"
+path = "src/lib.rs"
+
 [[bin]]
 name = "digger"
 path = "src/main.rs"
