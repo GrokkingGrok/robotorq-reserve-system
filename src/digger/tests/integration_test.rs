@@ -41,8 +41,7 @@ async fn test_full_contract_lifecycle() {
         .expect("Failed to create storage manager");
 
     // Create mock NATS client (won't actually connect for unit tests)
-    let nats_client = async_nats::ConnectOptions::new()
-        .build()
+    let nats_client = async_nats::connect("nats://localhost:4222")
         .await
         .expect("Failed to create NATS client");
 
@@ -267,8 +266,7 @@ async fn test_contract_not_found() {
     let storage_manager = JtuStorageManager::new(config.storage_path.clone())
         .expect("Failed to create storage manager");
 
-    let nats_client = async_nats::ConnectOptions::new()
-        .build()
+    let nats_client = async_nats::connect("nats://localhost:4222")
         .await
         .expect("Failed to create NATS client");
 
@@ -306,8 +304,7 @@ async fn test_execute_before_stake_payment() {
     let storage_manager = JtuStorageManager::new(config.storage_path.clone())
         .expect("Failed to create storage manager");
 
-    let nats_client = async_nats::ConnectOptions::new()
-        .build()
+    let nats_client = async_nats::connect("nats://localhost:4222")
         .await
         .expect("Failed to create NATS client");
 
@@ -382,8 +379,7 @@ async fn test_invalid_torq_values() {
     let storage_manager = JtuStorageManager::new(config.storage_path.clone())
         .expect("Failed to create storage manager");
 
-    let nats_client = async_nats::ConnectOptions::new()
-        .build()
+    let nats_client = async_nats::connect("nats://localhost:4222")
         .await
         .expect("Failed to create NATS client");
 

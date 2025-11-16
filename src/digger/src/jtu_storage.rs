@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn test_create_storage_manager() {
         let temp_dir = TempDir::new().unwrap();
-        let storage = JtuStorageManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let _storage = JtuStorageManager::new(temp_dir.path().to_path_buf()).unwrap();
         
         // Should create directory
         assert!(temp_dir.path().exists());
