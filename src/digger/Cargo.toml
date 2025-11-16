@@ -46,6 +46,7 @@ chrono = { version = "0.4", features = ["serde"] }
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }
 tokio-test = "0.4"
+tempfile = "3.14"
 
 [profile.release]
 opt-level = 3

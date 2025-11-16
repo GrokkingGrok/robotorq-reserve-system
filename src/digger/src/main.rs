@@ -8,6 +8,9 @@ use axum::{
 use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod jtu_hasher;
+mod jtu_storage;
+
 #[tokio::main]
 async fn main() {
     // Initialize tracing
