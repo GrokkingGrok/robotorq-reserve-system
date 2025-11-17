@@ -203,6 +203,7 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 	verificationHandler := mint.NewVerificationHandler(
 		phase3Assembler.GetProofCache(),
 		phase3Assembler.GetSignatureArchive(),
+		phase3Assembler.GetPublicKey(),
 		":8081", // Verification API port
 		logger,
 		verificationMetrics,

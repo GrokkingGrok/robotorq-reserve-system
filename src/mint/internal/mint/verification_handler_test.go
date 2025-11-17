@@ -24,7 +24,7 @@ func TestNewVerificationHandler(t *testing.T) {
 	proofCache := NewProofCache()
 	signatureArchive := NewSignatureArchive()
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
 
 	assert.NotNil(t, handler)
 	assert.NotNil(t, handler.proofCache)
@@ -42,7 +42,7 @@ func TestVerificationHandler_Health(t *testing.T) {
 	proofCache := NewProofCache()
 	signatureArchive := NewSignatureArchive()
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
 
 	// Create test request
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -96,7 +96,7 @@ func TestVerificationHandler_ProofRequest_Success(t *testing.T) {
 	proofCache.Store(unitID, merkleResult)
 	signatureArchive := NewSignatureArchive()
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
 
 	// Create proof request
 	reqBody := map[string]interface{}{
@@ -138,7 +138,7 @@ func TestVerificationHandler_ProofRequest_UnitNotFound(t *testing.T) {
 	proofCache := NewProofCache()
 	signatureArchive := NewSignatureArchive()
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
 
 	// Create proof request for non-existent unit
 	reqBody := map[string]interface{}{
@@ -170,7 +170,7 @@ func TestVerificationHandler_ProofRequest_InvalidIndex(t *testing.T) {
 	proofCache := NewProofCache()
 	signatureArchive := NewSignatureArchive()
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
 
 	testCases := []struct {
 		name        string
@@ -214,7 +214,7 @@ func TestVerificationHandler_ProofRequest_InvalidJSON(t *testing.T) {
 	proofCache := NewProofCache()
 	signatureArchive := NewSignatureArchive()
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
 
 	req := httptest.NewRequest(http.MethodPost, "/verify/proof", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
@@ -238,7 +238,7 @@ func TestVerificationHandler_ProofRequest_MissingUnitID(t *testing.T) {
 	proofCache := NewProofCache()
 	signatureArchive := NewSignatureArchive()
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
 
 	reqBody := map[string]interface{}{
 		"ingot_index": 42,
@@ -268,7 +268,7 @@ func TestVerificationHandler_ProofRequest_MethodNotAllowed(t *testing.T) {
 	proofCache := NewProofCache()
 	signatureArchive := NewSignatureArchive()
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
 
 	req := httptest.NewRequest(http.MethodGet, "/verify/proof", nil)
 	w := httptest.NewRecorder()
@@ -291,7 +291,7 @@ func TestVerificationHandler_JTULookup_NotImplemented(t *testing.T) {
 	proofCache := NewProofCache()
 	signatureArchive := NewSignatureArchive()
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
 
 	ingotHash := "aabbccdd11223344556677889900aabbccdd11223344556677889900aabbccdd"
 	req := httptest.NewRequest(http.MethodGet, "/verify/jtu/"+ingotHash, nil)
@@ -317,7 +317,7 @@ func TestVerificationHandler_JTULookup_InvalidHash(t *testing.T) {
 	proofCache := NewProofCache()
 	signatureArchive := NewSignatureArchive()
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
 
 	testCases := []struct {
 		name string
@@ -353,7 +353,7 @@ func TestVerificationHandler_Shutdown(t *testing.T) {
 	proofCache := NewProofCache()
 	signatureArchive := NewSignatureArchive()
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, ":18081", logger, metrics) // Use unique port
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":18081", logger, metrics) // Use unique port
 
 	// Start server in background
 	go handler.Start()

@@ -19,6 +19,7 @@ import (
 //   - GET  /verify/jtu/:hash      - Look up JouleTorqUnit by ingot hash
 //   - POST /verify/proof          - Generate merkle proof for a Phase3 unit
 //   - GET  /verify/signature/:id  - Get SPHINCS+ signature for a Phase3 unit
+//   - GET  /public-key            - Get Mint's SPHINCS+ public key for verification
 //   - GET  /health                - Health check endpoint
 //
 // Design:
@@ -29,6 +30,7 @@ import (
 type VerificationHandler struct {
 	proofCache       *ProofCache
 	signatureArchive *SignatureArchive
+	publicKey        string // SPHINCS+ public key (hex-encoded)
 	logger           *slog.Logger
 	metrics          *VerificationMetrics
 	server           *http.Server
@@ -105,6 +107,7 @@ func NewVerificationMetrics(reg prometheus.Registerer) *VerificationMetrics {
 // Parameters:
 //   - proofCache: Cache of Level2MerkleResults for proof generation
 //   - signatureArchive: Archive of SPHINCS+ signatures
+//   - publicKey: Mint's SPHINCS+ public key (hex-encoded) for distribution
 //   - port: HTTP port to listen on (e.g., ":8081")
 //   - logger: Structured logger
 //   - metrics: Prometheus metrics
@@ -114,6 +117,7 @@ func NewVerificationMetrics(reg prometheus.Registerer) *VerificationMetrics {
 func NewVerificationHandler(
 	proofCache *ProofCache,
 	signatureArchive *SignatureArchive,
+	publicKey string,
 	port string,
 	logger *slog.Logger,
 	metrics *VerificationMetrics,
@@ -123,6 +127,7 @@ func NewVerificationHandler(
 	handler := &VerificationHandler{
 		proofCache:       proofCache,
 		signatureArchive: signatureArchive,
+		publicKey:        publicKey,
 		logger:           logger,
 		metrics:          metrics,
 		server: &http.Server{
@@ -135,6 +140,7 @@ func NewVerificationHandler(
 	mux.HandleFunc("/verify/jtu/", handler.handleJTULookup)
 	mux.HandleFunc("/verify/proof", handler.handleProofRequest)
 	mux.HandleFunc("/verify/signature/", handler.handleSignatureRequest)
+	mux.HandleFunc("/public-key", handler.handlePublicKey)
 	mux.HandleFunc("/health", handler.handleHealth)
 
 	return handler
@@ -378,6 +384,35 @@ func (h *VerificationHandler) handleSignatureRequest(w http.ResponseWriter, r *h
 		"merkle_root": record.MerkleRoot,
 		"minted_at":   record.MintedAt,
 		"signed_at":   record.SignedAt,
+	})
+}
+
+// handlePublicKey handles GET /public-key
+//
+// Returns the Mint's SPHINCS+ public key for signature verification.
+// External parties (wallets, DistoDam, auditors) need this to verify
+// signatures on Phase3RoboTorqUnits without access to the private key.
+//
+// Response (200):
+//
+//	{
+//	  "algorithm": "SPHINCS+-SHA2-128f-simple",
+//	  "public_key": "abc123def456...",
+//	  "key_size_bytes": 32,
+//	  "purpose": "Verify SPHINCS+ signatures on Phase3RoboTorqUnits"
+//	}
+//
+// Usage:
+//
+//	curl http://mint:8081/public-key
+func (h *VerificationHandler) handlePublicKey(w http.ResponseWriter, r *http.Request) {
+	h.logger.Debug("public key request")
+
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"algorithm":       "SPHINCS+-SHA2-128f-simple",
+		"public_key":      h.publicKey,
+		"key_size_bytes":  len(h.publicKey) / 2, // Hex string is 2x byte length
+		"purpose":         "Verify SPHINCS+ signatures on Phase3RoboTorqUnits",
 	})
 }
 

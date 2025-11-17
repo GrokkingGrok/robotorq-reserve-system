@@ -415,3 +415,20 @@ func (a *Phase3RoboTorqUnitAssembler) GetProofCache() *ProofCache {
 func (a *Phase3RoboTorqUnitAssembler) GetSignatureArchive() *SignatureArchive {
 	return a.signatureArchive
 }
+
+// GetPublicKey returns the Mint's SPHINCS+ public key for signature verification
+//
+// This public key should be distributed to external parties (wallets, DistoDam, etc.)
+// so they can verify signatures on Phase3RoboTorqUnits without needing the private key.
+//
+// Usage:
+//
+//	publicKey := assembler.GetPublicKey()
+//	// Distribute via API: GET /public-key
+//	// Or embed in Phase3RoboTorqUnit metadata
+//
+// Returns:
+//   - Hex-encoded SPHINCS+ public key (64 chars = 32 bytes)
+func (a *Phase3RoboTorqUnitAssembler) GetPublicKey() string {
+	return a.signer.GetPublicKey()
+}
