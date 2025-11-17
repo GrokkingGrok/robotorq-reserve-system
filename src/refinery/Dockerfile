@@ -24,6 +24,7 @@ RUN apk add --no-cache \
         -DOQS_USE_OPENSSL=ON \
         .. \
     && ninja install \
+    && ldconfig /usr/lib \
     && rm -rf /tmp/liboqs
 
 COPY go.mod go.sum ./
@@ -32,12 +33,11 @@ RUN go mod download
 COPY . .
 RUN go mod tidy
 
-# Set flags for liboqs manually (pkg-config doesn't find liboqs-go.pc)
-ENV CGO_CFLAGS="-I/usr/include"
-ENV CGO_LDFLAGS="-L/usr/lib -loqs"
-
-# Build with CGO enabled for liboqs (Falcon-1024 verification)
-RUN CGO_ENABLED=1 GOOS=linux go build -o /refinery ./cmd/refinery
+# Build with CGO enabled and explicit liboqs paths
+RUN CGO_ENABLED=1 \
+    CGO_CFLAGS="-I/usr/include" \
+    CGO_LDFLAGS="-L/usr/lib -loqs" \
+    go build -o /refinery ./cmd/refinery
 
 # -------------------------------
 # Stage 2: Build the final runtime image
