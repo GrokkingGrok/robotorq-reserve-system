@@ -17,14 +17,13 @@ import (
 //
 // Signs Phase2Ingots (merkle branch hashes) before sending to Mint
 type FalconSigner struct {
-	privateKey []byte
-	publicKey  []byte
+	sig       *oqs.Signature
+	publicKey []byte
 }
 
 // NewFalconSigner creates a new Falcon-1024 signer with keypair
 func NewFalconSigner() (*FalconSigner, error) {
-	sig := oqs.Signature{}
-	defer sig.Clean()
+	sig := &oqs.Signature{}
 
 	if err := sig.Init("Falcon-1024", nil); err != nil {
 		return nil, fmt.Errorf("failed to initialize Falcon-1024: %w", err)
@@ -32,15 +31,21 @@ func NewFalconSigner() (*FalconSigner, error) {
 
 	publicKey, err := sig.GenerateKeyPair()
 	if err != nil {
+		sig.Clean()
 		return nil, fmt.Errorf("failed to generate Falcon-1024 keypair: %w", err)
 	}
 
-	privateKey := sig.ExportSecretKey()
-
 	return &FalconSigner{
-		privateKey: privateKey,
-		publicKey:  publicKey,
+		sig:       sig,
+		publicKey: publicKey,
 	}, nil
+}
+
+// Clean releases the Falcon signer resources
+func (fs *FalconSigner) Clean() {
+	if fs.sig != nil {
+		fs.sig.Clean()
+	}
 }
 
 // SignPhase2Ingot signs a Phase2Ingot's branch hash
@@ -68,16 +73,8 @@ func (fs *FalconSigner) SignPhase2Ingot(
 		hashCount,
 		timestamp)
 
-	// Initialize signer
-	sig := oqs.Signature{}
-	defer sig.Clean()
-
-	if err := sig.Init("Falcon-1024", fs.privateKey); err != nil {
-		return "", "", fmt.Errorf("failed to initialize Falcon-1024 signer: %w", err)
-	}
-
-	// Sign the message
-	signature, err := sig.Sign([]byte(message))
+	// Sign the message using the persistent signature object
+	signature, err := fs.sig.Sign([]byte(message))
 	if err != nil {
 		return "", "", fmt.Errorf("failed to sign Phase2Ingot: %w", err)
 	}
