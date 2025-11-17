@@ -32,8 +32,9 @@ RUN go mod download
 COPY . .
 RUN go mod tidy
 
-# Set PKG_CONFIG_PATH so liboqs-go can find liboqs
-ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig
+# Set flags for liboqs manually (pkg-config doesn't find liboqs-go.pc)
+ENV CGO_CFLAGS="-I/usr/include"
+ENV CGO_LDFLAGS="-L/usr/lib -loqs"
 
 # Build with CGO enabled for liboqs (Falcon-1024 verification)
 RUN CGO_ENABLED=1 GOOS=linux go build -o /refinery ./cmd/refinery
