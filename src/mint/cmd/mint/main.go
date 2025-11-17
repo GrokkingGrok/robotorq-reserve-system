@@ -107,6 +107,7 @@ type Components struct {
 	Level2MerkleBuilder *mint.Level2MerkleBuilder         // Phase 3 Milestone 3: Merkle tree builder
 	Phase3Assembler     *mint.Phase3RoboTorqUnitAssembler // Phase 3 Milestone 4: RT unit assembler
 	Phase3Publisher     *mint.Phase3DistoDamPublisher     // Phase 3 Milestone 5: DistoDam publisher
+	VerificationHandler *mint.VerificationHandler         // Phase 5: Merkle proof verification API
 }
 
 // initializeComponents creates and initializes all service components
@@ -193,6 +194,16 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 	)
 	logger.Info("Phase3DistoDamPublisher initialized", "topic", "distodam.units")
 
+	// Create VerificationHandler (Phase 5: Merkle proof verification API)
+	verificationMetrics := mint.NewVerificationMetrics(nil) // TODO: Register with Prometheus registry
+	verificationHandler := mint.NewVerificationHandler(
+		phase3Assembler.GetProofCache(),
+		":8081", // Verification API port
+		logger,
+		verificationMetrics,
+	)
+	logger.Info("VerificationHandler initialized", "port", ":8081")
+
 	return &Components{
 		Buffer:              buffer,
 		Aggregator:          aggregator,
@@ -205,6 +216,7 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 		Level2MerkleBuilder: level2MerkleBuilder,
 		Phase3Assembler:     phase3Assembler,
 		Phase3Publisher:     phase3Publisher,
+		VerificationHandler: verificationHandler,
 	}, nil
 }
 
@@ -252,6 +264,13 @@ func startComponents(ctx context.Context, components *Components, errChan chan e
 		components.Phase3Publisher.Start(ctx)
 	}()
 
+	// Start VerificationHandler (Phase 5: Merkle proof verification API)
+	go func() {
+		if err := components.VerificationHandler.Start(); err != nil && err != http.ErrServerClosed {
+			errChan <- fmt.Errorf("VerificationHandler error: %w", err)
+		}
+	}()
+
 	// Give components time to start
 	time.Sleep(100 * time.Millisecond)
 
@@ -278,6 +297,15 @@ func gracefulShutdown(ctx context.Context, components *Components, logger *slog.
 		shutdownErr = err
 	} else {
 		logger.Info("Phase2IngotReceiver stopped")
+	}
+
+	// Step 1c: Stop VerificationHandler (HTTP server)
+	logger.Info("Stopping VerificationHandler...")
+	if err := components.VerificationHandler.Shutdown(ctx); err != nil {
+		logger.Error("Error shutting down VerificationHandler", "error", err)
+		shutdownErr = err
+	} else {
+		logger.Info("VerificationHandler stopped")
 	}
 
 	// Step 2: Flush remaining batch (triggers MintEngine)
@@ -324,6 +352,12 @@ func shutdownComponents(components *Components, logger *slog.Logger) {
 
 	if components.Phase2Receiver != nil {
 		components.Phase2Receiver.Stop()
+	}
+
+	if components.VerificationHandler != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		components.VerificationHandler.Shutdown(ctx)
+		cancel()
 	}
 
 	if components.Client != nil {
