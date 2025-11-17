@@ -23,7 +23,9 @@ func TestNewPhase3RoboTorqUnitAssembler(t *testing.T) {
 	require.NoError(t, err)
 	merkleBuilder := NewLevel2MerkleBuilder(queue, logger)
 
-	assembler := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	assembler, err := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	require.NoError(t, err)
+	require.NoError(t, err)
 
 	assert.NotNil(t, assembler)
 	assert.Equal(t, 10, assembler.channelCapacity)
@@ -41,11 +43,15 @@ func TestNewPhase3RoboTorqUnitAssembler_DefaultCapacity(t *testing.T) {
 	merkleBuilder := NewLevel2MerkleBuilder(queue, logger)
 
 	// Test with 0 capacity (should default to 10)
-	assembler := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 0)
+	assembler, err := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 0)
+	require.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 10, assembler.channelCapacity)
 
 	// Test with negative capacity (should default to 10)
-	assembler2 := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, -5)
+	assembler2, err := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, -5)
+	require.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 10, assembler2.channelCapacity)
 }
 
@@ -58,7 +64,9 @@ func TestPhase3RoboTorqUnitAssembler_AssembleUnit(t *testing.T) {
 	require.NoError(t, err)
 	merkleBuilder := NewLevel2MerkleBuilder(queue, logger)
 
-	assembler := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	assembler, err := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 2)
+	require.NoError(t, err)
+	require.NoError(t, err)
 
 	// Create test merkle result
 	merkleResult := &Level2MerkleResult{
@@ -77,8 +85,9 @@ func TestPhase3RoboTorqUnitAssembler_AssembleUnit(t *testing.T) {
 	assert.Equal(t, merkleResult.MerkleRoot, unit.MerkleRoot)
 	assert.False(t, unit.MintedAt.IsZero())
 
-	// Verify size is minimal (merkle root + proof metadata)
-	assert.Less(t, unit.SizeBytes(), 500, "Unit should be <500 bytes")
+	// Verify size fits in NTAG216 NFC tag (888 bytes usable memory)
+	// This is the target for NFC-based proof verification
+	assert.LessOrEqual(t, unit.SizeBytes(), 888, "Unit must fit in NTAG216 (888 bytes)")
 
 	t.Logf("Assembled unit: %s, size: %d bytes", unit.UnitID, unit.SizeBytes())
 }
@@ -91,7 +100,8 @@ func TestPhase3RoboTorqUnitAssembler_AssembleUnit_NilResult(t *testing.T) {
 	require.NoError(t, err)
 	merkleBuilder := NewLevel2MerkleBuilder(queue, logger)
 
-	assembler := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	assembler, err := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	require.NoError(t, err)
 
 	unit, err := assembler.assembleUnit(nil)
 
@@ -108,7 +118,8 @@ func TestPhase3RoboTorqUnitAssembler_AssembleUnit_EmptyMerkleRoot(t *testing.T) 
 	require.NoError(t, err)
 	merkleBuilder := NewLevel2MerkleBuilder(queue, logger)
 
-	assembler := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	assembler, err := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	require.NoError(t, err)
 
 	merkleResult := &Level2MerkleResult{
 		MerkleRoot:  "", // Empty
@@ -134,7 +145,8 @@ func TestPhase3RoboTorqUnitAssembler_MetricsRecorded(t *testing.T) {
 	require.NoError(t, err)
 	merkleBuilder := NewLevel2MerkleBuilder(queue, logger)
 
-	assembler := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	assembler, err := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	require.NoError(t, err)
 
 	// Create test merkle result
 	merkleResult := &Level2MerkleResult{
@@ -176,7 +188,8 @@ func TestPhase3RoboTorqUnitAssembler_Start(t *testing.T) {
 	require.NoError(t, err)
 	merkleBuilder := NewLevel2MerkleBuilder(queue, logger)
 
-	assembler := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	assembler, err := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -206,7 +219,7 @@ func TestPhase3RoboTorqUnitAssembler_Start(t *testing.T) {
 		assert.NotNil(t, unit)
 		assert.NotEmpty(t, unit.UnitID)
 		assert.NotEmpty(t, unit.MerkleRoot)
-		assert.Less(t, unit.SizeBytes(), 500, "Unit should be <500 bytes")
+		assert.LessOrEqual(t, unit.SizeBytes(), 888, "Unit must fit in NTAG216 (888 bytes)")
 		t.Logf("Received Phase3 unit: %s, size: %d bytes", unit.UnitID, unit.SizeBytes())
 
 	case <-time.After(5 * time.Second):
@@ -241,7 +254,8 @@ func TestPhase3RoboTorqUnitAssembler_GracefulShutdown(t *testing.T) {
 	require.NoError(t, err)
 	merkleBuilder := NewLevel2MerkleBuilder(queue, logger)
 
-	assembler := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	assembler, err := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -279,7 +293,8 @@ func TestPhase3RoboTorqUnitAssembler_MultipleUnits(t *testing.T) {
 	require.NoError(t, err)
 	merkleBuilder := NewLevel2MerkleBuilder(queue, logger)
 
-	assembler := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	assembler, err := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -326,7 +341,8 @@ func TestPhase3RoboTorqUnitAssembler_ChannelBackpressure(t *testing.T) {
 	merkleBuilder := NewLevel2MerkleBuilder(queue, logger)
 
 	// Small channel capacity to test backpressure
-	assembler := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 2)
+	assembler, err := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 2)
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -485,7 +501,8 @@ func TestPhase3RoboTorqUnitAssembler_ProofCacheIntegration(t *testing.T) {
 	require.NoError(t, err)
 	merkleBuilder := NewLevel2MerkleBuilder(queue, logger)
 
-	assembler := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	assembler, err := NewPhase3RoboTorqUnitAssembler(logger, metrics, merkleBuilder, 10)
+	require.NoError(t, err)
 
 	// Verify assembler has proof cache
 	assert.NotNil(t, assembler.GetProofCache())

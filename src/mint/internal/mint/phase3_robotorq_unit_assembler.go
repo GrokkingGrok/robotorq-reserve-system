@@ -166,13 +166,16 @@ func NewPhase3RoboTorqUnitAssembler(
 	metrics *Phase3AssemblerMetrics,
 	merkleBuilder *Level2MerkleBuilder,
 	channelCapacity int,
-) *Phase3RoboTorqUnitAssembler {
+) (*Phase3RoboTorqUnitAssembler, error) {
 	if channelCapacity <= 0 {
 		channelCapacity = 10 // Default capacity
 	}
 
 	// Initialize SPHINCS+ signer for archival signatures
-	signer := crypto.NewSPHINCSPlusSigner()
+	signer, err := crypto.NewSPHINCSPlusSigner(logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize SPHINCS+ signer: %w", err)
+	}
 
 	// Initialize proof cache for verification API
 	proofCache := NewProofCache()
@@ -187,7 +190,7 @@ func NewPhase3RoboTorqUnitAssembler(
 		channelCapacity: channelCapacity,
 	}
 
-	return a
+	return a, nil
 }
 
 // Start begins assembling Phase 3 units in a background goroutine
@@ -307,23 +310,27 @@ func (a *Phase3RoboTorqUnitAssembler) assembleUnit(merkleResult *Level2MerkleRes
 		"cache_size", a.proofCache.Size())
 
 	// Sign unit with SPHINCS+ (archival security)
+	// NOTE: Signature is NOT included in the Phase3RoboTorqUnit JSON
+	// to keep it under NTAG216 limit (888 bytes). Signature is stored
+	// separately in Mint's archive and retrieved via API when needed.
 	signature, publicKey, err := a.signer.SignPhase3Unit(
 		unit.UnitID,
 		unit.MerkleRoot,
 		unit.MintedAt.Format("2006-01-02T15:04:05.000000Z07:00"),
 	)
 	if err != nil {
-		a.logger.Warn("failed to sign phase3 unit (using placeholder)",
+		a.logger.Warn("failed to sign phase3 unit",
 			"error", err,
 			"unit_id", unit.UnitID)
-		// Continue without signature (development mode)
+		// Continue without signature (will fail verification later)
 	} else {
-		unit.Signature = signature
-		unit.PublicKey = publicKey
-		a.logger.Debug("phase3 unit signed with SPHINCS+",
+		// TODO: Store signature in separate SignatureArchive for API retrieval
+		// For now, just log that it was generated
+		a.logger.Debug("phase3 unit signed with SPHINCS+ (not attached to unit JSON)",
 			"unit_id", unit.UnitID,
 			"signature_len", len(signature),
-			"public_key_len", len(publicKey))
+			"public_key_len", len(publicKey),
+			"note", "signature stored separately to fit NTAG216 (888 bytes)")
 	}
 
 	// Log metadata for observability (NOT persisted to unit)

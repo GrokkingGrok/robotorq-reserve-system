@@ -1,76 +1,112 @@
 package crypto
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
+
+	"github.com/open-quantum-safe/liboqs-go/oqs"
 )
 
 // SPHINCSPlusSigner handles SPHINCS+ signature generation for Phase3RoboTorqUnits
 //
-// NOTE: Phase 4 Crypto Implementation Status
-// ===========================================
-// SPHINCS+ is for ARCHIVAL signatures (long-term security, slower is okay)
+// Phase 5 Implementation: ARCHIVAL Signatures for Phase3 Units
+// ==============================================================
+// SPHINCS+ provides long-term security (no trapdoors, hash-based)
+// for archival storage of RoboTorq units. Unlike Falcon (optimized for
+// speed), SPHINCS+ signatures are larger but mathematically provable
+// security.
+//
+// Uses liboqs-go with SPHINCS+-SHA2-128f-simple variant:
+// - SHA2-128f: Uses SHA-256 (well-understood hash function)
+// - simple: Simpler variant (easier to audit)
+// - f: Fast variant (faster signing, larger signatures)
+// - Security: 128-bit (matches Falcon-1024)
 //
 // Why SPHINCS+ instead of Falcon:
 // - Paranoid security: Stateless hash-based signatures
 // - No secret key compromise: Even if key leaks, old signatures stay valid
 // - Quantum-proof: Based on hash functions, not lattices
 // - Slower: ~50ms signing vs Falcon's 0.5ms (acceptable for 1 RT/min creation)
-//
-// TODO for Production:
-// 1. Use liboqs-go (github.com/open-quantum-safe/liboqs-go) which has SPHINCS+
-// 2. OR use CIRCL if they add SPHINCS+ support
-// 3. OR use CGO bindings to pqclean's SPHINCS+ implementation
-//
-// For now: Mint creates Phase3Units but SKIPS signing (DEVELOPMENT ONLY!)
 type SPHINCSPlusSigner struct {
+	logger     *slog.Logger
+	privateKey []byte
+	publicKey  []byte
 }
 
-// NewSPHINCSPlusSigner creates a new SPHINCS+ signer
-func NewSPHINCSPlusSigner() *SPHINCSPlusSigner {
-	// TODO(phase-4-production): Implement actual SPHINCS+ signing
-	// Options same as Falcon: liboqs-go, CIRCL (future), or CGO bindings
+// NewSPHINCSPlusSigner creates a new SPHINCS+ signer with generated keypair
+func NewSPHINCSPlusSigner(logger *slog.Logger) (*SPHINCSPlusSigner, error) {
+	// Initialize SPHINCS+ signature scheme
+	sig := oqs.Signature{}
+	defer sig.Clean()
 
-	return &SPHINCSPlusSigner{}
+	if err := sig.Init("SPHINCS+-SHA2-128f-simple", nil); err != nil {
+		return nil, fmt.Errorf("failed to initialize SPHINCS+: %w", err)
+	}
+
+	// Generate keypair
+	publicKey, err := sig.GenerateKeyPair()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate SPHINCS+ keypair: %w", err)
+	}
+
+	// Export secret key
+	privateKey := sig.ExportSecretKey()
+
+	logger.Info("SPHINCS+ keypair generated",
+		"algorithm", "SPHINCS+-SHA2-128f-simple",
+		"public_key_size", len(publicKey),
+		"private_key_size", len(privateKey))
+
+	return &SPHINCSPlusSigner{
+		logger:     logger,
+		privateKey: privateKey,
+		publicKey:  publicKey,
+	}, nil
 }
 
-// SignPhase3Unit signs a Phase3RoboTorqUnit merkle root with SPHINCS+
+// SignPhase3Unit signs a Phase3RoboTorqUnit with SPHINCS+
 //
 // # Arguments
-//   - unitID: The RT unit ID (e.g., "RT-20251116-120000.000000")
-//   - merkleRoot: The Level 2 merkle root (64-char hex)
-//   - mintedAt: Timestamp when unit was created (RFC3339)
+//   - unitID: The unit ID (e.g., "unit-20251116-001")
+//   - merkleRoot: The Level2 merkle root hash (64-char hex)
+//   - mintedAt: ISO8601 timestamp when unit was minted
 //
 // # Returns
-//   - signatureHex: Hex-encoded SPHINCS+ signature
-//   - publicKeyHex: Hex-encoded SPHINCS+ public key
-//   - error if signing fails
-//
-// ⚠️  CURRENT STATUS: Returns placeholder signature - DEVELOPMENT ONLY!
+//   - signatureHex: Hex-encoded SPHINCS+ signature (~17KB for -128s variant)
+//   - publicKeyHex: Hex-encoded SPHINCS+ public key (~32 bytes)
+//   - error if signing failed
 func (s *SPHINCSPlusSigner) SignPhase3Unit(
 	unitID string,
 	merkleRoot string,
 	mintedAt string,
 ) (signatureHex string, publicKeyHex string, error error) {
-	// Hash the unit data for deterministic signing
-	unitHash := hashUnitForSigning(unitID, merkleRoot, mintedAt)
+	// Initialize signer
+	sig := oqs.Signature{}
+	defer sig.Clean()
 
-	// Validate hex format at least
-	if len(merkleRoot) != 64 {
-		return "", "", fmt.Errorf("invalid merkle root length: %d", len(merkleRoot))
+	if err := sig.Init("SPHINCS+-SHA2-128f-simple", s.privateKey); err != nil {
+		return "", "", fmt.Errorf("failed to initialize SPHINCS+: %w", err)
 	}
 
-	// TODO(phase-4-production): IMPLEMENT ACTUAL SPHINCS+ SIGNING
-	// For now, return placeholder (allows pipeline to work)
+	// Create canonical message
+	message := createSigningMessage(unitID, merkleRoot, mintedAt)
 
-	// ⚠️  WARNING: These are FAKE signatures! NOT for production!
-	// Production must use real SPHINCS+ signing for archival security.
+	// Sign message
+	signature, err := sig.Sign([]byte(message))
+	if err != nil {
+		return "", "", fmt.Errorf("failed to sign Phase3 unit: %w", err)
+	}
 
-	placeholderSignature := hex.EncodeToString(unitHash[:]) // Just the hash
-	placeholderPublicKey := hex.EncodeToString([]byte("PLACEHOLDER_SPHINCS_PUBLIC_KEY_32_BYTES"))
+	signatureHex = hex.EncodeToString(signature)
+	publicKeyHex = hex.EncodeToString(s.publicKey)
 
-	return placeholderSignature, placeholderPublicKey, nil
+	s.logger.Debug("SPHINCS+ signature generated",
+		"unit_id", unitID,
+		"signature_size", len(signature),
+		"public_key_size", len(s.publicKey))
+
+	return signatureHex, publicKeyHex, nil
 }
 
 // VerifyPhase3Unit verifies a SPHINCS+ signature on a Phase3RoboTorqUnit
@@ -84,8 +120,6 @@ func (s *SPHINCSPlusSigner) SignPhase3Unit(
 //
 // # Returns
 //   - error if signature invalid, nil if valid
-//
-// ⚠️  CURRENT STATUS: Returns nil (accepts all signatures) - DEVELOPMENT ONLY!
 func (s *SPHINCSPlusSigner) VerifyPhase3Unit(
 	unitID string,
 	merkleRoot string,
@@ -93,35 +127,60 @@ func (s *SPHINCSPlusSigner) VerifyPhase3Unit(
 	signatureHex string,
 	publicKeyHex string,
 ) error {
-	// Validate hex format
-	_, err := hex.DecodeString(signatureHex)
-	if err != nil {
-		return fmt.Errorf("invalid signature hex: %w", err)
-	}
-
-	_, err = hex.DecodeString(publicKeyHex)
+	// Decode public key
+	publicKey, err := hex.DecodeString(publicKeyHex)
 	if err != nil {
 		return fmt.Errorf("invalid public key hex: %w", err)
 	}
 
-	// TODO(phase-4-production): IMPLEMENT ACTUAL SPHINCS+ VERIFICATION
-	// For now, just validate hex encoding (development/testing phase)
+	// Decode signature
+	signature, err := hex.DecodeString(signatureHex)
+	if err != nil {
+		return fmt.Errorf("invalid signature hex: %w", err)
+	}
 
-	// ⚠️  WARNING: This accepts ALL signatures! NOT for production!
+	// Initialize verifier
+	sig := oqs.Signature{}
+	defer sig.Clean()
 
-	return nil // PLACEHOLDER - accepts all signatures
+	if err := sig.Init("SPHINCS+-SHA2-128f-simple", nil); err != nil {
+		return fmt.Errorf("failed to initialize SPHINCS+: %w", err)
+	}
+
+	// Create canonical message
+	message := createSigningMessage(unitID, merkleRoot, mintedAt)
+
+	// Verify signature
+	isValid, err := sig.Verify([]byte(message), signature, publicKey)
+	if err != nil {
+		return fmt.Errorf("signature verification failed: %w", err)
+	}
+
+	if !isValid {
+		return fmt.Errorf("invalid SPHINCS+ signature for unit=%s", unitID)
+	}
+
+	return nil
 }
 
-// hashUnitForSigning creates a deterministic SHA256 hash of unit data
+// GetPublicKey returns the hex-encoded public key
+func (s *SPHINCSPlusSigner) GetPublicKey() string {
+	return hex.EncodeToString(s.publicKey)
+}
+
+// createSigningMessage creates the canonical message to sign/verify
+// Must match format: "{unitID}|{merkleRoot}|{mintedAt}"
+func createSigningMessage(unitID, merkleRoot, mintedAt string) string {
+	return fmt.Sprintf("%s|%s|%s", unitID, merkleRoot, mintedAt)
+}
+
+// hashUnitForSigning - DEPRECATED, kept for backward compatibility
+// Use createSigningMessage instead
 func hashUnitForSigning(unitID string, merkleRoot string, mintedAt string) [32]byte {
-	hasher := sha256.New()
-
-	// Hash in deterministic order
-	hasher.Write([]byte(unitID))
-	hasher.Write([]byte(merkleRoot))
-	hasher.Write([]byte(mintedAt))
-
+	// This was the old placeholder implementation
+	// Keeping for any tests that might reference it
+	message := createSigningMessage(unitID, merkleRoot, mintedAt)
 	var result [32]byte
-	copy(result[:], hasher.Sum(nil))
+	copy(result[:], []byte(message))
 	return result
 }

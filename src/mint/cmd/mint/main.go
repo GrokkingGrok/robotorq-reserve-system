@@ -176,12 +176,16 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 	logger.Info("Phase3AssemblerMetrics initialized")
 
 	// Create Phase3RoboTorqUnitAssembler (Phase 3 Milestone 4b: RT unit assembler)
-	phase3Assembler := mint.NewPhase3RoboTorqUnitAssembler(
+	phase3Assembler, err := mint.NewPhase3RoboTorqUnitAssembler(
 		logger,
 		phase3Metrics,
 		level2MerkleBuilder,
 		10, // Channel capacity
 	)
+	if err != nil {
+		logger.Error("Failed to initialize Phase3RoboTorqUnitAssembler", "error", err)
+		os.Exit(1)
+	}
 	logger.Info("Phase3RoboTorqUnitAssembler initialized", "channel_capacity", 10)
 
 	// Create Phase3DistoDamPublisher (Phase 3 Milestone 5a: DistoDam publisher)
