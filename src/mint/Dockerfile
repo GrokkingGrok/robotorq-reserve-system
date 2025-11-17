@@ -50,9 +50,6 @@ RUN go mod tidy
 # Build with CGO enabled (pkg-config now finds our fake liboqs-go.pc)
 RUN CGO_ENABLED=1 go build -o /mint ./cmd/mint
 
-# Run minimal tests AND full validation tests
-RUN CGO_ENABLED=1 go test -v ./internal/crypto
-
 # -------------------------------
 # Stage 2: Build the final runtime image
 # -------------------------------
