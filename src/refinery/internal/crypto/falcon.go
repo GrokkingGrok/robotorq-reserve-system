@@ -40,7 +40,11 @@ func NewFalconSigner() (*FalconSigner, error) {
 	}
 
 	// Export secret key for reuse (liboqs-go pattern for multiple signatures)
-	secretKey := sig.ExportSecretKey()
+	// CRITICAL: Must copy the secret key, not reference it!
+	// sig.ExportSecretKey() returns internal slice that gets cleaned by defer sig.Clean()
+	exportedKey := sig.ExportSecretKey()
+	secretKey := make([]byte, len(exportedKey))
+	copy(secretKey, exportedKey)
 
 	return &FalconSigner{
 		secretKey: secretKey,
@@ -84,13 +88,20 @@ func (fs *FalconSigner) SignPhase2Ingot(
 		hashCount,
 		timestamp)
 
-	// Create new signature object with exported secret key
-	// This is the correct liboqs-go pattern for signing multiple messages
+	// Create new signature object for THIS signature operation
+	// CRITICAL LIBOQS-GO PATTERN:
+	// - sig.Init(alg, secretKey) stores a REFERENCE to the secretKey slice
+	// - sig.Clean() calls MemCleanse() which ZEROES the referenced memory
+	// - Therefore, we MUST pass a COPY of the secret key to avoid zeroing fs.secretKey
 	sig := oqs.Signature{}
 	defer sig.Clean()
 
-	// Re-initialize with secret key for THIS signature operation
-	if err := sig.Init("Falcon-1024", fs.secretKey); err != nil {
+	// Make a fresh copy of the secret key for THIS signature operation
+	secretKeyCopy := make([]byte, len(fs.secretKey))
+	copy(secretKeyCopy, fs.secretKey)
+
+	// Initialize signer with the COPY (not the original)
+	if err := sig.Init("Falcon-1024", secretKeyCopy); err != nil {
 		return "", "", fmt.Errorf("failed to init Falcon-1024 signer: %w", err)
 	}
 

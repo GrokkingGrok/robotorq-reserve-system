@@ -30,7 +30,30 @@ func (fs *FalconSigner) SignPhase2Ingot(...) (string, string, error) {
 - Signer initialization: ✅ No errors
 - Keypair generation: ✅ No errors
 
-**Root Cause**: `oqs.Signature` object becomes invalid after first `Sign()` call when secret key not re-initialized.
+**Root Cause Discovery** (deeper than initially thought):
+
+The problem was MORE subtle than just "signature object becomes invalid." The actual issue:
+
+1. `sig.Init(algName, secretKey)` **stores a REFERENCE** to the `secretKey` parameter (doesn't copy it)
+2. `sig.Clean()` calls `MemCleanse(sig.secretKey)` which **zeroes the referenced slice**
+3. When we passed `fs.secretKey` directly to `Init()`, `Clean()` would zero our original secret key
+4. Second signature attempt uses zeroed memory → "can not sign message"
+
+**Initial Fix** (incomplete):
+```go
+// This STILL had the bug!
+secretKey := sig.ExportSecretKey()  // Returns reference, not copy
+sig.Init("Falcon-1024", secretKey)  // Stores reference
+sig.Clean()  // Zeroes secretKey!
+```
+
+**Complete Fix** (the copy is critical):
+```go
+// MUST copy before passing to Init()
+secretKeyCopy := make([]byte, len(fs.secretKey))
+copy(secretKeyCopy, fs.secretKey)
+sig.Init("Falcon-1024", secretKeyCopy)  // Safe: Clean() only zeroes the copy
+```
 
 ---
 
@@ -155,8 +178,10 @@ func NewFalconSigner() (*FalconSigner, error) {
     sig.Init("Falcon-1024", nil)
     publicKey, _ := sig.GenerateKeyPair()
     
-    // Export secret key for reuse
-    secretKey := sig.ExportSecretKey()
+    // CRITICAL: Export AND COPY secret key
+    exportedKey := sig.ExportSecretKey()
+    secretKey := make([]byte, len(exportedKey))
+    copy(secretKey, exportedKey)  // ✅ COPY before sig.Clean() zeroes it
 
     return &FalconSigner{
         secretKey: secretKey,
@@ -171,8 +196,13 @@ func (fs *FalconSigner) SignPhase2Ingot(...) (string, string, error) {
     sig := oqs.Signature{}
     defer sig.Clean()
 
-    // Re-initialize with exported secret key
-    sig.Init("Falcon-1024", fs.secretKey)  // ✅ Key insight!
+    // CRITICAL: Make a COPY of the secret key before passing to Init()
+    // Init() stores a REFERENCE to the parameter, not a copy
+    // When Clean() calls MemCleanse(sig.secretKey), it zeroes the referenced slice
+    secretKeyCopy := make([]byte, len(fs.secretKey))
+    copy(secretKeyCopy, fs.secretKey)
+    
+    sig.Init("Falcon-1024", secretKeyCopy)  // ✅ Pass copy, not original!
 
     signature, err := sig.Sign([]byte(message))
     return hex.EncodeToString(signature), hex.EncodeToString(fs.publicKey), nil
@@ -189,6 +219,61 @@ func (fs *FalconSigner) Clean() {
 ---
 
 ## Test Results
+
+### Unit Tests: Regression Test for Multiple Signatures
+
+**Created**: `src/refinery/internal/crypto/falcon_test.go`
+
+```go
+func TestFalconSigner_SignPhase2Ingot_MultipleSignatures(t *testing.T) {
+    signer, err := NewFalconSigner()
+    require.NoError(t, err)
+    defer signer.Clean()
+
+    // Sign 3 different messages with same signer
+    for i := 1; i <= 3; i++ {
+        ingotID := fmt.Sprintf("test-ingot-%03d", i)
+        sig, pubKey, err := signer.SignPhase2Ingot(ingotID, "hash", 3600, "2025-11-16T12:00:00Z")
+        
+        assert.NoError(t, err, "Signature %d should succeed", i)  // ✅ All pass now!
+        assert.NotEmpty(t, sig)
+        assert.NotEmpty(t, pubKey)
+    }
+}
+```
+
+**Results**:
+```
+=== RUN   TestFalconSigner_SignPhase2Ingot_MultipleSignatures
+--- PASS: TestFalconSigner_SignPhase2Ingot_MultipleSignatures (0.09s)
+```
+
+### Integration Tests: Phase2IngotReceiver Signature Verification
+
+**Created**: `src/mint/internal/mint/phase2_ingot_receiver_test.go`
+
+Tests verify that Mint correctly accepts/rejects Falcon-1024 signatures:
+
+```
+=== RUN   TestPhase2IngotReceiver_ValidFalconSignature
+--- PASS: TestPhase2IngotReceiver_ValidFalconSignature (0.35s)
+
+=== RUN   TestPhase2IngotReceiver_InvalidFalconSignature
+--- PASS: TestPhase2IngotReceiver_InvalidFalconSignature (0.34s)
+
+=== RUN   TestPhase2IngotReceiver_TamperedMessage
+--- PASS: TestPhase2IngotReceiver_TamperedMessage (0.33s)
+
+=== RUN   TestPhase2IngotReceiver_MixedValidInvalid
+--- PASS: TestPhase2IngotReceiver_MixedValidInvalid (0.54s)
+```
+
+**Key Validation**:
+- ✅ Valid signatures accepted and queued
+- ✅ Corrupted signatures rejected with error log
+- ✅ Tampered messages detected (signature mismatch)
+- ✅ Mixed batches: valid ingots queued, invalid rejected
+- ✅ Metrics correctly tracked (success/failed counters)
 
 ### E2E Test: Phase 5 Complete Pipeline
 
@@ -250,9 +335,11 @@ Total: 6/6 pipeline stages passed
 
 ### ✅ DO
 
-1. **Export secret key after initial keypair generation**:
+1. **Export AND COPY secret key after initial keypair generation**:
    ```go
-   secretKey := sig.ExportSecretKey()
+   exportedKey := sig.ExportSecretKey()
+   secretKey := make([]byte, len(exportedKey))
+   copy(secretKey, exportedKey)  // ✅ COPY is critical!
    ```
 
 2. **Create fresh `oqs.Signature{}` per signing operation**:
@@ -261,9 +348,11 @@ Total: 6/6 pipeline stages passed
    defer sig.Clean()
    ```
 
-3. **Re-initialize with exported secret key**:
+3. **ALWAYS copy secret key before passing to Init()**:
    ```go
-   sig.Init("Falcon-1024", secretKey)
+   secretKeyCopy := make([]byte, len(fs.secretKey))
+   copy(secretKeyCopy, fs.secretKey)
+   sig.Init("Falcon-1024", secretKeyCopy)  // ✅ Pass copy!
    ```
 
 4. **Use `oqs.MemCleanse()` to securely erase secret keys**:
@@ -289,37 +378,61 @@ Total: 6/6 pipeline stages passed
    }
    ```
 
-2. **Don't forget to export secret key if reusing**:
+2. **Don't forget to COPY exported secret key**:
    ```go
-   // ❌ BROKEN
-   sig.GenerateKeyPair()
-   // Missing: secretKey := sig.ExportSecretKey()
+   // ❌ BROKEN - ExportSecretKey() returns reference
+   secretKey := sig.ExportSecretKey()  // sig.Clean() will zero this!
    ```
 
-3. **Don't pass `nil` when you need to reuse secret key**:
+3. **Don't pass original secret key to Init()**:
    ```go
-   // ❌ BROKEN - should pass secretKey, not nil
-   sig.Init("Falcon-1024", nil)  
+   // ❌ BROKEN - Init() stores reference, Clean() zeroes it
+   sig.Init("Falcon-1024", fs.secretKey)  
+   ```
+
+4. **Don't forget to copy BEFORE Init()**:
+   ```go
+   // ❌ BROKEN - Clean() will zero fs.secretKey
+   sig.Init("Falcon-1024", fs.secretKey)
+   defer sig.Clean()
    ```
 
 ---
 
 ## Why This Pattern Exists
 
-**Hypothesis** (based on liboqs C library design):
+**Root Cause** (confirmed through testing and code analysis):
 
-1. **C Library Statefulness**: The underlying `OQS_SIG` C struct may maintain internal state that becomes invalid after `OQS_SIG_sign()`.
+1. **`Init()` Stores Reference, Not Copy**:
+   ```go
+   func (sig *Signature) Init(algName string, secretKey []byte) error {
+       sig.secretKey = secretKey  // ← Stores reference to parameter!
+   }
+   ```
 
-2. **Memory Safety**: Creating a fresh object ensures no stale pointers or state corruption.
+2. **`Clean()` Zeroes Referenced Memory**:
+   ```go
+   func (sig *Signature) Clean() {
+       if len(sig.secretKey) > 0 {
+           MemCleanse(sig.secretKey)  // ← Zeroes the ORIGINAL slice!
+       }
+   }
+   ```
 
-3. **Thread Safety**: Each goroutine gets its own signature object, avoiding shared state.
+3. **Why E2E Test Passed Initially**:
+   - Only created ONE ingot per test run
+   - Never exercised the multiple-signature code path
+   - Bug only appeared when signing 2+ messages with same signer
 
-4. **Resource Management**: `Clean()` properly frees C memory allocated by `OQS_SIG_new()`.
+4. **Why Unit Test Caught It**:
+   - Explicitly tested multiple signatures in loop
+   - Regression test for this exact scenario
+   - Failed on second signature until fix applied
 
-**Evidence**:
-- liboqs-go tests never reuse signature objects across signatures
-- `Clean()` function calls `C.OQS_SIG_free(sig.sig)` and resets struct
-- Comment in `Clean()`: "One can reuse the signature by re-initializing"
+**Memory Management Philosophy**:
+- liboqs-go expects you to manage secret key lifecycle
+- `Init()` doesn't copy to avoid unnecessary allocations
+- YOU must copy if you need to preserve the key across `Clean()` calls
 
 ---
 
@@ -336,18 +449,40 @@ Total: 6/6 pipeline stages passed
 
 ### SPHINCS+ Implementation (Phase 3 Units)
 
-**Same pattern applies**:
+**Same pattern applies** (CRITICAL: copy secret key before Init):
 ```go
 type SPHINCSPlusSigner struct {
-    secretKey []byte  // ✅ Export and store
+    secretKey []byte  // ✅ Store copy, not reference
     publicKey []byte
+}
+
+func NewSPHINCSPlusSigner() (*SPHINCSPlusSigner, error) {
+    sig := oqs.Signature{}
+    defer sig.Clean()
+    
+    sig.Init("SPHINCS+-SHA2-128f-simple", nil)
+    publicKey, _ := sig.GenerateKeyPair()
+    
+    // CRITICAL: COPY exported key
+    exportedKey := sig.ExportSecretKey()
+    secretKey := make([]byte, len(exportedKey))
+    copy(secretKey, exportedKey)
+    
+    return &SPHINCSPlusSigner{
+        secretKey: secretKey,
+        publicKey: publicKey,
+    }, nil
 }
 
 func (s *SPHINCSPlusSigner) SignPhase3Unit(...) (string, string, error) {
     sig := oqs.Signature{}
     defer sig.Clean()
     
-    sig.Init("SPHINCS+-SHA2-128f-simple", s.secretKey)  // ✅ Reuse secret key
+    // CRITICAL: COPY secret key before Init()
+    secretKeyCopy := make([]byte, len(s.secretKey))
+    copy(secretKeyCopy, s.secretKey)
+    
+    sig.Init("SPHINCS+-SHA2-128f-simple", secretKeyCopy)  // ✅ Pass copy
     return sig.Sign(message)
 }
 ```
@@ -370,9 +505,17 @@ If signature rate increases significantly (>100/sec):
 - Open Quantum Safe project documentation
 - Trial-and-error experimentation with E2E tests
 - Docker logs analysis
+- **Unit test debugging** - regression test revealed the Init() reference issue
 
-**Commit**: `5f415b5` - "fix(refinery): Implement correct liboqs-go pattern for multiple signatures"
+**Key Commits**:
+- `5f415b5` - "fix(refinery): Implement correct liboqs-go pattern for multiple signatures"
+- `0956181` - "docs: Add liboqs-go research findings and best practices"
+
+**Tests Created**:
+- `src/refinery/internal/crypto/falcon_test.go` - 10 unit tests (all passing)
+- `src/mint/internal/crypto/falcon_test.go` - 6 unit tests (all passing)
+- `src/mint/internal/mint/phase2_ingot_receiver_test.go` - 6 integration tests (all passing)
 
 ---
 
-**Lesson**: When library documentation is sparse, **study the test code** - it often reveals the correct usage patterns.
+**Lesson**: When library documentation is sparse, **study the test code** - it often reveals the correct usage patterns. And when tests pass but production fails, **write regression tests that match production's actual usage pattern** (multiple operations with same object).
