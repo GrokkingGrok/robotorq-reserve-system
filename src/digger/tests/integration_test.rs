@@ -18,6 +18,7 @@ use tower::ServiceExt;
 use digger::{
     config::DiggerConfig,
     contract_state::ContractStateManager,
+    crypto::DiggerKeypair,
     jtu_storage::JtuStorageManager,
     http_api::{ApiState, create_router},
 };
@@ -49,7 +50,8 @@ async fn test_full_contract_lifecycle() {
         }
     };
 
-    let state = ApiState::new(config, contract_manager, storage_manager, nats_client);
+    let keypair = DiggerKeypair::generate();
+    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair);
     let app = create_router(state);
 
     // ========================================================================
@@ -274,12 +276,13 @@ async fn test_contract_not_found() {
     let nats_client = match async_nats::connect("nats://localhost:4222").await {
         Ok(client) => client,
         Err(_) => {
-            eprintln!("⚠️  Skipping test_contract_not_found - NATS not available (this is OK in CI)");
+            eprintln!("⚠️  Skipping test_error_handling - NATS not available (this is OK in CI)");
             return;
         }
     };
 
-    let state = ApiState::new(config, contract_manager, storage_manager, nats_client);
+    let keypair = DiggerKeypair::generate();
+    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair);
     let app = create_router(state);
 
     let response = app
@@ -322,7 +325,8 @@ async fn test_execute_before_stake_payment() {
         }
     };
 
-    let state = ApiState::new(config, contract_manager, storage_manager, nats_client);
+    let keypair = DiggerKeypair::generate();
+    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair);
     let app = create_router(state);
 
     // Create contract
@@ -397,12 +401,13 @@ async fn test_invalid_torq_values() {
     let nats_client = match async_nats::connect("nats://localhost:4222").await {
         Ok(client) => client,
         Err(_) => {
-            eprintln!("⚠️  Skipping test_invalid_torq_values - NATS not available (this is OK in CI)");
+            eprintln!("⚠️  Skipping test_stake_validation - NATS not available (this is OK in CI)");
             return;
         }
     };
 
-    let state = ApiState::new(config, contract_manager, storage_manager, nats_client);
+    let keypair = DiggerKeypair::generate();
+    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair);
     let app = create_router(state);
 
     // Test negative torq

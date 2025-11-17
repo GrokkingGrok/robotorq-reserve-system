@@ -590,7 +590,10 @@ mod tests {
             }
         };
 
-        Some(ApiState::new(config, contract_manager, storage_manager, nats_client))
+        // Generate test keypair for signing
+        let keypair = DiggerKeypair::generate();
+
+        Some(ApiState::new(config, contract_manager, storage_manager, nats_client, keypair))
     }
 
     #[tokio::test]
