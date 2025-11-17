@@ -1,5 +1,8 @@
 // internal/refinery/hash_batch_receiver_test.go
 // Tests for hash batch receiver with signature verification
+//
+// NOTE: These tests validate structure and logic without requiring liboqs.
+// Crypto verification tests are in crypto/falcon_test.go (requires liboqs in Docker)
 
 package refinery
 
