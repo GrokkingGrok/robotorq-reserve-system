@@ -3,32 +3,24 @@ package crypto
 import (
 	"encoding/hex"
 	"fmt"
+	"strings"
+
+	"github.com/open-quantum-safe/liboqs-go/oqs"
 )
 
 // FalconVerifier handles Falcon-1024 signature verification
 //
-// NOTE: Phase 4 Crypto Implementation Status
-// ===========================================
-// Digger (Rust): ✅ IMPLEMENTED - Using pqcrypto-falcon 0.4.1
-// Refinery (Go): ⚠️  PLACEHOLDER - CIRCL v1.6.1 doesn't expose Falcon easily
+// Phase 5 Implementation: REAL Falcon-1024 Verification
+// =======================================================
+// Uses liboqs-go (github.com/open-quantum-safe/liboqs-go) for NIST-approved
+// post-quantum signature verification.
 //
-// TODO for Production:
-// 1. Use liboqs-go (github.com/open-quantum-safe/liboqs-go) which has Falcon-1024
-// 2. OR wait for CIRCL to expose Falcon in public API
-// 3. OR use CGO bindings to pqclean's Falcon implementation
-//
-// For now: Refinery accepts signed batches but SKIPS verification (DEVELOPMENT ONLY!)
+// Verifies signatures created by Digger (Rust + pqcrypto-falcon)
 type FalconVerifier struct {
 }
 
 // NewFalconVerifier creates a new Falcon-1024 verifier
 func NewFalconVerifier() *FalconVerifier {
-	// TODO(phase-4-production): Implement actual Falcon verification
-	// Options:
-	// 1. github.com/open-quantum-safe/liboqs-go (OQS wrapper, battle-tested)
-	// 2. Manual CGO bindings to pqclean Falcon C code
-	// 3. Wait for CIRCL Falcon public API
-	
 	return &FalconVerifier{}
 }
 
@@ -47,8 +39,6 @@ func NewFalconVerifier() *FalconVerifier {
 //
 // # Returns
 //   - error if signature invalid, nil if valid
-//
-// ⚠️  CURRENT STATUS: Returns nil (accepts all signatures) - DEVELOPMENT ONLY!
 func (fv *FalconVerifier) VerifyHashBatch(
 	contractID string,
 	diggerID string,
@@ -60,24 +50,48 @@ func (fv *FalconVerifier) VerifyHashBatch(
 	signatureHex string,
 	publicKeyHex string,
 ) error {
-	// Decode public key (validate hex format at least)
-	_, err := hex.DecodeString(publicKeyHex)
+	// 1. Decode public key
+	publicKey, err := hex.DecodeString(publicKeyHex)
 	if err != nil {
 		return fmt.Errorf("invalid public key hex: %w", err)
 	}
 
-	// Decode signature (validate hex format)
-	_, err = hex.DecodeString(signatureHex)
+	// 2. Decode signature
+	signature, err := hex.DecodeString(signatureHex)
 	if err != nil {
 		return fmt.Errorf("invalid signature hex: %w", err)
 	}
 
-	// TODO(phase-4-production): IMPLEMENT ACTUAL FALCON-1024 VERIFICATION
-	// For now, just validate hex encoding (development/testing phase)
-	// This allows the pipeline to work while we integrate proper crypto library
-	
-	// ⚠️  WARNING: This accepts ALL signatures! NOT for production!
-	// Production must verify cryptographic signature validity.
-	
-	return nil  // PLACEHOLDER - accepts all signatures
+	// 3. Reconstruct the message that was signed
+	// Must match EXACTLY what Digger signed in Rust:
+	// format!("{contract_id}|{digger_id}|{milestone_index}|{joules}|{robo_stake}|{hashes_joined}|{timestamp}")
+	hashesJoined := strings.Join(unitHashes, ",")
+	message := fmt.Sprintf("%s|%s|%d|%.2f|%.8f|%s|%s",
+		contractID,
+		diggerID,
+		milestoneIndex,
+		joules,
+		roboStake,
+		hashesJoined,
+		timestamp)
+
+	// 4. Initialize Falcon-1024 verifier
+	sig := oqs.Signature{}
+	defer sig.Clean()
+
+	if err := sig.Init("Falcon-1024", nil); err != nil {
+		return fmt.Errorf("failed to initialize Falcon-1024: %w", err)
+	}
+
+	// 5. Verify the signature
+	isValid, err := sig.Verify([]byte(message), signature, publicKey)
+	if err != nil {
+		return fmt.Errorf("signature verification failed: %w", err)
+	}
+
+	if !isValid {
+		return fmt.Errorf("invalid Falcon-1024 signature for contract=%s digger=%s", contractID, diggerID)
+	}
+
+	return nil
 }
