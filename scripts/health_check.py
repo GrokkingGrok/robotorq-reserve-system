@@ -7,8 +7,8 @@ Usage: python health_check.py
 import requests
 
 SERVICES = {
-    "Digger": "http://localhost:9000/health",
-    "Mint API": "http://localhost:8084/health",
+    "Digger": "http://localhost:3030/health",
+    "Refinery": "http://localhost:8081/health",
     "DistoDam": "http://localhost:8083/health",
 }
 

@@ -7,11 +7,11 @@ Usage: python execute_contract.py --contract-id CONTRACT
 import requests
 import argparse
 
-DIGGER_URL = "http://localhost:9000"
+DIGGER_URL = "http://localhost:3030"
 
 def execute_contract(contract_id):
     """Execute a contract"""
-    url = f"{DIGGER_URL}/execute"
+    url = f"{DIGGER_URL}/contracts/execute"
     payload = {"contract_id": contract_id}
     
     try:

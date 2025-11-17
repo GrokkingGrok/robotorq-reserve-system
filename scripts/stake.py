@@ -7,11 +7,11 @@ Usage: python stake.py --amount 0.05 [--contract-id CONTRACT]
 import requests
 import argparse
 
-DIGGER_URL = "http://localhost:9000"
+DIGGER_URL = "http://localhost:3030"
 
 def stake_robotorq(amount, contract_id=None):
     """Stake RoboTorq"""
-    url = f"{DIGGER_URL}/stake"
+    url = f"{DIGGER_URL}/contracts/stake"
     payload = {"amount": amount}
     
     if contract_id:

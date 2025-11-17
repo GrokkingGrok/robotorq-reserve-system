@@ -9,7 +9,7 @@ import argparse
 import time
 from datetime import datetime
 
-DIGGER_URL = "http://localhost:9000"
+DIGGER_URL = "http://localhost:3030"
 
 def create_contract(contract_id=None, duration=3):
     """Create a single contract"""
@@ -17,7 +17,7 @@ def create_contract(contract_id=None, duration=3):
         timestamp = int(time.time())
         contract_id = f"contract-{timestamp}"
     
-    url = f"{DIGGER_URL}/create_contract"
+    url = f"{DIGGER_URL}/contracts/create"
     payload = {
         "contract_id": contract_id,
         "duration": duration

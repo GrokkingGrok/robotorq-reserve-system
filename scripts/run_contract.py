@@ -8,16 +8,25 @@ import requests
 import argparse
 import time
 
-DIGGER_URL = "http://localhost:9000"
+DIGGER_URL = "http://localhost:3030"
 
-def run_contract(contract_id, duration=3, stake_amount=0.05):
+def run_contract(contract_id, duration=3, stake_amount=0.05, power_watts=1500.0):
     """Run complete contract workflow"""
     print(f"\n▶ Processing contract: {contract_id}")
     
+    # Calculate milestones based on duration (1 milestone per second)
+    milestones = duration
+    
     # Create
     try:
-        response = requests.post(f"{DIGGER_URL}/create_contract", 
-                                json={"contract_id": contract_id, "duration": duration}, 
+        response = requests.post(f"{DIGGER_URL}/contracts/create", 
+                                json={
+                                    "contract_id": contract_id,
+                                    "torq": 100.0,  # 100:1 ratio
+                                    "robo_stake": stake_amount,
+                                    "milestones": milestones,
+                                    "power_watts": power_watts
+                                }, 
                                 timeout=5)
         response.raise_for_status()
         print(f"  ✅ Created")
@@ -25,10 +34,10 @@ def run_contract(contract_id, duration=3, stake_amount=0.05):
         print(f"  ❌ Create failed: {e}")
         return False
     
-    # Stake
+    # Stake (already paid during create, but endpoint might validate)
     try:
-        response = requests.post(f"{DIGGER_URL}/stake", 
-                                json={"amount": stake_amount, "contract_id": contract_id}, 
+        response = requests.post(f"{DIGGER_URL}/contracts/stake", 
+                                json={"contract_id": contract_id}, 
                                 timeout=5)
         response.raise_for_status()
         print(f"  ✅ Staked {stake_amount} RT")
@@ -38,11 +47,16 @@ def run_contract(contract_id, duration=3, stake_amount=0.05):
     
     # Execute
     try:
-        response = requests.post(f"{DIGGER_URL}/execute", 
-                                json={"contract_id": contract_id}, 
-                                timeout=5)
+        response = requests.post(f"{DIGGER_URL}/contracts/execute", 
+                                json={
+                                    "contract_id": contract_id,
+                                    "duration_seconds": duration
+                                }, 
+                                timeout=duration+30)  # Add buffer to timeout
         response.raise_for_status()
-        print(f"  ✅ Executing ({duration}s)")
+        result = response.json()
+        jtus = result.get('jtus_generated', 0)
+        print(f"  ✅ Executed: {jtus} JTUs generated")
     except Exception as e:
         print(f"  ❌ Execute failed: {e}")
         return False
