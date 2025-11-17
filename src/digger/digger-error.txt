@@ -1,0 +1,56 @@
+warning: associated functions `default_test` and `default_prod` are never used
+   --> src\config.rs:98:12
+    |
+ 43 | impl DiggerConfig {
+    | ----------------- associated functions in this implementation
+...
+ 98 |     pub fn default_test() -> Self {
+    |            ^^^^^^^^^^^^
+...
+124 |     pub fn default_prod() -> Self {
+    |            ^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `complete_milestone` is never used
+   --> src\contract_state.rs:180:12
+    |
+ 73 | impl ContractState {
+    | ------------------ method in this implementation
+...
+180 |     pub fn complete_milestone(&mut self) -> Result<(), String> {
+    |            ^^^^^^^^^^^^^^^^^^
+
+warning: methods `all_contract_ids` and `remove_completed` are never used
+   --> src\contract_state.rs:264:12
+    |
+218 | impl ContractStateManager {
+    | ------------------------- methods in this implementation
+...
+264 |     pub fn all_contract_ids(&self) -> Vec<String> {
+    |            ^^^^^^^^^^^^^^^^
+...
+269 |     pub fn remove_completed(&mut self) -> Vec<String> {
+    |            ^^^^^^^^^^^^^^^^
+
+warning: methods `insert_jtu`, `get_jtu_count`, `get_jtu_by_hash`, and `prune_old` are never used
+   --> src\jtu_storage.rs:97:12
+    |
+ 44 | impl JtuStorageManager {
+    | ---------------------- methods in this implementation
+...
+ 97 |     pub fn insert_jtu(&self, jtu: &JouleTorqUnit) -> SqliteResult<()> {
+    |            ^^^^^^^^^^
+...
+168 |     pub fn get_jtu_count(&self, contract_id: &str) -> SqliteResult<i64> {
+    |            ^^^^^^^^^^^^^
+...
+178 |     pub fn get_jtu_by_hash(&self, contract_id: &str, hash: &str) -> SqliteResult<Option<JouleTorqUnit>> {
+    |            ^^^^^^^^^^^^^^^
+...
+212 |     pub fn prune_old(&self, contract_id: &str, days: i64) -> SqliteResult<usize> {
+    |            ^^^^^^^^^
+
+warning: `digger` (bin "digger") generated 4 warnings
+    Finished `release` profile [optimized] target(s) in 0.55s
+     Running `target\release\digger.exe`

@@ -20,7 +20,8 @@ RoboTorq is **NOT** a cryptocurrency—it's a NATS-based distributed system wher
 **Critical Reading**:
 1. `README.md` (5,745 lines): Complete economic model, formulas, philosophy
 2. `BRANCHING.md`: Git workflow (`v0` baseline, `feature/*` branches)
-3. Service-specific architecture docs:
+3. **`port mapping/PORT_MAPPINGS.md`**: **MANDATORY** - Check BEFORE any port changes
+4. Service-specific architecture docs:
    - `src/mint/MINT_ARCHITECTURE.md`
    - `src/refinery/REFINERY_ARCHITECTURE.md`
    - `src/trust/TRUST_ARCHITECTURE.md` (future)
@@ -847,19 +848,51 @@ type Metrics struct {
 
 ```
          ┌─────────┐
-         │   E2E   │  10% - Full pipeline, slow, brittle
-         │  Tests  │
+         │   E2E   │  10% - Full pipeline, slow, comprehensive
+         │ (Python)│       tests/e2e/*.py
          └─────────┘
        ┌─────────────┐
-       │ Integration │  20% - Multi-component, moderate speed
-       │    Tests    │
+       │ Integration │  20% - Multi-service, moderate speed
+       │  (Python)   │       tests/integration/*.py
        └─────────────┘
      ┌─────────────────┐
      │   Unit Tests    │  70% - Single function, fast, reliable
+     │     (Go)        │       src/{service}/*_test.go
      └─────────────────┘
 ```
 
-### Unit Test Example
+### Test Organization
+
+**Structure**:
+```
+tests/
+├── README.md              # Test documentation
+├── e2e/                   # End-to-end tests (Python)
+│   ├── phase2_complete.py # Digger → Refinery → Mint
+│   ├── phase3_complete.py # Phase2Ingot → Merkle → RT Unit
+│   └── full_pipeline.py   # Complete: Digger → DistoDam
+├── integration/           # Integration tests (Python)
+│   ├── refinery_mint.py   # Refinery ↔ Mint
+│   └── mint_distodam.py   # Mint ↔ DistoDam
+└── fixtures/              # Shared test helpers
+    ├── __init__.py
+    ├── helpers.py         # Utilities (colors, docker, etc.)
+    └── sample_data.py     # Test data generators
+```
+
+**Why This Structure**:
+- **Root stays clean**: No test files in repo root
+- **Easy discovery**: All tests in `tests/` directory
+- **Reusable code**: Shared fixtures eliminate duplication
+- **Clear separation**: Unit (Go) vs Integration/E2E (Python)
+
+### Unit Tests (Go) - 70% of coverage
+
+**Location**: `src/{service}/internal/{component}/*_test.go`  
+**Framework**: Go testing + testify/assert  
+**Run**: `go test ./... -v -cover`
+
+**Example**:
 ```go
 // Test ONE function in isolation
 func TestQueueManager_AddUnit(t *testing.T) {
@@ -872,37 +905,351 @@ func TestQueueManager_AddUnit(t *testing.T) {
     assert.NoError(t, err)
     assert.Equal(t, 1, qm.Len())
 }
-```
 
-### Integration Test Example
-```go
-// Test multiple components together
-func TestRefinery_OreToIngot(t *testing.T) {
-    // Setup
+// Test concurrency safety
+func TestQueueManager_ConcurrentAccess(t *testing.T) {
     qm := NewQueueManager(1000)
-    assembler := NewIngotAssembler(qm)
-    receiver := NewOreReceiver(qm)
     
-    // Send ore
-    ore := &models.JouleTorqOre{TokensGenerated: 300, Joules: 1250}
-    receiver.ReceiveOre(ore)
-    
-    // Verify units queued
-    assert.Equal(t, 300, qm.Len())
-    
-    // Assemble ingot (needs 3600 units = 12 ores)
-    for i := 0; i < 11; i++ {
-        receiver.ReceiveOre(ore)
+    // 10 goroutines adding units
+    var wg sync.WaitGroup
+    for i := 0; i < 10; i++ {
+        wg.Add(1)
+        go func(id int) {
+            defer wg.Done()
+            unit := &models.JouleTorqUnit{
+                TokenID: fmt.Sprintf("concurrent-%d", id),
+            }
+            qm.AddUnit(unit)
+        }(i)
     }
     
-    ingot := assembler.GetCompletedIngots()[0]
-    assert.Equal(t, 3600, len(ingot.Units))
-    assert.NotEmpty(t, ingot.BranchHash)
+    wg.Wait()
+    assert.Equal(t, 10, qm.Len())
 }
 ```
 
-### E2E Test Example
-See `test-digger-e2e.ps1` for full pipeline test.
+**Run Unit Tests**:
+```bash
+# All services
+go test ./... -v -cover
+
+# Specific service
+cd src/mint
+go test ./internal/mint -v -cover
+
+# With race detection
+go test ./... -v -race
+
+# Coverage report
+go test ./... -coverprofile=coverage.out
+go tool cover -html=coverage.out
+```
+
+### Integration Tests (Python) - 20% of coverage
+
+**Location**: `tests/integration/*.py`  
+**Framework**: Python asyncio + nats-py  
+**Run**: `python tests/integration/{test_name}.py`
+
+**Example** (`tests/integration/refinery_mint.py`):
+```python
+#!/usr/bin/env python3
+"""
+Integration Test: Refinery → Mint
+Tests ingot publishing and reception
+"""
+
+import asyncio
+import json
+from nats.aio.client import Client as NATS
+import sys
+sys.path.append('tests/fixtures')
+from helpers import *
+
+NATS_URL = "nats://localhost:4222"
+INGOT_TOPIC = "mint.ingots"
+
+async def test_refinery_to_mint():
+    """Test that Mint receives and processes ingots from Refinery"""
+    
+    print_section("Integration Test: Refinery → Mint")
+    
+    # Connect to NATS
+    nc = NATS()
+    await nc.connect(NATS_URL)
+    
+    received_ingots = []
+    
+    async def ingot_handler(msg):
+        ingot = json.loads(msg.data.decode())
+        received_ingots.append(ingot)
+        print_success(f"Received ingot: {ingot['id']}")
+    
+    # Subscribe to ingot topic
+    await nc.subscribe(INGOT_TOPIC, cb=ingot_handler)
+    
+    # Publish test ingot
+    test_ingot = create_sample_phase2_ingot("test-ingot-001")
+    await nc.publish(INGOT_TOPIC, json.dumps(test_ingot).encode())
+    
+    # Wait for processing
+    await asyncio.sleep(2)
+    
+    # Verify
+    assert len(received_ingots) == 1, "Should receive 1 ingot"
+    assert received_ingots[0]['id'] == "test-ingot-001"
+    
+    await nc.close()
+    print_success("✨ Integration test passed!")
+
+if __name__ == "__main__":
+    asyncio.run(test_refinery_to_mint())
+```
+
+**Run Integration Tests**:
+```bash
+# Single test
+python tests/integration/refinery_mint.py
+
+# All integration tests (with pytest)
+pytest tests/integration/ -v
+```
+
+### End-to-End Tests (Python) - 10% of coverage
+
+**Location**: `tests/e2e/*.py`  
+**Framework**: Python asyncio + nats-py + docker helpers  
+**Run**: `python tests/e2e/{test_name}.py`
+
+**Example** (`tests/e2e/phase3_complete.py`):
+```python
+#!/usr/bin/env python3
+"""
+E2E Test: Phase 3 Complete Proof Chain
+Tests: Phase2Ingot → IngotHashQueue → Level2Merkle → Phase3Unit → DistoDam
+"""
+
+import asyncio
+import json
+from nats.aio.client import Client as NATS
+import sys
+sys.path.append('tests/fixtures')
+from helpers import *
+
+NATS_URL = "nats://localhost:4222"
+INGOT_COUNT = 1000
+TIMEOUT = 30
+
+async def main():
+    print_section("Phase 3 E2E Test: Complete Proof Chain")
+    
+    # Prerequisites
+    if not check_docker_container("robotorq-network-mint-1"):
+        print_error("Mint container not running")
+        return False
+    
+    # Connect to NATS
+    nc = NATS()
+    await nc.connect(NATS_URL)
+    
+    received_units = []
+    
+    # Subscribe to output
+    async def unit_handler(msg):
+        unit = json.loads(msg.data.decode())
+        received_units.append(unit)
+        print_success(f"Received Phase3RoboTorqUnit: {unit['unit_id']}")
+    
+    await nc.subscribe("distodam.units", cb=unit_handler)
+    await asyncio.sleep(1)  # Ensure subscription ready
+    
+    # Publish 1000 Phase2Ingots
+    print_step(f"Publishing {INGOT_COUNT} Phase2Ingots...")
+    for i in range(1, INGOT_COUNT + 1):
+        ingot = create_sample_phase2_ingot(
+            f"test-ingot-{i:04d}",
+            contracts=["e2e-contract-001", "e2e-contract-002"],
+            diggers=["e2e-digger-001"]
+        )
+        await nc.publish("mint.ingots", json.dumps(ingot).encode())
+    
+    print_success(f"Published {INGOT_COUNT} Phase2Ingots")
+    
+    # Wait for Phase3 unit
+    print_step("Waiting for Phase3RoboTorqUnit...")
+    await asyncio.sleep(TIMEOUT)
+    
+    # Verify
+    if not received_units:
+        print_error("No Phase3RoboTorqUnit received!")
+        return False
+    
+    unit = received_units[0]
+    is_valid, issues = verify_phase3_unit(unit)
+    
+    if not is_valid:
+        print_error(f"Unit validation failed: {issues}")
+        return False
+    
+    print_success("✨ PHASE 3 E2E TEST PASSED! ✨")
+    await nc.close()
+    return True
+
+if __name__ == "__main__":
+    success = asyncio.run(main())
+    exit(0 if success else 1)
+```
+
+**Run E2E Tests**:
+```bash
+# Prerequisites
+docker-compose up -d
+pip install nats-py
+
+# Single E2E test
+python tests/e2e/phase3_complete.py
+
+# All E2E tests
+pytest tests/e2e/ -v
+```
+
+### Test Fixtures & Helpers
+
+All shared test code lives in `tests/fixtures/`:
+
+```python
+# tests/fixtures/helpers.py
+from helpers import (
+    print_success,      # ✅ Green success message
+    print_error,        # ❌ Red error message
+    print_warning,      # ⚠️  Yellow warning
+    print_step,         # ▶  Blue info step
+    print_section,      # Section header with ===
+    check_docker_container,      # Check if container running
+    get_docker_logs,             # Get container logs
+    search_docker_logs,          # Search logs for pattern
+    wait_for_service,            # Wait for container healthy
+    create_sample_phase2_ingot,  # Generate test ingots
+    verify_phase3_unit,          # Validate Phase3 units
+    validate_merkle_root,        # Check merkle hash format
+)
+```
+
+**Usage in tests**:
+```python
+import sys
+sys.path.append('tests/fixtures')
+from helpers import *
+
+# Now use helpers
+print_step("Starting test...")
+if check_docker_container("robotorq-network-mint-1"):
+    print_success("Mint is running")
+else:
+    print_error("Mint not found")
+```
+
+---
+
+## 🐛 Debugging Tests
+
+### Debugging Python E2E Tests
+
+**Check Prerequisites**:
+```bash
+# Verify services running
+docker-compose ps
+
+# Check specific service
+docker ps | grep mint
+
+# View service logs
+docker logs robotorq-network-mint-1 --tail 50 -f
+```
+
+**Use Test Helpers**:
+```python
+# In your test file
+import sys
+sys.path.append('tests/fixtures')
+from helpers import *
+
+# Check if service is ready
+if not check_docker_container("robotorq-network-mint-1"):
+    print_error("Mint not running - start with: docker-compose up -d mint")
+    exit(1)
+
+# Wait for service to be healthy
+if not wait_for_service("robotorq-network-mint-1", timeout=30):
+    print_error("Mint failed to start")
+    print_step("Check logs: docker logs robotorq-network-mint-1")
+    exit(1)
+
+# Search logs for specific events
+logs = get_docker_logs("robotorq-network-mint-1", since="60s")
+if "ingot assembled" in logs:
+    print_success("Ingot processing confirmed")
+else:
+    print_warning("No ingots found in logs")
+```
+
+**Common Issues**:
+
+1. **NATS Connection Refused**:
+   ```python
+   # Issue: nc.connect() fails
+   # Solution: Check NATS is running
+   if not check_docker_container("robotorq-network-nats-1"):
+       print_error("NATS not running")
+       exit(1)
+   ```
+
+2. **Test Timeout**:
+   ```python
+   # Issue: Waiting forever for message
+   # Solution: Add timeout and check logs
+   try:
+       await asyncio.wait_for(
+           asyncio.Future(),  # Your wait logic
+           timeout=30
+       )
+   except asyncio.TimeoutError:
+       print_error("Timeout waiting for Phase3Unit")
+       logs = get_docker_logs("robotorq-network-mint-1", since="60s")
+       print_step("Recent logs:")
+       print(logs[-500:])  # Last 500 chars
+   ```
+
+3. **Invalid Test Data**:
+   ```python
+   # Issue: Unit validation fails
+   # Solution: Use verify_* helpers
+   is_valid, issues = verify_phase3_unit(unit)
+   if not is_valid:
+       print_error("Validation failed:")
+       for issue in issues:
+           print(f"  - {issue}")
+   ```
+
+### Debugging Go Unit Tests
+
+**Run with Verbose**:
+```bash
+go test ./... -v -run TestSpecificTest
+```
+
+**Debug Race Conditions**:
+```bash
+go test ./... -race -run TestConcurrent
+```
+
+**Print Debug Info**:
+```go
+func TestDebug(t *testing.T) {
+    unit := &JouleTorqUnit{TokenID: "debug"}
+    t.Logf("Unit: %+v", unit)  // Prints during test
+}
+```
 
 ---
 

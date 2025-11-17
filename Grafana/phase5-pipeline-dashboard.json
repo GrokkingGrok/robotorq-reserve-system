@@ -1,0 +1,236 @@
+{
+  "dashboard": {
+    "title": "RoboTorq Phase 5 Pipeline",
+    "uid": "phase5-pipeline",
+    "version": 1,
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "refresh": "5s",
+    "time": {
+      "from": "now-15m",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Phase 5 Pipeline Overview",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
+        "targets": [],
+        "options": {
+          "textMode": "name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [{"value": null, "color": "green"}]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Hash Batches Received (Refinery)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+        "targets": [
+          {
+            "expr": "refinery_nats_batches_received_total",
+            "legendFormat": "Total Batches",
+            "refId": "A"
+          },
+          {
+            "expr": "refinery_nats_hashes_received_total",
+            "legendFormat": "Total Hashes",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Hash Queue Status",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+        "targets": [
+          {
+            "expr": "refinery_hash_queue_size",
+            "legendFormat": "Current Queue Size",
+            "refId": "A"
+          },
+          {
+            "expr": "refinery_hashes_queued_total",
+            "legendFormat": "Total Queued",
+            "refId": "B"
+          },
+          {
+            "expr": "refinery_hashes_dequeued_total",
+            "legendFormat": "Total Dequeued",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Hashes"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Merkle Tree Building",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+        "targets": [
+          {
+            "expr": "refinery_merkle_trees_built_total",
+            "legendFormat": "Trees Built",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(refinery_merkle_build_duration_seconds_bucket[5m]))",
+            "legendFormat": "p99 Build Time",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count / Seconds"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Phase2 Ingot Assembly",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+        "targets": [
+          {
+            "expr": "refinery_phase2_ingots_assembled_total",
+            "legendFormat": "Ingots Assembled",
+            "refId": "A"
+          },
+          {
+            "expr": "refinery_phase2_ingots_sent_total",
+            "legendFormat": "Ingots Sent to Mint",
+            "refId": "B"
+          },
+          {
+            "expr": "refinery_phase2_batches_sent_total",
+            "legendFormat": "Batches Sent",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Mint Phase2 Ingot Reception",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 8, "x": 0, "y": 20},
+        "targets": [
+          {
+            "expr": "mint_phase2_ingots_received_total",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "red"},
+                {"value": 1, "color": "green"}
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        }
+      },
+      {
+        "id": 7,
+        "title": "Ingot Hash Queue (Mint)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "mint_ingot_hash_queue_size",
+            "legendFormat": "Queue Depth",
+            "refId": "A"
+          },
+          {
+            "expr": "mint_ingot_hashes_added_total",
+            "legendFormat": "Hashes Added",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Falcon-1024 Verification",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "refinery_falcon_signatures_verified_total",
+            "legendFormat": "Verified",
+            "refId": "A"
+          },
+          {
+            "expr": "refinery_falcon_signatures_failed_total",
+            "legendFormat": "Failed",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(refinery_falcon_verification_duration_seconds_bucket[5m]))",
+            "legendFormat": "p95 Verification Time",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count / Seconds"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Batch Send Performance",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 32},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, rate(refinery_phase2_batch_send_duration_seconds_bucket[5m]))",
+            "legendFormat": "p99 Send Duration",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(refinery_phase2_batches_sent_total[1m])",
+            "legendFormat": "Batches/sec",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Duration"},
+          {"format": "ops"}
+        ]
+      }
+    ]
+  },
+  "overwrite": true
+}

@@ -85,30 +85,9 @@ jobs:
         if: always()
         run: docker compose down --volumes
 
-      # ── Setup Rust & Node for Digger (Tauri) ───────────────────
+      # ── Setup Rust for Digger (HTTP API) ───────────────────────
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: src/digger-app/digger/package-lock.json
-      # ── Linux system deps for Tauri (GTK, WebKit, etc.) ────────
-      - name: Install Tauri dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libglib2.0-dev \
-            pkg-config \
-            build-essential \
-            curl
 
       # ── Cache Cargo (registry + build) ────────────────────────
       - name: Cache Cargo registry and build
@@ -118,26 +97,41 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cargo/bin
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+            src/digger/target
+          key: ${{ runner.os }}-digger-cargo-${{ hashFiles('src/digger/Cargo.lock') }}
 
-      # ── Install Tauri CLI ─────────────────────────────────────
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --locked --force
+      # ── Build Digger (Rust HTTP API) ──────────────────────────
+      - name: Build Digger
+        working-directory: ./src/digger
+        run: cargo build --release
 
-      # ── Build Digger App (headless) ───────────────────────────
-      - name: Build Digger App
-        working-directory: ./src/digger-app/digger
+      # ── Run Digger Unit Tests ─────────────────────────────────
+      - name: Test Digger
+        working-directory: ./src/digger
+        run: cargo test --all-features
+
+      # ── Test Digger HTTP API ──────────────────────────────────
+      - name: Test Digger HTTP API
         run: |
-          npm install
-          cargo tauri build
+          docker compose up -d nats
+          sleep 5
+          cd src/digger
+          DIGGER_ID="ci-test-digger" NATS_URL="nats://localhost:4222" BATCH_INTERVAL_SEC=10 cargo run --release &
+          DIGGER_PID=$!
+          sleep 15
+          curl -f http://localhost:9000/health || exit 1
+          kill $DIGGER_PID || true
 
-      # ── Upload Linux .deb artifact ───────────────────────────
-      - name: Upload Digger Linux build
+      - name: Clean up Digger
+        if: always()
+        run: docker compose down --volumes
+
+      # ── Upload Digger Binary ──────────────────────────────────
+      - name: Upload Digger Binary
         uses: actions/upload-artifact@v4
         with:
-          name: digger-app-linux
-          path: src/digger-app/digger/src-tauri/target/release/bundle/deb/*.deb
+          name: digger-http-api-linux
+          path: src/digger/target/release/digger
       
       # ── Final success ────────────────────────────────────────
       - name: All tests passed
