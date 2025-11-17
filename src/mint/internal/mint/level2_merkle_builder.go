@@ -95,6 +95,7 @@ type Level2MerkleResult struct {
 	MerkleRoot  string                   // Level 2 merkle root (64-char hex SHA256)
 	HashEntries []*models.IngotHashEntry // Original 1000 hash entries
 	TreeHeight  int                      // Tree height (should be 10 for 1000 hashes)
+	TreeNodes   [][]string               // All tree levels for proof generation (nodes[0] = leaves, nodes[height-1] = root)
 	ContractIDs []string                 // Unique contract IDs from all entries
 	DiggerIDs   []string                 // Unique digger IDs from all entries
 	RefineryIDs []string                 // Unique refinery IDs from all entries
@@ -138,7 +139,7 @@ func (b *Level2MerkleBuilder) BuildLevel2Tree(ctx context.Context) (*Level2Merkl
 
 	// Build merkle tree
 	start := prometheus.NewTimer(b.metrics.BuildDurationSeconds)
-	merkleRoot, height, err := buildMerkleTree(branchHashes)
+	merkleRoot, height, treeNodes, err := buildMerkleTree(branchHashes)
 	start.ObserveDuration()
 
 	if err != nil {
@@ -153,6 +154,7 @@ func (b *Level2MerkleBuilder) BuildLevel2Tree(ctx context.Context) (*Level2Merkl
 		MerkleRoot:  merkleRoot,
 		HashEntries: entries,
 		TreeHeight:  height,
+		TreeNodes:   treeNodes,
 		ContractIDs: extractUniqueIDs(entries, func(e *models.IngotHashEntry) []string { return e.ContractIDs }),
 		DiggerIDs:   extractUniqueIDs(entries, func(e *models.IngotHashEntry) []string { return e.DiggerIDs }),
 		RefineryIDs: extractUniqueStrings(entries, func(e *models.IngotHashEntry) string { return e.RefineryID }),
@@ -177,26 +179,36 @@ func (b *Level2MerkleBuilder) BuildLevel2Tree(ctx context.Context) (*Level2Merkl
 //  3. If odd number, duplicate last hash
 //  4. Repeat until single root hash
 //
-// Returns: (merkle_root, tree_height, error)
-func buildMerkleTree(hashes []string) (string, int, error) {
+// Returns: (merkle_root, tree_height, tree_nodes, error)
+// tree_nodes[0] = leaves, tree_nodes[height-1] = root
+func buildMerkleTree(hashes []string) (string, int, [][]string, error) {
 	if len(hashes) == 0 {
-		return "", 0, fmt.Errorf("cannot build merkle tree from empty hash list")
+		return "", 0, nil, fmt.Errorf("cannot build merkle tree from empty hash list")
 	}
+
+	// Store all tree levels for proof generation
+	var allLevels [][]string
 
 	// Special case: single hash
 	if len(hashes) == 1 {
 		root := hashPair(hashes[0], hashes[0])
-		return root, 1, nil
+		leafLevel := make([]string, 1)
+		copy(leafLevel, hashes)
+		rootLevel := []string{root}
+		allLevels = [][]string{leafLevel, rootLevel}
+		return root, 1, allLevels, nil
 	}
 
 	// Build tree bottom-up
 	currentLevel := make([]string, len(hashes))
 	copy(currentLevel, hashes)
+	allLevels = append(allLevels, currentLevel) // Level 0 = leaves
 
 	height := 0
 
 	// Keep combining pairs until we reach the root
 	for len(currentLevel) > 1 {
+		height++
 		nextLevel := make([]string, 0, (len(currentLevel)+1)/2)
 
 		for i := 0; i < len(currentLevel); i += 2 {
@@ -213,11 +225,11 @@ func buildMerkleTree(hashes []string) (string, int, error) {
 			nextLevel = append(nextLevel, combinedHash)
 		}
 
+		allLevels = append(allLevels, nextLevel)
 		currentLevel = nextLevel
-		height++
 	}
 
-	return currentLevel[0], height, nil
+	return currentLevel[0], height, allLevels, nil
 }
 
 // hashPair combines two hashes and returns SHA256(left + right)
@@ -263,4 +275,102 @@ func extractUniqueStrings(entries []*models.IngotHashEntry, extractor func(*mode
 	}
 
 	return unique
+}
+
+// GetProof generates a merkle proof for a specific ingot hash index
+//
+// A merkle proof is the list of sibling hashes needed to reconstruct
+// the path from leaf to root. This allows verification that a specific
+// ingot exists in the tree without downloading all 1000 ingots.
+//
+// Example (4 leaves, proving index 2 = "C"):
+//
+//	     ROOT
+//	    /    \
+//	  AB      CD     ← Need AB (sibling of CD)
+//	 /  \    /  \
+//	A    B  C*   D   ← Need D (sibling of C)
+//
+// Proof for C: [D, AB]
+//
+// Verification:
+//  1. Hash(C + D) = CD
+//  2. Hash(AB + CD) = ROOT ✓
+//
+// Returns:
+//   - proof: Array of sibling hashes (bottom to top)
+//   - error: If leafIndex out of bounds
+func (r *Level2MerkleResult) GetProof(leafIndex int) ([]string, error) {
+	if leafIndex < 0 || leafIndex >= len(r.HashEntries) {
+		return nil, fmt.Errorf("leaf index %d out of bounds (0-%d)", leafIndex, len(r.HashEntries)-1)
+	}
+
+	if len(r.TreeNodes) == 0 {
+		return nil, fmt.Errorf("tree nodes not available for proof generation")
+	}
+
+	proof := make([]string, 0, r.TreeHeight-1)
+	index := leafIndex
+
+	// Walk up the tree, collecting sibling hashes
+	for level := 0; level < len(r.TreeNodes)-1; level++ {
+		nodes := r.TreeNodes[level]
+
+		var sibling string
+		if index%2 == 0 {
+			// Left node - sibling is right
+			if index+1 < len(nodes) {
+				sibling = nodes[index+1]
+			} else {
+				// Odd number of nodes, duplicate self
+				sibling = nodes[index]
+			}
+		} else {
+			// Right node - sibling is left
+			sibling = nodes[index-1]
+		}
+
+		proof = append(proof, sibling)
+		index = index / 2 // Move to parent index
+	}
+
+	return proof, nil
+}
+
+// VerifyProof verifies that an ingot hash is part of the merkle tree
+//
+// Given:
+//   - leafHash: The ingot's branch_hash to verify
+//   - proof: Sibling hashes from GetProof()
+//   - root: Expected merkle root (from Level2MerkleResult.MerkleRoot)
+//   - leafIndex: Position in original 1000 ingots
+//
+// Algorithm:
+//  1. Start with leafHash (ingot's branch_hash)
+//  2. For each sibling in proof:
+//     - Determine position (left/right based on leafIndex)
+//     - Hash current with sibling
+//     - Move up one level
+//  3. Compare final hash with expected root
+//
+// Returns:
+//   - true if proof is valid (reconstructed root == expected root)
+//   - false if proof is invalid
+func VerifyProof(leafHash string, proof []string, root string, leafIndex int) bool {
+	current := leafHash
+	index := leafIndex
+
+	// Reconstruct path to root
+	for _, sibling := range proof {
+		if index%2 == 0 {
+			// We're on the left, sibling on right
+			current = hashPair(current, sibling)
+		} else {
+			// We're on the right, sibling on left
+			current = hashPair(sibling, current)
+		}
+		index = index / 2
+	}
+
+	return current == root
 }

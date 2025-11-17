@@ -182,11 +182,13 @@ func TestBuildLevel2Tree_InvalidHashLength(t *testing.T) {
 func TestBuildMerkleTree_SingleHash(t *testing.T) {
 	hashes := []string{generateTestHash(0)}
 
-	root, height, err := buildMerkleTree(hashes)
+	root, height, treeNodes, err := buildMerkleTree(hashes)
 
 	require.NoError(t, err)
 	assert.Len(t, root, 64, "root should be 64-char hex")
-	assert.Equal(t, 1, height, "height should be 1 for single hash")
+	assert.Equal(t, 1, height, "height should be 1 for single hash (1 level up from leaf)")
+	assert.NotEmpty(t, treeNodes, "tree nodes should be populated")
+	assert.Len(t, treeNodes, 2, "should have 2 levels (leaf + root)")
 }
 
 // TestBuildMerkleTree_TwoHashes tests tree building with 2 hashes
@@ -196,11 +198,12 @@ func TestBuildMerkleTree_TwoHashes(t *testing.T) {
 		generateTestHash(1),
 	}
 
-	root, height, err := buildMerkleTree(hashes)
+	root, height, treeNodes, err := buildMerkleTree(hashes)
 
 	require.NoError(t, err)
 	assert.Len(t, root, 64)
-	assert.Equal(t, 1, height, "height should be 1 for 2 hashes")
+	assert.Equal(t, 1, height, "height should be 1 for 2 hashes (1 level up)")
+	assert.Len(t, treeNodes, 2, "should have 2 levels (leaves + root)")
 }
 
 // TestBuildMerkleTree_OddNumber tests tree building with odd number of hashes
@@ -211,11 +214,12 @@ func TestBuildMerkleTree_OddNumber(t *testing.T) {
 		generateTestHash(2),
 	}
 
-	root, height, err := buildMerkleTree(hashes)
+	root, height, treeNodes, err := buildMerkleTree(hashes)
 
 	require.NoError(t, err)
 	assert.Len(t, root, 64)
-	assert.Equal(t, 2, height, "height should be 2 for 3 hashes")
+	assert.Equal(t, 2, height, "height should be 2 for 3 hashes (2 levels up)")
+	assert.Len(t, treeNodes, 3, "should have 3 levels (leaves + 2 intermediate)")
 }
 
 // TestBuildMerkleTree_PowerOfTwo tests tree building with power of 2 hashes
@@ -226,11 +230,12 @@ func TestBuildMerkleTree_PowerOfTwo(t *testing.T) {
 		hashes[i] = generateTestHash(i)
 	}
 
-	root, height, err := buildMerkleTree(hashes)
+	root, height, treeNodes, err := buildMerkleTree(hashes)
 
 	require.NoError(t, err)
 	assert.Len(t, root, 64)
-	assert.Equal(t, 4, height, "height should be 4 for 16 hashes (2^4)")
+	assert.Equal(t, 4, height, "height should be 4 for 16 hashes (log₂(16))")
+	assert.Len(t, treeNodes, 5, "should have 5 levels (leaf + 4 up to root)")
 }
 
 // TestBuildMerkleTree_1000Hashes tests tree building with 1000 hashes (real scenario)
@@ -241,12 +246,13 @@ func TestBuildMerkleTree_1000Hashes(t *testing.T) {
 	}
 
 	start := time.Now()
-	root, height, err := buildMerkleTree(hashes)
+	root, height, treeNodes, err := buildMerkleTree(hashes)
 	duration := time.Since(start)
 
 	require.NoError(t, err)
 	assert.Len(t, root, 64)
 	assert.Equal(t, 10, height, "height should be 10 for 1000 hashes (⌈log₂(1000)⌉)")
+	assert.Len(t, treeNodes, 11, "should have 11 levels (leaf + 10 up to root)")
 	assert.Less(t, duration.Milliseconds(), int64(20), "should build tree in <20ms")
 
 	t.Logf("Built merkle tree from 1000 hashes in %v", duration)
@@ -257,11 +263,12 @@ func TestBuildMerkleTree_1000Hashes(t *testing.T) {
 func TestBuildMerkleTree_EmptyList(t *testing.T) {
 	hashes := []string{}
 
-	root, height, err := buildMerkleTree(hashes)
+	root, height, treeNodes, err := buildMerkleTree(hashes)
 
 	assert.Error(t, err)
 	assert.Empty(t, root)
 	assert.Equal(t, 0, height)
+	assert.Nil(t, treeNodes)
 	assert.Contains(t, err.Error(), "empty hash list")
 }
 
