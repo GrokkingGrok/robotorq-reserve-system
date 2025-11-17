@@ -12,6 +12,8 @@ RUN apk add --no-cache \
     ninja \
     build-base \
     pkgconfig \
+    openssl-dev \
+    linux-headers \
     && git clone --branch main --depth 1 https://github.com/open-quantum-safe/liboqs.git /tmp/liboqs \
     && cd /tmp/liboqs \
     && mkdir build && cd build \
