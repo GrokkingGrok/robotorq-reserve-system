@@ -4,12 +4,68 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"b2b/mint/internal/crypto"
 	"b2b/mint/internal/models"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
+
+// ProofCache stores Level2MerkleResult for later proof generation
+//
+// Design:
+//   - Thread-safe map of unitID → Level2MerkleResult
+//   - Used by verification API to generate merkle proofs on-demand
+//   - Contains full tree (TreeNodes) for O(log n) proof generation
+//
+// Lifecycle:
+//   - Populated: When Phase3RoboTorqUnit assembled
+//   - Queried: By GET /verify/proof/:unit_id endpoint
+//   - Eviction: LRU cache (future enhancement, currently unbounded)
+type ProofCache struct {
+	mu      sync.RWMutex
+	results map[string]*Level2MerkleResult // unitID -> merkle result
+}
+
+// NewProofCache creates a new proof cache
+func NewProofCache() *ProofCache {
+	return &ProofCache{
+		results: make(map[string]*Level2MerkleResult),
+	}
+}
+
+// Store saves a Level2MerkleResult for a given Phase3 unit
+//
+// Parameters:
+//   - unitID: Phase3RoboTorqUnit ID (used as cache key)
+//   - result: Level2MerkleResult with TreeNodes for proof generation
+func (pc *ProofCache) Store(unitID string, result *Level2MerkleResult) {
+	pc.mu.Lock()
+	defer pc.mu.Unlock()
+	pc.results[unitID] = result
+}
+
+// Get retrieves a Level2MerkleResult for a given Phase3 unit
+//
+// Parameters:
+//   - unitID: Phase3RoboTorqUnit ID
+//
+// Returns:
+//   - Level2MerkleResult if found
+//   - nil if not found
+func (pc *ProofCache) Get(unitID string) *Level2MerkleResult {
+	pc.mu.RLock()
+	defer pc.mu.RUnlock()
+	return pc.results[unitID]
+}
+
+// Size returns the number of cached results
+func (pc *ProofCache) Size() int {
+	pc.mu.RLock()
+	defer pc.mu.RUnlock()
+	return len(pc.results)
+}
 
 // Phase3RoboTorqUnitAssembler assembles Phase 3 RoboTorq units from Level 2 merkle trees.
 //
@@ -33,6 +89,7 @@ type Phase3RoboTorqUnitAssembler struct {
 	metrics         *Phase3AssemblerMetrics
 	merkleBuilder   *Level2MerkleBuilder
 	signer          *crypto.SPHINCSPlusSigner
+	proofCache      *ProofCache // NEW: Cache for merkle proof generation
 	unitChannel     chan *models.Phase3RoboTorqUnit
 	channelCapacity int
 }
@@ -117,11 +174,15 @@ func NewPhase3RoboTorqUnitAssembler(
 	// Initialize SPHINCS+ signer for archival signatures
 	signer := crypto.NewSPHINCSPlusSigner()
 
+	// Initialize proof cache for verification API
+	proofCache := NewProofCache()
+
 	a := &Phase3RoboTorqUnitAssembler{
 		logger:          logger,
 		metrics:         metrics,
 		merkleBuilder:   merkleBuilder,
 		signer:          signer,
+		proofCache:      proofCache,
 		unitChannel:     make(chan *models.Phase3RoboTorqUnit, channelCapacity),
 		channelCapacity: channelCapacity,
 	}
@@ -230,10 +291,20 @@ func (a *Phase3RoboTorqUnitAssembler) assembleUnit(merkleResult *Level2MerkleRes
 	}
 
 	// Create minimal Phase 3 unit (merkle root only)
-	unit, err := models.NewPhase3RoboTorqUnit(merkleResult.MerkleRoot)
+	unit, err := models.NewPhase3RoboTorqUnit(merkleResult.MerkleRoot, merkleResult.TreeHeight)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create phase3 unit: %w", err)
 	}
+
+	// Set merkle proof API endpoint
+	unit.MerkleProofAPI = fmt.Sprintf("/verify/proof/%s", unit.UnitID)
+
+	// Store merkle result in cache for later proof generation
+	a.proofCache.Store(unit.UnitID, merkleResult)
+	a.logger.Debug("stored merkle result in proof cache",
+		"unit_id", unit.UnitID,
+		"tree_height", merkleResult.TreeHeight,
+		"cache_size", a.proofCache.Size())
 
 	// Sign unit with SPHINCS+ (archival security)
 	signature, publicKey, err := a.signer.SignPhase3Unit(
@@ -285,4 +356,20 @@ func (a *Phase3RoboTorqUnitAssembler) assembleUnit(merkleResult *Level2MerkleRes
 //   - Read-only channel of Phase3RoboTorqUnit
 func (a *Phase3RoboTorqUnitAssembler) GetUnitChannel() <-chan *models.Phase3RoboTorqUnit {
 	return a.unitChannel
+}
+
+// GetProofCache returns the proof cache for verification API
+//
+// Usage:
+//
+//	cache := assembler.GetProofCache()
+//	result := cache.Get(unitID)
+//	if result != nil {
+//	    proof := GetProof(result.TreeNodes, leafIndex)
+//	}
+//
+// Returns:
+//   - ProofCache instance with stored Level2MerkleResults
+func (a *Phase3RoboTorqUnitAssembler) GetProofCache() *ProofCache {
+	return a.proofCache
 }
