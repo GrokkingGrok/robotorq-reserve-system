@@ -24,14 +24,16 @@ import (
 //   - Queried: By GET /verify/proof/:unit_id endpoint
 //   - Eviction: LRU cache (future enhancement, currently unbounded)
 type ProofCache struct {
-	mu      sync.RWMutex
-	results map[string]*Level2MerkleResult // unitID -> merkle result
+	mu          sync.RWMutex
+	results     map[string]*Level2MerkleResult // unitID -> merkle result
+	ingotIndex  map[string]string              // ingotHash -> unitID (reverse lookup)
 }
 
 // NewProofCache creates a new proof cache
 func NewProofCache() *ProofCache {
 	return &ProofCache{
-		results: make(map[string]*Level2MerkleResult),
+		results:    make(map[string]*Level2MerkleResult),
+		ingotIndex: make(map[string]string),
 	}
 }
 
@@ -44,6 +46,12 @@ func (pc *ProofCache) Store(unitID string, result *Level2MerkleResult) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
 	pc.results[unitID] = result
+	
+	// Build reverse index: ingot hash -> unit ID
+	// This enables GET /verify/jtu/:hash lookups
+	for _, entry := range result.HashEntries {
+		pc.ingotIndex[entry.BranchHash] = unitID
+	}
 }
 
 // Get retrieves a Level2MerkleResult for a given Phase3 unit
@@ -65,6 +73,24 @@ func (pc *ProofCache) Size() int {
 	pc.mu.RLock()
 	defer pc.mu.RUnlock()
 	return len(pc.results)
+}
+
+// LookupByIngotHash performs reverse lookup: ingot hash -> unit ID
+//
+// This enables GET /verify/jtu/:hash endpoint to find which Phase3 unit
+// contains a specific ingot hash.
+//
+// Parameters:
+//   - ingotHash: Branch hash from Phase2Ingot (64-char hex SHA256)
+//
+// Returns:
+//   - unitID: Phase3RoboTorqUnit ID containing this ingot
+//   - found: true if ingot hash exists in cache
+func (pc *ProofCache) LookupByIngotHash(ingotHash string) (unitID string, found bool) {
+	pc.mu.RLock()
+	defer pc.mu.RUnlock()
+	unitID, found = pc.ingotIndex[ingotHash]
+	return unitID, found
 }
 
 // Phase3RoboTorqUnitAssembler assembles Phase 3 RoboTorq units from Level 2 merkle trees.

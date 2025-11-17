@@ -285,7 +285,62 @@ func TestVerificationHandler_ProofRequest_MethodNotAllowed(t *testing.T) {
 }
 
 // TestVerificationHandler_JTULookup_NotImplemented tests JTU lookup placeholder
-func TestVerificationHandler_JTULookup_NotImplemented(t *testing.T) {
+func TestVerificationHandler_JTULookup_Success(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	metrics := NewVerificationMetrics(nil)
+	proofCache := NewProofCache()
+	signatureArchive := NewSignatureArchive()
+
+	// Populate cache with test data
+	hashes := make([]string, 1000)
+	hashEntries := make([]*models.IngotHashEntry, 1000)
+	for i := 0; i < 1000; i++ {
+		hashes[i] = generateTestHash(i)
+		hashEntries[i] = &models.IngotHashEntry{
+			BranchHash:  hashes[i],
+			ContractIDs: []string{"test-contract"},
+			DiggerIDs:   []string{"test-digger"},
+			RefineryID:  "test-refinery",
+		}
+	}
+
+	root, height, treeNodes, err := buildMerkleTree(hashes)
+	require.NoError(t, err)
+
+	merkleResult := &Level2MerkleResult{
+		MerkleRoot:  root,
+		TreeHeight:  height,
+		TreeNodes:   treeNodes,
+		HashEntries: hashEntries,
+	}
+
+	unitID := "RT-test-unit-001"
+	proofCache.Store(unitID, merkleResult)
+
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
+
+	// Test lookup for ingot at index 42
+	testHash := hashes[42]
+	req := httptest.NewRequest(http.MethodGet, "/verify/jtu/"+testHash, nil)
+	w := httptest.NewRecorder()
+
+	handler.handleJTULookup(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err = json.NewDecoder(w.Body).Decode(&response)
+	require.NoError(t, err)
+
+	assert.Equal(t, testHash, response["ingot_hash"])
+	assert.True(t, response["found"].(bool))
+	assert.Equal(t, unitID, response["unit_id"])
+	assert.Equal(t, float64(42), response["ingot_index"])
+	assert.Equal(t, root, response["merkle_root"])
+}
+
+// TestVerificationHandler_JTULookup_NotFound tests JTU lookup with hash not in cache
+func TestVerificationHandler_JTULookup_NotFound(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	metrics := NewVerificationMetrics(nil)
 	proofCache := NewProofCache()
@@ -299,7 +354,7 @@ func TestVerificationHandler_JTULookup_NotImplemented(t *testing.T) {
 
 	handler.handleJTULookup(w, req)
 
-	assert.Equal(t, http.StatusNotImplemented, w.Code)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 
 	var response map[string]interface{}
 	err := json.NewDecoder(w.Body).Decode(&response)
@@ -307,7 +362,7 @@ func TestVerificationHandler_JTULookup_NotImplemented(t *testing.T) {
 
 	assert.Equal(t, ingotHash, response["ingot_hash"])
 	assert.False(t, response["found"].(bool))
-	assert.Contains(t, response["error"], "not yet implemented")
+	assert.Contains(t, response["error"], "not found")
 }
 
 // TestVerificationHandler_JTULookup_InvalidHash tests invalid hash format

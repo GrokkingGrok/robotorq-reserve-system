@@ -217,13 +217,60 @@ func (h *VerificationHandler) handleJTULookup(w http.ResponseWriter, r *http.Req
 	h.logger.Debug("jtu lookup request",
 		"ingot_hash", ingotHash)
 
-	// TODO: Implement reverse lookup: ingot hash → Phase3 unit
-	// For now, return 501 Not Implemented
-	h.metrics.JTULookupsNotFound.Inc()
-	h.respondJSON(w, http.StatusNotImplemented, map[string]interface{}{
-		"ingot_hash": ingotHash,
-		"found":      false,
-		"error":      "JTU lookup not yet implemented (requires ingot hash index)",
+	// Look up unit ID by ingot hash (reverse index)
+	unitID, found := h.proofCache.LookupByIngotHash(ingotHash)
+
+	if !found {
+		h.metrics.JTULookupsNotFound.Inc()
+		h.respondJSON(w, http.StatusNotFound, map[string]interface{}{
+			"ingot_hash": ingotHash,
+			"found":      false,
+			"error":      "ingot hash not found in any Phase3 unit",
+		})
+		return
+	}
+
+	// Get the merkle result for this unit
+	merkleResult := h.proofCache.Get(unitID)
+	if merkleResult == nil {
+		// This should never happen (index inconsistency)
+		h.logger.Error("index inconsistency: unit ID found but merkle result missing",
+			"unit_id", unitID,
+			"ingot_hash", ingotHash)
+		h.metrics.JTULookupsNotFound.Inc()
+		h.respondError(w, http.StatusInternalServerError, "cache inconsistency detected")
+		return
+	}
+
+	// Find the ingot index within the unit
+	var ingotIndex int
+	found = false
+	for i, entry := range merkleResult.HashEntries {
+		if entry.BranchHash == ingotHash {
+			ingotIndex = i
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		// Another inconsistency - should never happen
+		h.logger.Error("index inconsistency: hash in index but not in hash entries",
+			"unit_id", unitID,
+			"ingot_hash", ingotHash)
+		h.metrics.JTULookupsNotFound.Inc()
+		h.respondError(w, http.StatusInternalServerError, "cache inconsistency detected")
+		return
+	}
+
+	h.metrics.JTULookupsFound.Inc()
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"ingot_hash":  ingotHash,
+		"found":       true,
+		"unit_id":     unitID,
+		"ingot_index": ingotIndex,
+		"merkle_root": merkleResult.MerkleRoot,
+		"tree_height": merkleResult.TreeHeight,
 	})
 }
 
@@ -409,10 +456,10 @@ func (h *VerificationHandler) handlePublicKey(w http.ResponseWriter, r *http.Req
 	h.logger.Debug("public key request")
 
 	h.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"algorithm":       "SPHINCS+-SHA2-128f-simple",
-		"public_key":      h.publicKey,
-		"key_size_bytes":  len(h.publicKey) / 2, // Hex string is 2x byte length
-		"purpose":         "Verify SPHINCS+ signatures on Phase3RoboTorqUnits",
+		"algorithm":      "SPHINCS+-SHA2-128f-simple",
+		"public_key":     h.publicKey,
+		"key_size_bytes": len(h.publicKey) / 2, // Hex string is 2x byte length
+		"purpose":        "Verify SPHINCS+ signatures on Phase3RoboTorqUnits",
 	})
 }
 
