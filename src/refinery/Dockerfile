@@ -6,11 +6,25 @@ FROM golang:1.24-alpine AS builder
 WORKDIR /app
 
 # Install liboqs for Falcon-1024 signature verification (Phase 5)
-# Use pre-built package instead of compiling from source (faster builds)
+# Compile from source with minimal algorithms (Falcon-1024 only = faster build)
 RUN apk add --no-cache \
+    git \
+    cmake \
+    ninja \
     build-base \
     pkgconfig \
-    liboqs-dev
+    openssl-dev \
+    linux-headers \
+    && git clone --branch main --depth 1 https://github.com/open-quantum-safe/liboqs.git /tmp/liboqs \
+    && cd /tmp/liboqs \
+    && mkdir build && cd build \
+    && cmake -GNinja \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DOQS_MINIMAL_BUILD="KEM_kyber_512;SIG_falcon_1024" \
+        -DOQS_USE_OPENSSL=ON \
+        .. \
+    && ninja install \
+    && rm -rf /tmp/liboqs
 
 COPY go.mod go.sum ./
 RUN go mod download
@@ -27,9 +41,10 @@ RUN CGO_ENABLED=1 GOOS=linux go build -o /refinery ./cmd/refinery
 FROM alpine:3.20
 
 # Install runtime dependencies for liboqs
-RUN apk add --no-cache ca-certificates wget liboqs
+RUN apk add --no-cache ca-certificates wget libstdc++ libgcc openssl
 
 COPY --from=builder /refinery /refinery
+COPY --from=builder /usr/lib/liboqs.so* /usr/lib/
 
 EXPOSE 8080
 
