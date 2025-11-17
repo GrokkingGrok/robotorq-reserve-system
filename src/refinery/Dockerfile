@@ -27,17 +27,26 @@ RUN apk add --no-cache \
     && ldconfig /usr/lib \
     && rm -rf /tmp/liboqs
 
+# Create fake liboqs-go.pc that liboqs-go wrapper expects
+RUN echo "prefix=/usr" > /usr/lib/pkgconfig/liboqs-go.pc \
+    && echo "exec_prefix=\${prefix}" >> /usr/lib/pkgconfig/liboqs-go.pc \
+    && echo "libdir=\${exec_prefix}/lib" >> /usr/lib/pkgconfig/liboqs-go.pc \
+    && echo "includedir=\${prefix}/include" >> /usr/lib/pkgconfig/liboqs-go.pc \
+    && echo "" >> /usr/lib/pkgconfig/liboqs-go.pc \
+    && echo "Name: liboqs-go" >> /usr/lib/pkgconfig/liboqs-go.pc \
+    && echo "Description: liboqs wrapper for Go" >> /usr/lib/pkgconfig/liboqs-go.pc \
+    && echo "Version: 0.0.1" >> /usr/lib/pkgconfig/liboqs-go.pc \
+    && echo "Cflags: -I\${includedir}" >> /usr/lib/pkgconfig/liboqs-go.pc \
+    && echo "Libs: -L\${libdir} -loqs" >> /usr/lib/pkgconfig/liboqs-go.pc
+
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 RUN go mod tidy
 
-# Build with CGO enabled and explicit liboqs paths
-RUN CGO_ENABLED=1 \
-    CGO_CFLAGS="-I/usr/include" \
-    CGO_LDFLAGS="-L/usr/lib -loqs" \
-    go build -o /refinery ./cmd/refinery
+# Build with CGO enabled (pkg-config now finds our fake liboqs-go.pc)
+RUN CGO_ENABLED=1 go build -o /refinery ./cmd/refinery
 
 # -------------------------------
 # Stage 2: Build the final runtime image
