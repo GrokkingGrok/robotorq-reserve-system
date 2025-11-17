@@ -328,3 +328,323 @@ func TestExtractUniqueStrings(t *testing.T) {
 func generateTestHash(index int) string {
 	return fmt.Sprintf("%064d", index)
 }
+
+// =======================
+// Merkle Proof Tests
+// =======================
+
+// TestLevel2MerkleResult_GetProof_ValidIndex tests proof generation for valid index
+func TestLevel2MerkleResult_GetProof_ValidIndex(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	queue, err := NewIngotHashQueue(2000, 1000, logger)
+	require.NoError(t, err)
+
+	builder := NewLevel2MerkleBuilder(queue, logger)
+	ctx := context.Background()
+
+	// Add 1000 hash entries
+	go func() {
+		for i := 0; i < 1000; i++ {
+			entry := &models.IngotHashEntry{
+				BranchHash:  generateTestHash(i),
+				ContractIDs: []string{"contract-1"},
+				DiggerIDs:   []string{"digger-1"},
+				RefineryID:  "refinery-1",
+			}
+			_ = queue.AddIngotHash(ctx, entry)
+		}
+	}()
+
+	result, err := builder.BuildLevel2Tree(ctx)
+	require.NoError(t, err)
+
+	// Get proof for various indices
+	testCases := []int{0, 1, 42, 500, 999}
+
+	for _, index := range testCases {
+		proof, err := result.GetProof(index)
+		require.NoError(t, err, "should get proof for index %d", index)
+		assert.NotNil(t, proof)
+		assert.Equal(t, result.TreeHeight, len(proof), "proof length should equal tree height")
+	}
+}
+
+// TestLevel2MerkleResult_GetProof_InvalidIndex tests proof generation for invalid indices
+func TestLevel2MerkleResult_GetProof_InvalidIndex(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	queue, err := NewIngotHashQueue(2000, 1000, logger)
+	require.NoError(t, err)
+
+	builder := NewLevel2MerkleBuilder(queue, logger)
+	ctx := context.Background()
+
+	// Add 1000 hash entries
+	go func() {
+		for i := 0; i < 1000; i++ {
+			entry := &models.IngotHashEntry{
+				BranchHash:  generateTestHash(i),
+				ContractIDs: []string{"contract-1"},
+				DiggerIDs:   []string{"digger-1"},
+				RefineryID:  "refinery-1",
+			}
+			_ = queue.AddIngotHash(ctx, entry)
+		}
+	}()
+
+	result, err := builder.BuildLevel2Tree(ctx)
+	require.NoError(t, err)
+
+	// Test invalid indices
+	testCases := []struct {
+		index       int
+		description string
+	}{
+		{-1, "negative index"},
+		{1000, "index equal to count"},
+		{5000, "index far too large"},
+	}
+
+	for _, tc := range testCases {
+		proof, err := result.GetProof(tc.index)
+		assert.Error(t, err, "should error for %s", tc.description)
+		assert.Nil(t, proof, "proof should be nil for %s", tc.description)
+		assert.Contains(t, err.Error(), "out of bounds", "error message should mention bounds")
+	}
+}
+
+// TestLevel2MerkleResult_GetProof_NoTreeNodes tests error when TreeNodes not available
+func TestLevel2MerkleResult_GetProof_NoTreeNodes(t *testing.T) {
+	result := &Level2MerkleResult{
+		MerkleRoot:  generateTestHash(0),
+		HashEntries: make([]*models.IngotHashEntry, 1000),
+		TreeHeight:  10,
+		TreeNodes:   nil, // No tree nodes!
+	}
+
+	proof, err := result.GetProof(0)
+	assert.Error(t, err)
+	assert.Nil(t, proof)
+	assert.Contains(t, err.Error(), "tree nodes not available")
+}
+
+// TestVerifyProof_ValidProof tests verification of valid proofs
+func TestVerifyProof_ValidProof(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	queue, err := NewIngotHashQueue(2000, 1000, logger)
+	require.NoError(t, err)
+
+	builder := NewLevel2MerkleBuilder(queue, logger)
+	ctx := context.Background()
+
+	// Add 1000 hash entries
+	go func() {
+		for i := 0; i < 1000; i++ {
+			entry := &models.IngotHashEntry{
+				BranchHash:  generateTestHash(i),
+				ContractIDs: []string{"contract-1"},
+				DiggerIDs:   []string{"digger-1"},
+				RefineryID:  "refinery-1",
+			}
+			_ = queue.AddIngotHash(ctx, entry)
+		}
+	}()
+
+	result, err := builder.BuildLevel2Tree(ctx)
+	require.NoError(t, err)
+
+	// Verify proofs for all 1000 ingots
+	for i := 0; i < 1000; i++ {
+		leafHash := result.HashEntries[i].BranchHash
+		proof, err := result.GetProof(i)
+		require.NoError(t, err)
+
+		// Verify proof
+		valid := VerifyProof(leafHash, proof, result.MerkleRoot, i)
+		assert.True(t, valid, "proof should be valid for index %d", i)
+	}
+}
+
+// TestVerifyProof_InvalidProof tests verification of invalid proofs
+func TestVerifyProof_InvalidProof(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	queue, err := NewIngotHashQueue(2000, 1000, logger)
+	require.NoError(t, err)
+
+	builder := NewLevel2MerkleBuilder(queue, logger)
+	ctx := context.Background()
+
+	// Add 1000 hash entries
+	go func() {
+		for i := 0; i < 1000; i++ {
+			entry := &models.IngotHashEntry{
+				BranchHash:  generateTestHash(i),
+				ContractIDs: []string{"contract-1"},
+				DiggerIDs:   []string{"digger-1"},
+				RefineryID:  "refinery-1",
+			}
+			_ = queue.AddIngotHash(ctx, entry)
+		}
+	}()
+
+	result, err := builder.BuildLevel2Tree(ctx)
+	require.NoError(t, err)
+
+	// Test 1: Wrong leaf hash
+	leafHash := result.HashEntries[42].BranchHash
+	proof, _ := result.GetProof(42)
+	wrongLeafHash := generateTestHash(99999)
+	valid := VerifyProof(wrongLeafHash, proof, result.MerkleRoot, 42)
+	assert.False(t, valid, "proof should be invalid with wrong leaf hash")
+
+	// Test 2: Wrong merkle root
+	wrongRoot := generateTestHash(88888)
+	valid = VerifyProof(leafHash, proof, wrongRoot, 42)
+	assert.False(t, valid, "proof should be invalid with wrong root")
+
+	// Test 3: Tampered proof (flip one hash)
+	tamperedProof := make([]string, len(proof))
+	copy(tamperedProof, proof)
+	tamperedProof[0] = generateTestHash(77777)
+	valid = VerifyProof(leafHash, tamperedProof, result.MerkleRoot, 42)
+	assert.False(t, valid, "proof should be invalid with tampered proof")
+}
+
+// TestVerifyProof_LargeTree tests verification on large tree (1000 leaves)
+func TestVerifyProof_LargeTree(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	queue, err := NewIngotHashQueue(2000, 1000, logger)
+	require.NoError(t, err)
+
+	builder := NewLevel2MerkleBuilder(queue, logger)
+	ctx := context.Background()
+
+	// Add 1000 hash entries
+	go func() {
+		for i := 0; i < 1000; i++ {
+			entry := &models.IngotHashEntry{
+				BranchHash:  generateTestHash(i),
+				ContractIDs: []string{"contract-1"},
+				DiggerIDs:   []string{"digger-1"},
+				RefineryID:  "refinery-1",
+			}
+			_ = queue.AddIngotHash(ctx, entry)
+		}
+	}()
+
+	result, err := builder.BuildLevel2Tree(ctx)
+	require.NoError(t, err)
+
+	// Spot check random indices
+	testIndices := []int{0, 1, 100, 250, 500, 750, 999}
+
+	for _, index := range testIndices {
+		leafHash := result.HashEntries[index].BranchHash
+		proof, err := result.GetProof(index)
+		require.NoError(t, err)
+
+		valid := VerifyProof(leafHash, proof, result.MerkleRoot, index)
+		assert.True(t, valid, "proof should be valid for index %d in large tree", index)
+	}
+}
+
+// TestRoundTrip_BuildProveVerify tests complete round-trip for various tree sizes
+func TestRoundTrip_BuildProveVerify(t *testing.T) {
+	testCases := []struct {
+		count       int
+		description string
+	}{
+		{4, "small tree (4 ingots)"},
+		{100, "medium tree (100 ingots)"},
+		{1000, "full tree (1000 ingots)"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+			queue, err := NewIngotHashQueue(tc.count+100, tc.count, logger)
+			require.NoError(t, err)
+
+			builder := NewLevel2MerkleBuilder(queue, logger)
+			ctx := context.Background()
+
+			// Add hash entries
+			go func() {
+				for i := 0; i < tc.count; i++ {
+					entry := &models.IngotHashEntry{
+						BranchHash:  generateTestHash(i),
+						ContractIDs: []string{fmt.Sprintf("contract-%d", i%5)},
+						DiggerIDs:   []string{fmt.Sprintf("digger-%d", i%3)},
+						RefineryID:  fmt.Sprintf("refinery-%d", i%2),
+					}
+					_ = queue.AddIngotHash(ctx, entry)
+				}
+			}()
+
+			// Build tree
+			result, err := builder.BuildLevel2Tree(ctx)
+			require.NoError(t, err)
+
+			// Verify proofs for all entries
+			for i := 0; i < tc.count; i++ {
+				leafHash := result.HashEntries[i].BranchHash
+				proof, err := result.GetProof(i)
+				require.NoError(t, err, "should get proof for index %d", i)
+
+				valid := VerifyProof(leafHash, proof, result.MerkleRoot, i)
+				assert.True(t, valid, "round-trip should verify for index %d in %s", i, tc.description)
+			}
+		})
+	}
+}
+
+// TestProofSize_Logarithmic tests that proof size is logarithmic
+func TestProofSize_Logarithmic(t *testing.T) {
+	testCases := []struct {
+		count                int
+		expectedMaxProofSize int
+		description          string
+	}{
+		{4, 2, "4 leaves -> log₂(4) = 2"},
+		{16, 4, "16 leaves -> log₂(16) = 4"},
+		{100, 7, "100 leaves -> ⌈log₂(100)⌉ = 7"},
+		{1000, 10, "1000 leaves -> ⌈log₂(1000)⌉ = 10"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+			queue, err := NewIngotHashQueue(tc.count+100, tc.count, logger)
+			require.NoError(t, err)
+
+			builder := NewLevel2MerkleBuilder(queue, logger)
+			ctx := context.Background()
+
+			// Add hash entries
+			go func() {
+				for i := 0; i < tc.count; i++ {
+					entry := &models.IngotHashEntry{
+						BranchHash:  generateTestHash(i),
+						ContractIDs: []string{"contract-1"},
+						DiggerIDs:   []string{"digger-1"},
+						RefineryID:  "refinery-1",
+					}
+					_ = queue.AddIngotHash(ctx, entry)
+				}
+			}()
+
+			result, err := builder.BuildLevel2Tree(ctx)
+			require.NoError(t, err)
+
+			// Get proof for middle element
+			proof, err := result.GetProof(tc.count / 2)
+			require.NoError(t, err)
+
+			// Verify proof size is logarithmic
+			assert.LessOrEqual(t, len(proof), tc.expectedMaxProofSize,
+				"proof size should be ≤ %d for %s", tc.expectedMaxProofSize, tc.description)
+
+			t.Logf("%s: proof size = %d hashes (expected ≤ %d)",
+				tc.description, len(proof), tc.expectedMaxProofSize)
+		})
+	}
+}
