@@ -3,6 +3,7 @@
 package refinery
 
 import (
+	"b2b/refinery/internal/models"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -15,15 +16,20 @@ import (
 // HashBatchMessage represents the JSON message format sent by Digger
 // via NATS on the "ore.batch" subject.
 //
-// This message contains ONLY the hashes of JouleTorqUnits, not the full
-// unit data. The Refinery builds merkle trees from these hashes without
-// needing to store or transfer the complete JTU structures.
+// Phase 5 Format (with Falcon-1024 signatures):
+// This message contains the hashes of JouleTorqUnits along with a
+// cryptographic signature proving the Digger actually performed the work.
 type HashBatchMessage struct {
-	ContractID string   `json:"contract_id"` // Contract that generated these hashes
-	DiggerID   string   `json:"digger_id"`   // Digger that performed the work
-	Hashes     []string `json:"hashes"`      // SHA256 hashes (32-byte hex strings)
-	HashCount  int      `json:"hash_count"`  // Number of hashes in batch
-	Timestamp  string   `json:"timestamp"`   // RFC3339 timestamp
+	ContractID     string   `json:"contract_id"`     // Contract that generated these hashes
+	DiggerID       string   `json:"digger_id"`       // Digger that performed the work
+	Hashes         []string `json:"hashes"`          // SHA256 hashes (32-byte hex strings)
+	HashCount      int      `json:"hash_count"`      // Number of hashes in batch
+	Timestamp      string   `json:"timestamp"`       // RFC3339 timestamp
+	Signature      string   `json:"signature"`       // Phase 5: Falcon-1024 signature (hex-encoded)
+	PublicKey      string   `json:"public_key"`      // Phase 5: Falcon-1024 public key (hex-encoded)
+	MilestoneIndex uint32   `json:"milestone_index"` // Phase 5: Milestone number
+	Joules         float64  `json:"joules"`          // Phase 5: Energy consumed
+	RoboStake      float64  `json:"robo_stake"`      // Phase 5: Stake paid
 }
 
 // NATSSubscriber listens to the NATS "ore.batch" subject and processes
@@ -32,17 +38,19 @@ type HashBatchMessage struct {
 // Architecture:
 // - Subscribes to "ore.batch" subject on startup
 // - Parses HashBatchMessage JSON from each message
-// - Adds individual hashes to QueueManager (not full units!)
+// - **Phase 5**: Verifies Falcon-1024 signatures before accepting batches
+// - Adds verified hashes to QueueManager
 // - Tracks metrics for monitoring
 // - Gracefully unsubscribes on shutdown
 type NATSSubscriber struct {
-	nc       *nats.Conn
-	sub      *nats.Subscription
-	logger   *slog.Logger
-	queueMgr *QueueManager
-	metrics  *NATSSubscriberMetrics
-	ctx      context.Context
-	wg       sync.WaitGroup
+	nc                *nats.Conn
+	sub               *nats.Subscription
+	logger            *slog.Logger
+	queueMgr          *QueueManager
+	hashBatchReceiver *HashBatchReceiver // Phase 5: Falcon verification
+	metrics           *NATSSubscriberMetrics
+	ctx               context.Context
+	wg                sync.WaitGroup
 }
 
 // NATSSubscriberMetrics tracks NATS subscriber performance
@@ -91,17 +99,19 @@ func NewNATSSubscriberMetrics() *NATSSubscriberMetrics {
 //   - ctx: Context for lifecycle management
 //   - nc: Active NATS connection
 //   - queueMgr: Queue manager to receive hashes
+//   - hashBatchReceiver: Phase 5 - Falcon-1024 signature verifier
 //
 // The subscriber will automatically start listening on creation.
-func NewNATSSubscriber(ctx context.Context, nc *nats.Conn, queueMgr *QueueManager) (*NATSSubscriber, error) {
+func NewNATSSubscriber(ctx context.Context, nc *nats.Conn, queueMgr *QueueManager, hashBatchReceiver *HashBatchReceiver) (*NATSSubscriber, error) {
 	logger := slog.With("component", "nats_subscriber")
 
 	ns := &NATSSubscriber{
-		nc:       nc,
-		logger:   logger,
-		queueMgr: queueMgr,
-		metrics:  NewNATSSubscriberMetrics(),
-		ctx:      ctx,
+		nc:                nc,
+		logger:            logger,
+		queueMgr:          queueMgr,
+		hashBatchReceiver: hashBatchReceiver,
+		metrics:           NewNATSSubscriberMetrics(),
+		ctx:               ctx,
 	}
 
 	// Subscribe to ore.batch subject
@@ -113,6 +123,7 @@ func NewNATSSubscriber(ctx context.Context, nc *nats.Conn, queueMgr *QueueManage
 
 	logger.Info("NATS subscriber created",
 		"subject", "ore.batch",
+		"falcon_verification", hashBatchReceiver != nil,
 	)
 
 	// Register metrics
@@ -133,8 +144,9 @@ func NewNATSSubscriber(ctx context.Context, nc *nats.Conn, queueMgr *QueueManage
 // Message flow:
 // 1. Parse JSON message into HashBatchMessage struct
 // 2. Validate message fields
-// 3. Add each hash to the queue manager
-// 4. Update metrics
+// 3. **Phase 5**: Verify Falcon-1024 signature (CRITICAL SECURITY CHECK)
+// 4. Add verified hashes to the queue manager
+// 5. Update metrics
 //
 // This handler runs asynchronously for each received message.
 func (ns *NATSSubscriber) handleHashBatch(msg *nats.Msg) {
@@ -149,7 +161,7 @@ func (ns *NATSSubscriber) handleHashBatch(msg *nats.Msg) {
 		return
 	}
 
-	// Validate message
+	// Validate message structure
 	if batch.ContractID == "" || batch.DiggerID == "" || len(batch.Hashes) == 0 {
 		ns.logger.Warn("received invalid hash batch",
 			"contract_id", batch.ContractID,
@@ -172,7 +184,54 @@ func (ns *NATSSubscriber) handleHashBatch(msg *nats.Msg) {
 	ns.metrics.HashesReceivedTotal.Add(float64(batch.HashCount))
 	ns.metrics.LastBatchHashCount.Set(float64(batch.HashCount))
 
-	// Add hashes to queue (Phase 2 Milestone 2)
+	// Phase 5: Verify Falcon-1024 signature before processing
+	// This is the CRITICAL SECURITY LAYER that prevents fake work submissions
+	if ns.hashBatchReceiver != nil && batch.Signature != "" && batch.PublicKey != "" {
+		// Convert HashBatchMessage to HashBatchOre for verification
+		hashBatchOre := &models.HashBatchOre{
+			ContractID:     batch.ContractID,
+			DiggerID:       batch.DiggerID,
+			Hashes:         batch.Hashes,
+			HashCount:      batch.HashCount,
+			Timestamp:      batch.Timestamp,
+			Signature:      batch.Signature,
+			PublicKey:      batch.PublicKey,
+			MilestoneIndex: batch.MilestoneIndex,
+			Joules:         batch.Joules,
+			RoboStake:      batch.RoboStake,
+		}
+
+		// Verify signature (will reject if invalid)
+		if err := ns.hashBatchReceiver.ReceiveHashBatch(hashBatchOre); err != nil {
+			ns.logger.Error("SECURITY: Falcon signature verification FAILED - batch REJECTED",
+				"contract_id", batch.ContractID,
+				"digger_id", batch.DiggerID,
+				"error", err,
+			)
+			ns.metrics.ProcessingErrorsTotal.Inc()
+			return // REJECT the entire batch
+		}
+
+		ns.logger.Info("✅ Falcon signature verified - batch accepted",
+			"contract_id", batch.ContractID,
+			"digger_id", batch.DiggerID,
+			"hashes", batch.HashCount,
+		)
+
+		// Batch already processed by hashBatchReceiver, no need to queue hashes manually
+		return
+	}
+
+	// Fallback: Process without verification (Phase 1-4 compatibility)
+	// TODO Phase 5: Remove this fallback once all Diggers send signatures
+	if batch.Signature == "" || batch.PublicKey == "" {
+		ns.logger.Warn("⚠️  Hash batch missing signature - processing WITHOUT verification",
+			"contract_id", batch.ContractID,
+			"digger_id", batch.DiggerID,
+			"reason", "Phase 1-4 backward compatibility",
+			"security_risk", "HIGH - unverified work",
+		)
+	} // Add hashes to queue (Phase 2 Milestone 2)
 	hashesQueued := 0
 	for _, hash := range batch.Hashes {
 		err := ns.queueMgr.AddHash(hash, batch.ContractID, batch.DiggerID)

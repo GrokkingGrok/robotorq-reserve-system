@@ -83,17 +83,23 @@ func main() {
 	// Phase 1 Batch Sender: DEPRECATED - removed (not used in Phase 2)
 	// Phase 1 used full JTU data, Phase 2 uses hash-only merkle trees
 
-	// Ore Receiver: HTTP handler for Digger submissions
-	oreReceiver := refinery.NewOreReceiver(queueMgr)
-	slog.Info("ore receiver initialized")
+	// Hash Batch Receiver: Phase 5 - Falcon-1024 signature verification
+	hashBatchReceiver := refinery.NewHashBatchReceiver(queueMgr)
+	slog.Info("✅ Phase 5: Hash batch receiver initialized with Falcon-1024 verification")
 
-	// NATS Subscriber: Listens for hash batches from Diggers (Phase 2)
-	natsSubscriber, err := refinery.NewNATSSubscriber(ctx, mintClient.Connection(), queueMgr)
+	// Ore Receiver: HTTP handler for Digger submissions (DEPRECATED for Phase 5)
+	// Kept for backward compatibility with Phase 1-3 contracts
+	oreReceiver := refinery.NewOreReceiver(queueMgr)
+	slog.Info("ore receiver initialized (Phase 1-3 backward compatibility)")
+
+	// NATS Subscriber: Listens for hash batches from Diggers (Phase 2+)
+	// Phase 5: Now includes Falcon verification via hashBatchReceiver
+	natsSubscriber, err := refinery.NewNATSSubscriber(ctx, mintClient.Connection(), queueMgr, hashBatchReceiver)
 	if err != nil {
 		slog.Error("failed to create NATS subscriber", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("NATS subscriber initialized", "subject", "ore.batch")
+	slog.Info("NATS subscriber initialized with Falcon verification", "subject", "ore.batch")
 
 	// Health Handler: Comprehensive status endpoint
 	healthHandler := refinery.NewHealthHandler(queueMgr, mintClient, assembler)
