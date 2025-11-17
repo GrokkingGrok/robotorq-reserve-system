@@ -50,8 +50,10 @@ func NewSPHINCSPlusSigner(logger *slog.Logger) (*SPHINCSPlusSigner, error) {
 		return nil, fmt.Errorf("failed to generate SPHINCS+ keypair: %w", err)
 	}
 
-	// Export secret key
-	privateKey := sig.ExportSecretKey()
+	// Export secret key and COPY it (liboqs may modify the original)
+	exportedKey := sig.ExportSecretKey()
+	privateKey := make([]byte, len(exportedKey))
+	copy(privateKey, exportedKey)
 
 	logger.Info("SPHINCS+ keypair generated",
 		"algorithm", "SPHINCS+-SHA2-128f-simple",
@@ -85,7 +87,12 @@ func (s *SPHINCSPlusSigner) SignPhase3Unit(
 	sig := oqs.Signature{}
 	defer sig.Clean()
 
-	if err := sig.Init("SPHINCS+-SHA2-128f-simple", s.privateKey); err != nil {
+	// CRITICAL: Copy private key before passing to Init()
+	// liboqs-go stores a reference and may zero it on Clean()
+	privateKeyCopy := make([]byte, len(s.privateKey))
+	copy(privateKeyCopy, s.privateKey)
+
+	if err := sig.Init("SPHINCS+-SHA2-128f-simple", privateKeyCopy); err != nil {
 		return "", "", fmt.Errorf("failed to initialize SPHINCS+: %w", err)
 	}
 
