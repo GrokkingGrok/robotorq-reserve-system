@@ -198,10 +198,11 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 	)
 	logger.Info("Phase3DistoDamPublisher initialized", "topic", "distodam.units")
 
-	// Create VerificationHandler (Phase 5: Merkle proof verification API)
+	// Create VerificationHandler (Phase 5: Merkle proof verification API + SPHINCS+ signature verification)
 	verificationMetrics := mint.NewVerificationMetrics(nil) // TODO: Register with Prometheus registry
 	verificationHandler := mint.NewVerificationHandler(
 		phase3Assembler.GetProofCache(),
+		phase3Assembler.GetSignatureArchive(),
 		":8081", // Verification API port
 		logger,
 		verificationMetrics,
