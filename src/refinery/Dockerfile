@@ -37,7 +37,7 @@ RUN echo "prefix=/usr" > /usr/lib/pkgconfig/liboqs-go.pc \
     && echo "Description: liboqs wrapper for Go" >> /usr/lib/pkgconfig/liboqs-go.pc \
     && echo "Version: 0.0.1" >> /usr/lib/pkgconfig/liboqs-go.pc \
     && echo "Cflags: -I\${includedir}" >> /usr/lib/pkgconfig/liboqs-go.pc \
-    && echo "Libs: -L\${libdir} -loqs" >> /usr/lib/pkgconfig/liboqs-go.pc
+    && echo "Libs: -L\${libdir} -loqs -lcrypto" >> /usr/lib/pkgconfig/liboqs-go.pc
 
 COPY go.mod go.sum ./
 RUN go mod download
