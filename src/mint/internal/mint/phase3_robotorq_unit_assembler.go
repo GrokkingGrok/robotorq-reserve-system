@@ -85,13 +85,14 @@ func (pc *ProofCache) Size() int {
 //   - With signature overhead: ~356 bytes total
 //   - Remaining: 184 bytes spare for additional data
 type Phase3RoboTorqUnitAssembler struct {
-	logger          *slog.Logger
-	metrics         *Phase3AssemblerMetrics
-	merkleBuilder   *Level2MerkleBuilder
-	signer          *crypto.SPHINCSPlusSigner
-	proofCache      *ProofCache // NEW: Cache for merkle proof generation
-	unitChannel     chan *models.Phase3RoboTorqUnit
-	channelCapacity int
+	logger           *slog.Logger
+	metrics          *Phase3AssemblerMetrics
+	merkleBuilder    *Level2MerkleBuilder
+	signer           *crypto.SPHINCSPlusSigner
+	proofCache       *ProofCache       // Cache for merkle proof generation
+	signatureArchive *SignatureArchive // NEW: Storage for SPHINCS+ signatures
+	unitChannel      chan *models.Phase3RoboTorqUnit
+	channelCapacity  int
 }
 
 // Phase3AssemblerMetrics tracks Phase 3 unit assembly metrics
@@ -180,14 +181,18 @@ func NewPhase3RoboTorqUnitAssembler(
 	// Initialize proof cache for verification API
 	proofCache := NewProofCache()
 
+	// Initialize signature archive for SPHINCS+ signatures
+	signatureArchive := NewSignatureArchive()
+
 	a := &Phase3RoboTorqUnitAssembler{
-		logger:          logger,
-		metrics:         metrics,
-		merkleBuilder:   merkleBuilder,
-		signer:          signer,
-		proofCache:      proofCache,
-		unitChannel:     make(chan *models.Phase3RoboTorqUnit, channelCapacity),
-		channelCapacity: channelCapacity,
+		logger:           logger,
+		metrics:          metrics,
+		merkleBuilder:    merkleBuilder,
+		signer:           signer,
+		proofCache:       proofCache,
+		signatureArchive: signatureArchive,
+		unitChannel:      make(chan *models.Phase3RoboTorqUnit, channelCapacity),
+		channelCapacity:  channelCapacity,
 	}
 
 	return a, nil
@@ -312,7 +317,7 @@ func (a *Phase3RoboTorqUnitAssembler) assembleUnit(merkleResult *Level2MerkleRes
 	// Sign unit with SPHINCS+ (archival security)
 	// NOTE: Signature is NOT included in the Phase3RoboTorqUnit JSON
 	// to keep it under NTAG216 limit (888 bytes). Signature is stored
-	// separately in Mint's archive and retrieved via API when needed.
+	// separately in SignatureArchive and retrieved via API when needed.
 	signature, publicKey, err := a.signer.SignPhase3Unit(
 		unit.UnitID,
 		unit.MerkleRoot,
@@ -324,13 +329,27 @@ func (a *Phase3RoboTorqUnitAssembler) assembleUnit(merkleResult *Level2MerkleRes
 			"unit_id", unit.UnitID)
 		// Continue without signature (will fail verification later)
 	} else {
-		// TODO: Store signature in separate SignatureArchive for API retrieval
-		// For now, just log that it was generated
-		a.logger.Debug("phase3 unit signed with SPHINCS+ (not attached to unit JSON)",
-			"unit_id", unit.UnitID,
-			"signature_len", len(signature),
-			"public_key_len", len(publicKey),
-			"note", "signature stored separately to fit NTAG216 (888 bytes)")
+		// Store signature in archive for API retrieval
+		signatureRecord := &SignatureRecord{
+			UnitID:     unit.UnitID,
+			Signature:  signature,
+			PublicKey:  publicKey,
+			MerkleRoot: unit.MerkleRoot,
+			MintedAt:   unit.MintedAt.Format("2006-01-02T15:04:05.000000Z07:00"),
+			SignedAt:   unit.MintedAt.Format("2006-01-02T15:04:05.000000Z07:00"),
+		}
+
+		if err := a.signatureArchive.Store(signatureRecord); err != nil {
+			a.logger.Error("failed to store signature in archive",
+				"error", err,
+				"unit_id", unit.UnitID)
+		} else {
+			a.logger.Debug("phase3 unit signed and archived",
+				"unit_id", unit.UnitID,
+				"signature_len", len(signature),
+				"public_key_len", len(publicKey),
+				"archive_size", a.signatureArchive.Size())
+		}
 	}
 
 	// Log metadata for observability (NOT persisted to unit)
@@ -379,4 +398,20 @@ func (a *Phase3RoboTorqUnitAssembler) GetUnitChannel() <-chan *models.Phase3Robo
 //   - ProofCache instance with stored Level2MerkleResults
 func (a *Phase3RoboTorqUnitAssembler) GetProofCache() *ProofCache {
 	return a.proofCache
+}
+
+// GetSignatureArchive returns the signature archive for verification API
+//
+// Usage:
+//
+//	archive := assembler.GetSignatureArchive()
+//	record, err := archive.Get(unitID)
+//	if err == nil {
+//	    // Use record.Signature and record.PublicKey for verification
+//	}
+//
+// Returns:
+//   - SignatureArchive instance with stored SPHINCS+ signatures
+func (a *Phase3RoboTorqUnitAssembler) GetSignatureArchive() *SignatureArchive {
+	return a.signatureArchive
 }
