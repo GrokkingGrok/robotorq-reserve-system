@@ -51,6 +51,16 @@ type Phase3RoboTorqUnit struct {
 	// This is the ONLY cryptographic proof stored on-chain
 	MerkleRoot string `json:"merkle_root"`
 
+	// TreeHeight is the number of levels in the Level 2 merkle tree
+	// Should be ~10 for 1000 ingots (⌈log₂(1000)⌉ = 10)
+	// Used to validate proof size and tree structure
+	TreeHeight int `json:"tree_height"`
+
+	// MerkleProofAPI is the URL endpoint for retrieving merkle proofs
+	// Format: /verify/proof/{unit_id}
+	// Allows anyone to request proof that a specific ingot exists in this RT unit
+	MerkleProofAPI string `json:"merkle_proof_api"`
+
 	// MintedAt is when this RT unit was created
 	MintedAt time.Time `json:"minted_at"`
 
@@ -68,6 +78,7 @@ type Phase3RoboTorqUnit struct {
 //
 // Parameters:
 //   - merkleRoot: Level 2 merkle root (64-char hex from 1000 ingot hashes)
+//   - treeHeight: Number of levels in the merkle tree (should be 10 for 1000 ingots)
 //
 // Returns:
 //   - Phase3RoboTorqUnit ready for DistoDam publishing
@@ -75,7 +86,7 @@ type Phase3RoboTorqUnit struct {
 //
 // Note: Metadata (contracts, diggers, refineries, joules, robo stake) is NOT stored.
 // It can be reconstructed by querying proof archives when needed.
-func NewPhase3RoboTorqUnit(merkleRoot string) (*Phase3RoboTorqUnit, error) {
+func NewPhase3RoboTorqUnit(merkleRoot string, treeHeight int) (*Phase3RoboTorqUnit, error) {
 	// Validate merkle root format (64-char hex SHA256)
 	if len(merkleRoot) != 64 {
 		return nil, fmt.Errorf("invalid merkle_root length: got %d, expected 64", len(merkleRoot))
@@ -88,10 +99,19 @@ func NewPhase3RoboTorqUnit(merkleRoot string) (*Phase3RoboTorqUnit, error) {
 		}
 	}
 
+	// Validate tree height (should be reasonable for 1000 ingots)
+	if treeHeight < 0 || treeHeight > 20 {
+		return nil, fmt.Errorf("invalid tree_height: got %d, expected 0-20", treeHeight)
+	}
+
+	unitID := generateUnitID()
+
 	unit := &Phase3RoboTorqUnit{
-		UnitID:     generateUnitID(),
-		MerkleRoot: merkleRoot,
-		MintedAt:   time.Now().UTC(),
+		UnitID:         unitID,
+		MerkleRoot:     merkleRoot,
+		TreeHeight:     treeHeight,
+		MerkleProofAPI: fmt.Sprintf("/verify/proof/%s", unitID),
+		MintedAt:       time.Now().UTC(),
 	}
 
 	return unit, nil
@@ -112,6 +132,14 @@ func (u *Phase3RoboTorqUnit) Validate() error {
 		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
 			return fmt.Errorf("merkle_root must be hex string")
 		}
+	}
+
+	if u.TreeHeight < 0 || u.TreeHeight > 20 {
+		return fmt.Errorf("tree_height must be 0-20, got %d", u.TreeHeight)
+	}
+
+	if u.MerkleProofAPI == "" {
+		return fmt.Errorf("merkle_proof_api is required")
 	}
 
 	if u.MintedAt.IsZero() {
