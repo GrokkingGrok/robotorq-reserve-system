@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
+	"b2b/mint/internal/crypto"
 	"b2b/mint/internal/models"
 
 	"github.com/nats-io/nats.go"
@@ -24,14 +26,17 @@ type Phase2IngotReceiver struct {
 	ctx          context.Context
 	logger       *slog.Logger
 	metrics      *Phase2IngotMetrics
+	verifier     *crypto.FalconVerifier // Phase 5: Signature verification
 }
 
 // Phase2IngotMetrics holds Prometheus metrics for Phase2Ingot reception
 type Phase2IngotMetrics struct {
-	IngotsReceived     prometheus.Counter
-	ValidationErrors   *prometheus.CounterVec
-	QueueErrors        prometheus.Counter
-	IngotHashCountHist prometheus.Histogram
+	IngotsReceived        prometheus.Counter
+	ValidationErrors      *prometheus.CounterVec
+	QueueErrors           prometheus.Counter
+	IngotHashCountHist    prometheus.Histogram
+	SignatureVerifyErrors prometheus.Counter   // Phase 5: Signature verification failures
+	SignatureVerifyTime   prometheus.Histogram // Phase 5: Time to verify signatures
 }
 
 // NewPhase2IngotMetrics creates and registers Phase 2 ingot metrics
@@ -54,6 +59,15 @@ func NewPhase2IngotMetrics() *Phase2IngotMetrics {
 			Help:    "Distribution of hash counts in received ingots",
 			Buckets: []float64{100, 500, 1000, 2000, 3600, 5000, 10000},
 		}),
+		SignatureVerifyErrors: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "mint_phase2_signature_verification_errors_total",
+			Help: "Total Falcon-1024 signature verification failures",
+		}),
+		SignatureVerifyTime: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "mint_phase2_signature_verify_duration_seconds",
+			Help:    "Time taken to verify Falcon-1024 signatures on Phase2Ingots",
+			Buckets: prometheus.DefBuckets,
+		}),
 	}
 
 	// Try to register metrics (ignore if already registered in tests)
@@ -61,6 +75,8 @@ func NewPhase2IngotMetrics() *Phase2IngotMetrics {
 	prometheus.Register(metrics.ValidationErrors)
 	prometheus.Register(metrics.QueueErrors)
 	prometheus.Register(metrics.IngotHashCountHist)
+	prometheus.Register(metrics.SignatureVerifyErrors)
+	prometheus.Register(metrics.SignatureVerifyTime)
 
 	return metrics
 }
@@ -76,12 +92,15 @@ func NewPhase2IngotReceiver(nc *nats.Conn, queue *IngotHashQueue, ctx context.Co
 
 	metrics := NewPhase2IngotMetrics()
 
+	verifier := crypto.NewFalconVerifier()
+
 	return &Phase2IngotReceiver{
 		natsConn: nc,
 		queue:    queue,
 		ctx:      ctx,
 		logger:   logger,
 		metrics:  metrics,
+		verifier: verifier,
 	}, nil
 }
 
@@ -140,6 +159,31 @@ func (pir *Phase2IngotReceiver) handleIngot(msg *nats.Msg) {
 			failCount++
 			continue
 		}
+
+		// Phase 5: Verify Falcon-1024 signature from Refinery
+		verifyStart := time.Now()
+		if err := pir.verifier.VerifyPhase2Ingot(
+			ingot.ID,
+			ingot.BranchHash,
+			ingot.HashCount,
+			ingot.Timestamp.Format(time.RFC3339),
+			ingot.Signature,
+			ingot.PublicKey,
+		); err != nil {
+			pir.logger.Error("signature verification failed - REJECTING INGOT",
+				"error", err,
+				"ingot_id", ingot.ID,
+				"branch_hash", truncateHash(ingot.BranchHash))
+			pir.metrics.SignatureVerifyErrors.Inc()
+			pir.metrics.ValidationErrors.WithLabelValues("signature").Inc()
+			failCount++
+			continue
+		}
+		pir.metrics.SignatureVerifyTime.Observe(time.Since(verifyStart).Seconds())
+
+		pir.logger.Debug("signature verified",
+			"ingot_id", ingot.ID,
+			"verify_time_ms", time.Since(verifyStart).Milliseconds())
 
 		// Record hash count distribution
 		pir.metrics.IngotHashCountHist.Observe(float64(ingot.HashCount))

@@ -8,6 +8,83 @@ import (
 	"github.com/open-quantum-safe/liboqs-go/oqs"
 )
 
+// FalconSigner handles Falcon-1024 signature generation for Phase2Ingots
+//
+// Phase 5 Implementation: REAL Falcon-1024 Signing in Refinery
+// =============================================================
+// Uses liboqs-go (github.com/open-quantum-safe/liboqs-go) for NIST-approved
+// post-quantum signature generation.
+//
+// Signs Phase2Ingots (merkle branch hashes) before sending to Mint
+type FalconSigner struct {
+	privateKey []byte
+	publicKey  []byte
+}
+
+// NewFalconSigner creates a new Falcon-1024 signer with keypair
+func NewFalconSigner() (*FalconSigner, error) {
+	sig := oqs.Signature{}
+	defer sig.Clean()
+
+	if err := sig.Init("Falcon-1024", nil); err != nil {
+		return nil, fmt.Errorf("failed to initialize Falcon-1024: %w", err)
+	}
+
+	publicKey, err := sig.GenerateKeyPair()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate Falcon-1024 keypair: %w", err)
+	}
+
+	privateKey := sig.ExportSecretKey()
+
+	return &FalconSigner{
+		privateKey: privateKey,
+		publicKey:  publicKey,
+	}, nil
+}
+
+// SignPhase2Ingot signs a Phase2Ingot's branch hash
+//
+// # Arguments
+//   - ingotID: The ingot ID (e.g., "ingot-20251116-001")
+//   - branchHash: The merkle root hash (64-char hex)
+//   - hashCount: Number of hashes in merkle tree (should be 3600)
+//   - timestamp: ISO8601 timestamp when ingot was assembled
+//
+// # Returns
+//   - signatureHex: Hex-encoded Falcon-1024 signature
+//   - publicKeyHex: Hex-encoded Falcon-1024 public key
+//   - error if signing fails
+func (fs *FalconSigner) SignPhase2Ingot(
+	ingotID string,
+	branchHash string,
+	hashCount int,
+	timestamp string,
+) (signatureHex string, publicKeyHex string, error error) {
+	// Construct message to sign (must match Mint verification)
+	message := fmt.Sprintf("%s|%s|%d|%s",
+		ingotID,
+		branchHash,
+		hashCount,
+		timestamp)
+
+	// Initialize signer
+	sig := oqs.Signature{}
+	defer sig.Clean()
+
+	if err := sig.Init("Falcon-1024", fs.privateKey); err != nil {
+		return "", "", fmt.Errorf("failed to initialize Falcon-1024 signer: %w", err)
+	}
+
+	// Sign the message
+	signature, err := sig.Sign([]byte(message))
+	if err != nil {
+		return "", "", fmt.Errorf("failed to sign Phase2Ingot: %w", err)
+	}
+
+	return hex.EncodeToString(signature), hex.EncodeToString(fs.publicKey), nil
+}
+
 // FalconVerifier handles Falcon-1024 signature verification
 //
 // Phase 5 Implementation: REAL Falcon-1024 Verification

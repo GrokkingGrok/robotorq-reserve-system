@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"b2b/refinery/internal/crypto"
+
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -57,6 +59,10 @@ type Phase2Ingot struct {
 	ContractIDs []string  `json:"contract_ids"` // Unique contracts
 	DiggerIDs   []string  `json:"digger_ids"`   // Unique diggers
 	Timestamp   time.Time `json:"timestamp"`    // When assembled
+
+	// Phase 5: Falcon-1024 signature (proof of assembly by Refinery)
+	Signature string `json:"signature"`  // Hex-encoded Falcon-1024 signature
+	PublicKey string `json:"public_key"` // Hex-encoded Falcon-1024 public key
 }
 
 // Phase2IngotAssembler builds ingots from hash queues (not full units)
@@ -65,6 +71,7 @@ type Phase2IngotAssembler struct {
 	ctx          context.Context
 	logger       *slog.Logger
 	mu           sync.Mutex
+	signer       *crypto.FalconSigner // Phase 5: Sign ingots before sending to Mint
 
 	// Completed ingots ready to send to Mint
 	completedIngots []*Phase2Ingot
@@ -72,10 +79,21 @@ type Phase2IngotAssembler struct {
 
 // NewPhase2IngotAssembler creates a new Phase 2 ingot assembler
 func NewPhase2IngotAssembler(ctx context.Context, qm *QueueManager, logger *slog.Logger) *Phase2IngotAssembler {
+	// Initialize Falcon-1024 signer for Phase 5
+	signer, err := crypto.NewFalconSigner()
+	if err != nil {
+		logger.Error("failed to create Falcon signer", "error", err)
+		// Continue without signer (will fail later, but allows startup)
+		signer = nil
+	} else {
+		logger.Info("Falcon-1024 signer initialized for Phase2Ingots")
+	}
+
 	return &Phase2IngotAssembler{
 		queueManager:    qm,
 		ctx:             ctx,
 		logger:          logger,
+		signer:          signer,
 		completedIngots: make([]*Phase2Ingot, 0),
 	}
 }
@@ -172,6 +190,34 @@ func (ia *Phase2IngotAssembler) assembleIngot(hashEntries []HashEntry) error {
 		ContractIDs: contractIDs,
 		DiggerIDs:   diggerIDs,
 		Timestamp:   time.Now(),
+	}
+
+	// Phase 5: Sign the ingot with Falcon-1024 before sending to Mint
+	if ia.signer != nil {
+		timestamp := ingot.Timestamp.Format(time.RFC3339)
+		signature, publicKey, err := ia.signer.SignPhase2Ingot(
+			ingot.ID,
+			ingot.BranchHash,
+			ingot.HashCount,
+			timestamp,
+		)
+		if err != nil {
+			ia.logger.Error("failed to sign Phase2Ingot",
+				"error", err,
+				"ingot_id", ingot.ID)
+			return fmt.Errorf("failed to sign ingot: %w", err)
+		}
+
+		ingot.Signature = signature
+		ingot.PublicKey = publicKey
+
+		ia.logger.Debug("Phase2Ingot signed",
+			"ingot_id", ingot.ID,
+			"signature_len", len(signature),
+			"pubkey_len", len(publicKey))
+	} else {
+		ia.logger.Warn("no Falcon signer available - ingot NOT signed (will be rejected by Mint!)",
+			"ingot_id", ingot.ID)
 	}
 
 	// Store completed ingot

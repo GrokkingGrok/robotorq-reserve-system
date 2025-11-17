@@ -26,6 +26,10 @@ type Phase2Ingot struct {
 	DiggerIDs   []string  `json:"digger_ids"`   // Unique diggers who contributed
 	Timestamp   time.Time `json:"timestamp"`    // When assembled by Refinery
 
+	// Phase 5: Falcon-1024 signature from Refinery (proof of assembly)
+	Signature string `json:"signature"`  // Hex-encoded Falcon-1024 signature
+	PublicKey string `json:"public_key"` // Hex-encoded Falcon-1024 public key
+
 	// Phase 2: NO Units[] array - hash-only flow
 	// Full JTU data remains on Digger for audit/verification
 }
@@ -69,6 +73,26 @@ func (pi *Phase2Ingot) Validate() error {
 
 	if pi.Timestamp.After(time.Now().Add(1 * time.Hour)) {
 		return fmt.Errorf("timestamp is too far in future: %s", pi.Timestamp)
+	}
+
+	// Signature must not be empty (Phase 5)
+	if pi.Signature == "" {
+		return errors.New("signature cannot be empty")
+	}
+
+	// Public key must not be empty (Phase 5)
+	if pi.PublicKey == "" {
+		return errors.New("public_key cannot be empty")
+	}
+
+	// Validate signature hex format
+	if _, err := hex.DecodeString(pi.Signature); err != nil {
+		return fmt.Errorf("signature is not valid hex: %w", err)
+	}
+
+	// Validate public key hex format
+	if _, err := hex.DecodeString(pi.PublicKey); err != nil {
+		return fmt.Errorf("public_key is not valid hex: %w", err)
 	}
 
 	return nil
