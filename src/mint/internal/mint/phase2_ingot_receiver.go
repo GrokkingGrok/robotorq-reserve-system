@@ -85,67 +85,95 @@ func NewPhase2IngotReceiver(nc *nats.Conn, queue *IngotHashQueue, ctx context.Co
 	}, nil
 }
 
-// Start subscribes to mint.ingots and begins processing Phase2Ingots
+// Start subscribes to mint.phase2.ingots and begins processing Phase2Ingots
 func (pir *Phase2IngotReceiver) Start() error {
-	sub, err := pir.natsConn.Subscribe("mint.ingots", pir.handleIngot)
+	sub, err := pir.natsConn.Subscribe("mint.phase2.ingots", pir.handleIngot)
 	if err != nil {
-		return fmt.Errorf("failed to subscribe to mint.ingots: %w", err)
+		return fmt.Errorf("failed to subscribe to mint.phase2.ingots: %w", err)
 	}
 
 	pir.subscription = sub
 	pir.logger.Info("Phase2IngotReceiver started",
-		"subject", "mint.ingots",
+		"subject", "mint.phase2.ingots",
 		"status", "listening")
 
 	return nil
 }
 
-// handleIngot processes incoming Phase2Ingot messages from NATS
+// handleIngot processes incoming Phase2Ingot batch messages from NATS
 func (pir *Phase2IngotReceiver) handleIngot(msg *nats.Msg) {
-	// Unmarshal JSON
-	var ingot models.Phase2Ingot
-	if err := json.Unmarshal(msg.Data, &ingot); err != nil {
-		pir.logger.Error("failed to unmarshal Phase2Ingot",
+	// First, try to unmarshal as a batch wrapper
+	var batch struct {
+		BatchID   string                `json:"batch_id"`
+		Timestamp string                `json:"timestamp"`
+		Count     int                   `json:"count"`
+		Ingots    []*models.Phase2Ingot `json:"ingots"`
+	}
+
+	if err := json.Unmarshal(msg.Data, &batch); err != nil {
+		pir.logger.Error("failed to unmarshal Phase2 batch",
 			"error", err,
 			"msg_size", len(msg.Data))
 		pir.metrics.ValidationErrors.WithLabelValues("unmarshal").Inc()
 		return
 	}
 
-	// Validate ingot structure
-	if err := ingot.Validate(); err != nil {
-		pir.logger.Warn("invalid Phase2Ingot received",
-			"error", err,
+	pir.logger.Info("received NATS batch",
+		"batch_id", batch.BatchID,
+		"count", batch.Count,
+		"ingots", len(batch.Ingots),
+		"timestamp", batch.Timestamp)
+
+	// Process each ingot in the batch
+	successCount := 0
+	failCount := 0
+
+	for i, ingot := range batch.Ingots {
+		// Validate ingot structure
+		if err := ingot.Validate(); err != nil {
+			pir.logger.Error("ingot validation failed",
+				"error", err,
+				"ingot_id", ingot.ID,
+				"branch_hash", truncateHash(ingot.BranchHash),
+				"hash_count", ingot.HashCount)
+			pir.metrics.ValidationErrors.WithLabelValues("validation").Inc()
+			failCount++
+			continue
+		}
+
+		// Record hash count distribution
+		pir.metrics.IngotHashCountHist.Observe(float64(ingot.HashCount))
+
+		// Convert to IngotHashEntry and add to queue
+		hashEntry := models.NewIngotHashEntry(ingot)
+		if err := pir.queue.AddIngotHash(pir.ctx, hashEntry); err != nil {
+			pir.logger.Error("failed to process ingot from NATS batch",
+				"error", err,
+				"batch_id", batch.BatchID,
+				"ingot_index", i,
+				"ingot_id", ingot.ID)
+			pir.metrics.QueueErrors.Inc()
+			failCount++
+			continue
+		}
+
+		// Success
+		pir.metrics.IngotsReceived.Inc()
+		successCount++
+		pir.logger.Info("Phase 2 ingot received",
 			"ingot_id", ingot.ID,
 			"branch_hash", truncateHash(ingot.BranchHash),
-			"hash_count", ingot.HashCount)
-		pir.metrics.ValidationErrors.WithLabelValues("validation").Inc()
-		return
+			"hash_count", ingot.HashCount,
+			"contracts", len(ingot.ContractIDs),
+			"diggers", len(ingot.DiggerIDs),
+			"queue_depth", pir.queue.Len())
 	}
 
-	// Record hash count distribution
-	pir.metrics.IngotHashCountHist.Observe(float64(ingot.HashCount))
-
-	// Convert to IngotHashEntry and add to queue
-	hashEntry := models.NewIngotHashEntry(&ingot)
-	if err := pir.queue.AddIngotHash(pir.ctx, hashEntry); err != nil {
-		pir.logger.Error("failed to queue ingot hash",
-			"error", err,
-			"ingot_id", ingot.ID,
-			"branch_hash", truncateHash(ingot.BranchHash))
-		pir.metrics.QueueErrors.Inc()
-		return
-	}
-
-	// Success
-	pir.metrics.IngotsReceived.Inc()
-	pir.logger.Info("Phase 2 ingot received",
-		"ingot_id", ingot.ID,
-		"branch_hash", truncateHash(ingot.BranchHash),
-		"hash_count", ingot.HashCount,
-		"contracts", len(ingot.ContractIDs),
-		"diggers", len(ingot.DiggerIDs),
-		"queue_depth", pir.queue.Len())
+	pir.logger.Info("processed NATS batch",
+		"batch_id", batch.BatchID,
+		"total", batch.Count,
+		"success", successCount,
+		"failed", failCount)
 }
 
 // Stop unsubscribes from NATS and stops receiving ingots

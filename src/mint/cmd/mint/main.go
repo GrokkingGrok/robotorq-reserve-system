@@ -164,7 +164,7 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Phase2IngotReceiver: %w", err)
 	}
-	logger.Info("Phase2IngotReceiver initialized", "nats_topic", "mint.ingots")
+	logger.Info("Phase2IngotReceiver initialized", "nats_topic", "mint.phase2.ingots")
 
 	// Create Level2MerkleBuilder (Phase 3 Milestone 3: builds merkle tree from 1000 ingot hashes)
 	level2MerkleBuilder := mint.NewLevel2MerkleBuilder(ingotHashQueue, logger)

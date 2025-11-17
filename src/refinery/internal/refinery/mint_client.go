@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	// MintIngotsTopic is the NATS subject for sending ingots to Mint
-	MintIngotsTopic = "mint.ingots"
+	// MintIngotsTopic is the NATS topic for sending Phase 2 ingots to Mint
+	// Using separate topic to avoid conflict with old Phase 1-4 TokenTorqIngot receiver
+	MintIngotsTopic = "mint.phase2.ingots"
 )
 
 var (
