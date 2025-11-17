@@ -24,9 +24,9 @@ import (
 //   - Queried: By GET /verify/proof/:unit_id endpoint
 //   - Eviction: LRU cache (future enhancement, currently unbounded)
 type ProofCache struct {
-	mu          sync.RWMutex
-	results     map[string]*Level2MerkleResult // unitID -> merkle result
-	ingotIndex  map[string]string              // ingotHash -> unitID (reverse lookup)
+	mu         sync.RWMutex
+	results    map[string]*Level2MerkleResult // unitID -> merkle result
+	ingotIndex map[string]string              // ingotHash -> unitID (reverse lookup)
 }
 
 // NewProofCache creates a new proof cache
@@ -46,7 +46,7 @@ func (pc *ProofCache) Store(unitID string, result *Level2MerkleResult) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
 	pc.results[unitID] = result
-	
+
 	// Build reverse index: ingot hash -> unit ID
 	// This enables GET /verify/jtu/:hash lookups
 	for _, entry := range result.HashEntries {
@@ -341,9 +341,8 @@ func (a *Phase3RoboTorqUnitAssembler) assembleUnit(merkleResult *Level2MerkleRes
 		"cache_size", a.proofCache.Size())
 
 	// Sign unit with SPHINCS+ (archival security)
-	// NOTE: Signature is NOT included in the Phase3RoboTorqUnit JSON
-	// to keep it under NTAG216 limit (888 bytes). Signature is stored
-	// separately in SignatureArchive and retrieved via API when needed.
+	// NOTE: Signature IS included in the Phase3RoboTorqUnit JSON for full verification.
+	// For NFC tag storage, a separate minimal version without signature can be created.
 	signature, publicKey, err := a.signer.SignPhase3Unit(
 		unit.UnitID,
 		unit.MerkleRoot,
@@ -355,7 +354,11 @@ func (a *Phase3RoboTorqUnitAssembler) assembleUnit(merkleResult *Level2MerkleRes
 			"unit_id", unit.UnitID)
 		// Continue without signature (will fail verification later)
 	} else {
-		// Store signature in archive for API retrieval
+		// Set signature on unit for NATS publishing
+		unit.Signature = signature
+		unit.PublicKey = publicKey
+
+		// Also store signature in archive for API retrieval
 		signatureRecord := &SignatureRecord{
 			UnitID:     unit.UnitID,
 			Signature:  signature,

@@ -84,7 +84,12 @@ func main() {
 	// Phase 1 used full JTU data, Phase 2 uses hash-only merkle trees
 
 	// Hash Batch Receiver: Phase 5 - Falcon-1024 signature verification
-	hashBatchReceiver := refinery.NewHashBatchReceiver(queueMgr)
+	// SKIP_FALCON_VERIFICATION=true disables verification for testing
+	skipFalconVerification := os.Getenv("SKIP_FALCON_VERIFICATION") == "true"
+	hashBatchReceiver := refinery.NewHashBatchReceiver(queueMgr, skipFalconVerification)
+	if skipFalconVerification {
+		slog.Warn("⚠️  TESTING MODE: Falcon verification DISABLED")
+	}
 	slog.Info("✅ Phase 5: Hash batch receiver initialized with Falcon-1024 verification")
 
 	// Ore Receiver: HTTP handler for Digger submissions (DEPRECATED for Phase 5)

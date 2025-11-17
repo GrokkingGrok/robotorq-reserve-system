@@ -16,7 +16,7 @@ import (
 )
 
 func TestNewHashBatchReceiver(t *testing.T) {
-	receiver := NewHashBatchReceiver(nil)
+	receiver := NewHashBatchReceiver(nil, false)
 
 	assert.NotNil(t, receiver)
 	assert.NotNil(t, receiver.verifier)
@@ -24,7 +24,7 @@ func TestNewHashBatchReceiver(t *testing.T) {
 }
 
 func TestReceiveHashBatch_StructureValidation(t *testing.T) {
-	receiver := NewHashBatchReceiver(nil)
+	receiver := NewHashBatchReceiver(nil, false)
 
 	tests := []struct {
 		name        string

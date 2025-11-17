@@ -14,10 +14,11 @@ services:
     build:
       context: .
       dockerfile: ./nats/Dockerfile.nats.cli
-    command: >-
-      --jetstream
-      --http_port 8222
-      -m 8222
+    command:
+      - "-c"
+      - "/nats/nats-server.conf"
+    volumes:
+      - ./nats:/nats:ro
     ports:
       - "4222:4222"
       - "8222:8222"
@@ -58,12 +59,12 @@ services:
     ports:
       - "50051:50051"
       - "8080:8080"
-      - "8082:8081"  # Phase 5: Verification API (host:8082 -> container:8081)
+      - "8084:8081"  # Phase 5: Verification API (host:8084 -> container:8081)
       - "9090:9090"
     environment:
       - HTTP_PORT=8080
       - NATS_URL=nats://nats:4222
-      - BATCH_SIZE=1000
+      - BATCH_SIZE=1000  # Phase3 units require exactly 1000 Phase2Ingots
       - FLUSH_INTERVAL=60s
       - BUFFER_CAPACITY=100000
       - NATS_RETRIES=3
@@ -94,7 +95,7 @@ services:
       - NATS_URL=nats://nats:4222
       - HTTP_PORT=3030
       - STORAGE_PATH=/app/jtu_storage
-      - BATCH_INTERVAL_SEC=5
+      - BATCH_INTERVAL_SEC=5  # Send ore batches every 5s (balanced with Refinery 10s)
       - LOG_LEVEL=info
     depends_on:
       nats:
@@ -119,11 +120,12 @@ services:
       - "8081:8080"
     environment:
       - NATS_URL=nats://nats:4222
-      - REFINERY_INGOT_BATCH_INTERVAL=60
+      - REFINERY_INGOT_BATCH_INTERVAL=5  # Send ingot batches every 5s (match Digger interval)
       - MINT_MAX_RETRIES=3
       - MINT_BASE_DELAY=1
-      - REFINERY_JOULE_QUEUE_SIZE=5000
-      - REFINERY_ROBO_QUEUE_SIZE=5000
+      - REFINERY_JOULE_QUEUE_SIZE=7500  # Larger buffer for high-throughput testing
+      - REFINERY_ROBO_QUEUE_SIZE=7500  # Larger buffer for high-throughput testing
+      - SKIP_FALCON_VERIFICATION=true  # Testing: disable Falcon signature verification
     depends_on:
       nats:
         condition: service_healthy

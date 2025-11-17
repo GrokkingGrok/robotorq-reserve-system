@@ -40,7 +40,7 @@ from nats.aio.client import Client as NATS
 # Service endpoints
 NATS_URL = "nats://localhost:4222"
 DIGGER_API = "http://localhost:3030"
-MINT_VERIFICATION_API = "http://localhost:8082"
+MINT_VERIFICATION_API = "http://localhost:8084"
 
 # NATS topics
 TOPIC_MINT_INGOTS = "mint.ingots"
@@ -48,7 +48,7 @@ TOPIC_DISTODAM_UNITS = "distodam.units"
 
 # Timeouts
 TIMEOUT_INGOT = 90   # Wait for Refinery to produce ingot
-TIMEOUT_UNIT = 180   # Wait for Mint to produce Phase3 unit (need 1000 ingots)
+TIMEOUT_UNIT = 600   # Wait for Mint to produce Phase3 unit (need 1000 ingots, ~10 minutes)
 
 # Container names
 CONTAINERS = {
@@ -117,6 +117,83 @@ async def get_mint_public_key() -> Optional[str]:
     except requests.exceptions.RequestException as e:
         print_error(f"Failed to fetch public key: {e}")
         return None
+
+
+async def trigger_digger_contracts(num_contracts: int = 100) -> bool:
+    """Trigger multiple Digger contracts to generate ore batches"""
+    print_step(f"Creating and executing {num_contracts} Digger contracts...")
+    
+    try:
+        created_contracts = []
+        timestamp = int(time.time())  # Unique timestamp for contract IDs
+        
+        # Create and execute contracts
+        for i in range(num_contracts):
+            contract_id = f"e2e-test-{timestamp}-{i+1:03d}"
+            print_step(f"Creating contract {i+1}/{num_contracts}: {contract_id}")
+            
+            # Create contract
+            create_response = requests.post(
+                f"{DIGGER_API}/contracts/create",
+                json={
+                    "contract_id": contract_id,
+                    "torq": 3600.0,  # 1 kWh worth of computation (3600 joules)
+                    "robo_stake": 0.05,  # 0.05 RT stake
+                    "milestones": 13,  # 13 ore batches per contract
+                    "power_watts": 1500.0,  # 1.5kW robot power (more TT output)
+                },
+                timeout=10
+            )
+            
+            if create_response.status_code != 200:
+                print_warning(f"Failed to create contract {contract_id}: {create_response.status_code}")
+                continue
+            
+            print_success(f"Created contract {contract_id}")
+            
+            # Pay stake (0.05 RT per contract)
+            stake_response = requests.post(
+                f"{DIGGER_API}/contracts/stake",
+                json={"contract_id": contract_id},
+                timeout=10
+            )
+            
+            if stake_response.status_code != 200:
+                print_warning(f"Failed to stake for {contract_id}: {stake_response.status_code}")
+                continue
+            
+            print_success(f"Staked 0.05 RT for {contract_id}")
+            
+            # Execute contract (balanced duration for throughput)
+            exec_response = requests.post(
+                f"{DIGGER_API}/contracts/execute",
+                json={
+                    "contract_id": contract_id,
+                    "duration_seconds": 10  # 10 seconds = ~600 JTUs = 1-2 ingots per contract
+                },
+                timeout=120  # Allow time for execution (matches contract duration + overhead)
+            )
+            
+            if exec_response.status_code != 200:
+                print_warning(f"Failed to execute {contract_id}: {exec_response.status_code}")
+                continue
+            
+            print_success(f"Executing contract {contract_id}")
+            created_contracts.append(contract_id)
+            
+            # Small delay between contracts
+            await asyncio.sleep(0.5)
+        
+        if not created_contracts:
+            print_error("No contracts were successfully created and executed")
+            return False
+        
+        print_success(f"Triggered {len(created_contracts)}/{num_contracts} contracts successfully")
+        return True
+        
+    except requests.exceptions.RequestException as e:
+        print_error(f"Failed to trigger contracts: {e}")
+        return False
 
 
 async def wait_for_phase3_unit(nc: NATS, timeout: int = TIMEOUT_UNIT) -> Optional[Dict[str, Any]]:
@@ -400,6 +477,17 @@ async def main():
     except Exception as e:
         print_error(f"Failed to connect to NATS: {e}")
         return False
+    
+    # Trigger Digger contracts to generate ore (10 contracts × 3 seconds = lots of small batches)
+    if not await trigger_digger_contracts(num_contracts=10):
+        print_error("Failed to trigger Digger contracts")
+        await nc.close()
+        return False
+    
+    print_step("Waiting for pipeline to process ore → ingots → Phase3 unit...")
+    print_warning("Each contract produces ore batches with 300 tokens each")
+    print_warning("Total expected: 10 contracts × 3 seconds each")
+    print_warning("This will produce several ingots (3600 tokens each)")
     
     # Wait for Phase3 unit (this may take time - need 1000 ingots)
     unit = await wait_for_phase3_unit(nc)

@@ -20,7 +20,8 @@ RoboTorq is **NOT** a cryptocurrency—it's a NATS-based distributed system wher
 **Critical Reading**:
 1. `README.md` (5,745 lines): Complete economic model, formulas, philosophy
 2. `BRANCHING.md`: Git workflow (`v0` baseline, `feature/*` branches)
-3. Service-specific architecture docs:
+3. **`port mapping/PORT_MAPPINGS.md`**: **MANDATORY** - Check BEFORE any port changes
+4. Service-specific architecture docs:
    - `src/mint/MINT_ARCHITECTURE.md`
    - `src/refinery/REFINERY_ARCHITECTURE.md`
    - `src/trust/TRUST_ARCHITECTURE.md` (future)

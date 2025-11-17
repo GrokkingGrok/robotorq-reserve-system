@@ -22,10 +22,12 @@ import sys
 from datetime import datetime, timezone
 from nats.aio.client import Client as NATS
 
+from tests.fixtures.helpers import print_warning
+
 # Add test fixtures
 sys.path.append('tests/fixtures')
 try:
-    from helpers import *
+    from fixtures import helpers
 except ImportError:
     # Fallback if helpers not available
     def print_success(msg): print(f"✅ {msg}")

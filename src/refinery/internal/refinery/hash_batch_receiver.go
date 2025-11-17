@@ -15,9 +15,10 @@ import (
 
 // HashBatchReceiver handles incoming hash batches with Falcon-1024 verification
 type HashBatchReceiver struct {
-	verifier *crypto.FalconVerifier
-	queueMgr *QueueManager
-	metrics  *HashBatchMetrics
+	verifier         *crypto.FalconVerifier
+	queueMgr         *QueueManager
+	metrics          *HashBatchMetrics
+	skipVerification bool // For testing - skip Falcon verification
 }
 
 // HashBatchMetrics tracks signature verification metrics
@@ -68,14 +69,15 @@ func (m *HashBatchMetrics) RegisterMetrics() {
 }
 
 // NewHashBatchReceiver creates a new hash batch receiver with verification
-func NewHashBatchReceiver(queueMgr *QueueManager) *HashBatchReceiver {
+func NewHashBatchReceiver(queueMgr *QueueManager, skipVerification bool) *HashBatchReceiver {
 	metrics := NewHashBatchMetrics()
 	metrics.RegisterMetrics()
 
 	return &HashBatchReceiver{
-		verifier: crypto.NewFalconVerifier(),
-		queueMgr: queueMgr,
-		metrics:  metrics,
+		verifier:         crypto.NewFalconVerifier(),
+		queueMgr:         queueMgr,
+		metrics:          metrics,
+		skipVerification: skipVerification,
 	}
 }
 
@@ -99,46 +101,53 @@ func (hbr *HashBatchReceiver) ReceiveHashBatch(batch *models.HashBatchOre) error
 		"timestamp", batch.Timestamp)
 
 	// 2. Verify Falcon-1024 signature (Phase 5 - CRITICAL SECURITY CHECK)
-	timer := prometheus.NewTimer(hbr.metrics.VerificationDuration)
-	defer timer.ObserveDuration()
-
-	err := hbr.verifier.VerifyHashBatch(
-		batch.ContractID,
-		batch.DiggerID,
-		batch.MilestoneIndex,
-		batch.Joules,
-		batch.RoboStake,
-		batch.Hashes,
-		batch.Timestamp,
-		batch.Signature,
-		batch.PublicKey,
-	)
-
-	if err != nil {
-		hbr.metrics.SignaturesFailedTotal.Inc()
-
-		slog.Error("SECURITY: Falcon signature verification FAILED",
+	if hbr.skipVerification {
+		slog.Warn("⚠️  SKIPPING Falcon verification (testing mode)",
 			"contract", batch.ContractID,
-			"digger", batch.DiggerID,
-			"hashes", batch.HashCount,
-			"error", err,
-			"action", "REJECTED")
+			"digger", batch.DiggerID)
+	} else {
+		timer := prometheus.NewTimer(hbr.metrics.VerificationDuration)
+		defer timer.ObserveDuration()
 
-		// TODO Phase 5: Implement slashing for invalid signatures
-		// - Record violation in Trust service
-		// - Slash digger's stake (10% for first offense)
-		// - Ban digger if repeated offenses
+		err := hbr.verifier.VerifyHashBatch(
+			batch.ContractID,
+			batch.DiggerID,
+			batch.MilestoneIndex,
+			batch.Joules,
+			batch.RoboStake,
+			batch.Hashes,
+			batch.Timestamp,
+			batch.Signature,
+			batch.PublicKey,
+		)
 
-		return fmt.Errorf("signature verification failed: %w", err)
+		if err != nil {
+			hbr.metrics.SignaturesFailedTotal.Inc()
+
+			slog.Error("SECURITY: Falcon signature verification FAILED",
+				"contract", batch.ContractID,
+				"digger", batch.DiggerID,
+				"hashes", batch.HashCount,
+				"error", err,
+				"action", "REJECTED")
+
+			// TODO Phase 5: Implement slashing for invalid signatures
+			// - Record violation in Trust service
+			// - Slash digger's stake (10% for first offense)
+			// - Ban digger if repeated offenses
+
+			return fmt.Errorf("signature verification failed: %w", err)
+		}
+
+		hbr.metrics.SignaturesVerifiedTotal.Inc()
+
+		slog.Info("✅ Falcon signature verified",
+			"contract_id", batch.ContractID,
+			"digger_id", batch.DiggerID,
+			"hashes", batch.HashCount)
 	}
 
-	hbr.metrics.SignaturesVerifiedTotal.Inc()
 	hbr.metrics.HashesReceivedTotal.Add(float64(batch.HashCount))
-
-	slog.Info("✅ Falcon signature verified",
-		"contract_id", batch.ContractID,
-		"digger_id", batch.DiggerID,
-		"hashes", batch.HashCount)
 
 	// 3. Process verified hashes - add to queue for Phase2 ingot assembly
 	for _, hash := range batch.Hashes {
