@@ -27,22 +27,22 @@ class Colors:
 
 def print_success(msg: str):
     """Print success message in green"""
-    print(f"{Colors.OKGREEN}✅ {msg}{Colors.ENDC}")
+    print(f"{Colors.OKGREEN}[OK] {msg}{Colors.ENDC}")
 
 
 def print_error(msg: str):
     """Print error message in red"""
-    print(f"{Colors.FAIL}❌ {msg}{Colors.ENDC}")
+    print(f"{Colors.FAIL}[ERROR] {msg}{Colors.ENDC}")
 
 
 def print_warning(msg: str):
     """Print warning message in yellow"""
-    print(f"{Colors.WARNING}⚠️  {msg}{Colors.ENDC}")
+    print(f"{Colors.WARNING}[WARNING] {msg}{Colors.ENDC}")
 
 
 def print_step(msg: str):
     """Print step message in blue"""
-    print(f"{Colors.OKBLUE}▶ {msg}{Colors.ENDC}")
+    print(f"{Colors.OKBLUE}> {msg}{Colors.ENDC}")
 
 
 def print_section(title: str):
@@ -534,3 +534,36 @@ async def wait_for_nats_message(
         print_warning(f"No message on {topic} after {timeout}s")
     
     return message
+
+
+async def trigger_digger_execution(contract_id: str = "test-contract-001", api_url: str = "http://localhost:9000") -> bool:
+    """
+    Trigger Digger to execute a contract via HTTP API
+    
+    Args:
+        contract_id: Contract ID to execute
+        api_url: Digger HTTP API URL
+    
+    Returns:
+        True if execution started successfully, False otherwise
+    """
+    import requests
+    
+    try:
+        # Send execute request
+        response = requests.post(
+            f"{api_url}/execute",
+            json={"contract_id": contract_id},
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            print_success(f"Triggered Digger execution: {contract_id}")
+            return True
+        else:
+            print_error(f"Digger execution failed: {response.status_code} - {response.text}")
+            return False
+    
+    except Exception as e:
+        print_error(f"Failed to trigger Digger: {e}")
+        return False
