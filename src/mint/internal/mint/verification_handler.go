@@ -222,10 +222,9 @@ func (h *VerificationHandler) handleJTULookup(w http.ResponseWriter, r *http.Req
 
 	if !found {
 		h.metrics.JTULookupsNotFound.Inc()
-		h.respondJSON(w, http.StatusNotFound, map[string]interface{}{
+		h.respondJSON(w, http.StatusOK, map[string]interface{}{
 			"ingot_hash": ingotHash,
 			"found":      false,
-			"error":      "ingot hash not found in any Phase3 unit",
 		})
 		return
 	}

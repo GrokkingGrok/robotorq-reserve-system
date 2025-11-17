@@ -36,7 +36,7 @@ from fixtures.helpers import (
 )
 
 # Mint verification API endpoint
-MINT_VERIFICATION_API = "http://localhost:8081"
+MINT_VERIFICATION_API = "http://localhost:8082"
 
 # Container name
 MINT_CONTAINER = "robotorq-network-mint-1"
@@ -69,7 +69,7 @@ def test_health_endpoint() -> bool:
         data = response.json()
         
         # Validate response structure
-        required = ['status', 'cache_size', 'signature_archive_size']
+        required = ['status', 'cache_size', 'signature_count']
         missing = [f for f in required if f not in data]
         if missing:
             print_error(f"Health response missing fields: {missing}")
@@ -77,7 +77,7 @@ def test_health_endpoint() -> bool:
         
         print_success(f"✓ Health status: {data['status']}")
         print_step(f"  - Cache size: {data['cache_size']}")
-        print_step(f"  - Signature archive: {data['signature_archive_size']}")
+        print_step(f"  - Signature count: {data['signature_count']}")
         
         return True
     

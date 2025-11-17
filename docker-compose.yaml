@@ -58,6 +58,7 @@ services:
     ports:
       - "50051:50051"
       - "8080:8080"
+      - "8082:8081"  # Phase 5: Verification API (host:8082 -> container:8081)
       - "9090:9090"
     environment:
       - HTTP_PORT=8080
