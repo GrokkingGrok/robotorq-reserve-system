@@ -15,15 +15,20 @@ import (
 // Uses liboqs-go (github.com/open-quantum-safe/liboqs-go) for NIST-approved
 // post-quantum signature generation.
 //
-// Signs Phase2Ingots (merkle branch hashes) before sending to Mint
+// # Signs Phase2Ingots (merkle branch hashes) before sending to Mint
+//
+// CRITICAL: liboqs-go signature objects can be reused by re-initializing
+// with the exported secret key. See liboqs-go/oqstests/sig_test.go pattern.
 type FalconSigner struct {
-	sig       *oqs.Signature
+	secretKey []byte
 	publicKey []byte
 }
 
 // NewFalconSigner creates a new Falcon-1024 signer with keypair
 func NewFalconSigner() (*FalconSigner, error) {
-	sig := &oqs.Signature{}
+	// Create temporary signature object for key generation
+	sig := oqs.Signature{}
+	defer sig.Clean()
 
 	if err := sig.Init("Falcon-1024", nil); err != nil {
 		return nil, fmt.Errorf("failed to initialize Falcon-1024: %w", err)
@@ -31,24 +36,30 @@ func NewFalconSigner() (*FalconSigner, error) {
 
 	publicKey, err := sig.GenerateKeyPair()
 	if err != nil {
-		sig.Clean()
 		return nil, fmt.Errorf("failed to generate Falcon-1024 keypair: %w", err)
 	}
 
+	// Export secret key for reuse (liboqs-go pattern for multiple signatures)
+	secretKey := sig.ExportSecretKey()
+
 	return &FalconSigner{
-		sig:       sig,
+		secretKey: secretKey,
 		publicKey: publicKey,
 	}, nil
 }
 
-// Clean releases the Falcon signer resources
+// Clean clears secret key from memory
 func (fs *FalconSigner) Clean() {
-	if fs.sig != nil {
-		fs.sig.Clean()
+	if fs.secretKey != nil {
+		oqs.MemCleanse(fs.secretKey)
+		fs.secretKey = nil
 	}
 }
 
 // SignPhase2Ingot signs a Phase2Ingot's branch hash
+//
+// Creates a NEW signature object per sign operation, initialized with the
+// exported secret key. This is the liboqs-go pattern for multiple signatures.
 //
 // # Arguments
 //   - ingotID: The ingot ID (e.g., "ingot-20251116-001")
@@ -73,8 +84,18 @@ func (fs *FalconSigner) SignPhase2Ingot(
 		hashCount,
 		timestamp)
 
-	// Sign the message using the persistent signature object
-	signature, err := fs.sig.Sign([]byte(message))
+	// Create new signature object with exported secret key
+	// This is the correct liboqs-go pattern for signing multiple messages
+	sig := oqs.Signature{}
+	defer sig.Clean()
+
+	// Re-initialize with secret key for THIS signature operation
+	if err := sig.Init("Falcon-1024", fs.secretKey); err != nil {
+		return "", "", fmt.Errorf("failed to init Falcon-1024 signer: %w", err)
+	}
+
+	// Sign the message
+	signature, err := sig.Sign([]byte(message))
 	if err != nil {
 		return "", "", fmt.Errorf("failed to sign Phase2Ingot: %w", err)
 	}
