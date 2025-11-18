@@ -20,21 +20,23 @@
 
 ### After Mainnet (Phase 4 - 0-1 Year)
 6. **Multi-Verifier Consensus** (Task 5) - Eliminate single point of verification failure
-7. **Vault Capacity Circuit-Breaker** (Task 4) - Prevent "success disaster" (>65% vaulted)
-8. **Demurrage Wrapper Monitoring** (Task 9) - Detect and deter centralized exchanges
-9. **Canonical Protocol Spec** (Task 13) - Human-readable mathematical specification
+7. **Trust Service - Reputation Layer** (Task 24) - Sybil resistance for verifiers
+8. **Vault Capacity Circuit-Breaker** (Task 4) - Prevent "success disaster" (>65% vaulted)
+9. **Demurrage Wrapper Monitoring** (Task 9) - Detect and deter centralized exchanges
+10. **Canonical Protocol Spec** (Task 13) - Human-readable mathematical specification
 
 ### Long-Term (Phase 5+ - 1-5 Years)
-10. **Governance Framework** (Task 3) - On-chain parameter changes with time-locks
-11. **Mobile UX Simplification** (Task 8) - Consumer-friendly "Savings" flow
-12. **Optional Privacy Layer** (Task 6) - Stealth addresses + zk-SNARK mixer
-13. **Physical Protocol Archive** (Task 13) - 100 printed copies in fireproof vaults
+11. **Governance Framework** (Task 3) - On-chain parameter changes with time-locks
+12. **Mobile UX Simplification** (Task 8) - Consumer-friendly "Savings" flow
+13. **Printer Service - Physical Currency** (Task 23) - Paper wallets, vouchers, gift cards
+14. **Optional Privacy Layer** (Task 6) - Stealth addresses + zk-SNARK mixer
+15. **Physical Protocol Archive** (Task 13) - 100 printed copies in fireproof vaults
 
 ### Existential (2050-2100)
-14. **Foundation + Succession** (Task 12) - Perpetual legal entity with 25-year board rotation
-15. **Annual Security Ritual** (Task 22) - Verifier oath ceremonies, knowledge transfer bootcamps
+16. **Foundation + Succession** (Task 12) - Perpetual legal entity with 25-year board rotation
+17. **Annual Security Ritual** (Task 22) - Verifier oath ceremonies, knowledge transfer bootcamps
 
-**Key Insight**: Tasks 7, 10, 14 are **catastrophic/critical severity**. Nothing else matters if these fail.
+**Key Insight**: Tasks 7, 10, 14, 24 are **catastrophic/critical/high severity**. Trust (Task 24) is needed for multi-verifier consensus (Task 5).
 
 ---
 
@@ -815,7 +817,7 @@ Instead:
 
 **Directory**: `Plans/{Service}/{SERVICE}_YEAR_2100_PLAN.md`
 
-**Services**: Vault, Wallet, Mint, Refinery, DistoDam, BidNet, Digger
+**Services**: Vault, Wallet, Mint, Refinery, DistoDam, BidNet, Digger, Printer, Trust
 
 **Threat Mappings**:
 - **Vault**: #4, #7, #11, #12
@@ -825,6 +827,8 @@ Instead:
 - **DistoDam**: #2, #10, #12
 - **BidNet**: #3, #9
 - **Digger**: #11, #13, #14
+- **Printer**: #6, #8, #13, #14 (NEW)
+- **Trust**: #5, #9, #12, #14 (NEW)
 
 **Actions**:
 1. [ ] Review current architecture docs
@@ -832,11 +836,11 @@ Instead:
 3. [ ] Document current state vs gaps
 4. [ ] Create IMMEDIATE/Phase 4/Phase 5+ action items
 5. [ ] Write plans in `Plans/{Service}/` directories
-6. [ ] Cross-reference Tasks 1-19
+6. [ ] Cross-reference Tasks 1-24 (updated)
 7. [ ] Avoid duplication with existing docs
 
-**Timeline**: 3-5 days (parallelizable)  
-**Dependencies**: Task 16 (cross-ref), Task 17 (action plan), Task 18 (arch updates)
+**Timeline**: 4-6 days (parallelizable, now includes Printer + Trust)  
+**Dependencies**: Task 16 (cross-ref), Task 17 (action plan), Task 18 (arch updates), Task 23 (Printer), Task 24 (Trust)
 
 **Reference**: See `TASK_25_SERVICE_PLANS.md` for detailed template and guidance
 
@@ -1046,14 +1050,244 @@ Use **production services with synthetic inputs** (NOT abstract Python models):
 
 ---
 
+### Task 23: Review Printer Service - Currency Distribution & Physical Interface
+**Status**: ⏳ TODO  
+**Purpose**: Document Printer's role in Year 2100 threat landscape and identify security gaps
+
+**Background**: Printer service handles physical currency printing, QR code generation, and potentially offline transaction signing. It's the bridge between digital RoboTorq and physical world.
+
+**Threat Mapping** (Applicable to Printer):
+- **Threat #6 (Legal Attack)**: Physical currency seizure, printer access control
+- **Threat #8 (Adoption Ceiling)**: UX for non-technical users (printed vouchers, gift cards)
+- **Threat #13 (Knowledge Loss)**: Physical backup of private keys (paper wallets)
+- **Threat #14 (Moral Collapse)**: Printer operator accountability (counterfeit prevention)
+
+**Documents to Review**:
+- `src/printer/` - Printer service architecture (if exists)
+- `src/wallet/TRANSACTION_ARCHITECTURE.md` - Offline signing capabilities
+- Any docs on physical RT vouchers, gift cards, paper wallets
+
+**Questions to Answer**:
+- [ ] Does Printer service exist in current architecture?
+- [ ] What is Printer's responsibility? (QR codes? Physical vouchers? Paper wallets?)
+- [ ] Are printed vouchers cryptographically signed? (Prevent counterfeits)
+- [ ] Is there operator accountability? (Who can print? Audit trail?)
+- [ ] Are there denomination limits? (Prevent large physical cash attacks)
+- [ ] Is there offline signing capability? (Air-gapped transactions)
+- [ ] Are printed keys/vouchers tamper-evident? (Holographic seals?)
+- [ ] Is there geographic distribution of printers? (Prevent single-point censorship)
+
+**Expected Gaps**:
+- **Likely**: Printer service doesn't exist yet (Phase 5+ feature)
+- Missing: Counterfeit prevention mechanisms
+- Missing: Operator accountability (who printed what, when)
+- Missing: Physical security standards (tamper-evident paper, holographic ink)
+- Missing: Offline signing protocol (air-gapped hardware wallets)
+
+**Action Items to Create**:
+- [ ] Design Printer service architecture (if not exists):
+  - QR code generation for wallet addresses
+  - Voucher printing (fixed denominations: 1, 10, 100, 1000 RT)
+  - Paper wallet generation (offline cold storage)
+  - Gift card printing (redeemable codes)
+- [ ] Implement cryptographic signing for all printed materials:
+  - Each voucher has unique serial number + signature
+  - Verification: Scan QR → check signature against Printer's public key
+  - Prevents counterfeiting (can't forge Printer's SPHINCS+ signature)
+- [ ] Add operator accountability:
+  - All print jobs logged to NATS JetStream (immutable audit trail)
+  - Operators sign on-chain oath (similar to verifiers)
+  - Slashing mechanism if counterfeit detected
+- [ ] Define physical security standards:
+  - Use archival paper (100+ year lifespan)
+  - Tamper-evident features (holographic seals, UV ink)
+  - Serial number tracking (prevent double-spend of physical vouchers)
+- [ ] Design offline signing protocol:
+  - Air-gapped hardware wallet support (Ledger, Trezor)
+  - QR-code-based transaction signing (no USB/network)
+  - Paper wallet import (sweep funds to hot wallet)
+- [ ] Add geographic distribution:
+  - Multiple authorized Printers worldwide
+  - No single Printer can monopolize physical currency
+  - Prevents nation-state censorship (seize all printers in jurisdiction)
+- [ ] Create `PRINTER_ARCHITECTURE.md` with security considerations
+- [ ] Add Printer to Phase 5+ roadmap (optional feature for adoption)
+
+**Threat Mitigation Specifics**:
+
+1. **Threat #6 (Legal Attack)**:
+   - If government seizes digital infrastructure, physical RT vouchers enable offline transactions
+   - Geographic distribution: 20+ countries with authorized Printers
+   - Tamper-evident design reveals seizure attempts
+
+2. **Threat #8 (Adoption Ceiling)**:
+   - Physical vouchers enable non-technical users (elderly, unbanked)
+   - Gift cards drive viral adoption (similar to Bitcoin gift cards)
+   - Paper wallets allow cold storage without hardware wallets
+
+3. **Threat #13 (Knowledge Loss)**:
+   - Paper wallets archive private keys physically (survives digital collapse)
+   - Printed QR codes enable protocol recovery (if all digital infrastructure lost)
+   - Archival paper lasts 500+ years (longer than digital media)
+
+4. **Threat #14 (Moral Collapse)**:
+   - Printer operators take annual oath (similar to verifiers)
+   - Counterfeit detection: All vouchers signed, verified against public registry
+   - Slashing: If operator prints counterfeit → 100% collateral loss
+
+**Acceptance Tests**:
+1. **Counterfeit Prevention**: Attempt to forge voucher → signature verification fails
+2. **Operator Accountability**: Printer operator prints 1000 RT → logged to NATS, traceable to operator
+3. **Offline Redemption**: Scan paper wallet QR → import to hot wallet → balance appears
+4. **Geographic Resilience**: Shut down 50% of Printers → remaining Printers continue service
+5. **Physical Durability**: Print voucher → expose to water, heat, UV → QR still scannable after 1 year
+
+**Timeline**: Phase 5+ (2027-2030, after digital infrastructure stabilizes)  
+**Priority**: LOW (nice-to-have for adoption, not blocking mainnet)
+
+**Dependencies**:
+- Task 8 (Adoption Ceiling) provides UX context for physical currency
+- Task 6 (Legal Attack) provides censorship resistance requirements
+- Task 14 (Verifier Oath) establishes operator accountability pattern
+
+---
+
+### Task 24: Review Trust Service - Reputation & Identity Layer
+**Status**: ⏳ TODO  
+**Purpose**: Document Trust's role in Year 2100 threat landscape and social proof mechanisms
+
+**Background**: Trust service manages reputation, identity verification, and social graph for RoboTorq participants. It's the anti-Sybil layer that prevents fake identities from gaming the system.
+
+**Threat Mapping** (Applicable to Trust):
+- **Threat #5 (Physical Backing Oracle)**: Verifier reputation, Sybil resistance
+- **Threat #9 (Demurrage Wrapper)**: Detect coordinated exchange attacks (multiple fake identities)
+- **Threat #12 (Succession)**: Board member reputation, proof-of-contribution
+- **Threat #14 (Moral Collapse)**: Public accountability, whistleblower protection
+
+**Documents to Review**:
+- `src/trust/TRUST_ARCHITECTURE.md` - Trust service design (if exists)
+- `docs/trust-economics.md` - Reputation economics
+- `src/mint/` - Verifier identity management
+- Any social recovery or web-of-trust designs
+
+**Questions to Answer**:
+- [ ] Does Trust service exist in current architecture?
+- [ ] What is Trust's responsibility? (Reputation scores? Identity verification? Social graph?)
+- [ ] Is there Sybil resistance mechanism? (Prevent fake identities)
+- [ ] Is reputation on-chain or off-chain? (Immutability vs privacy)
+- [ ] Are there reputation decay mechanisms? (Old reputation expires)
+- [ ] Is there social recovery? (Restore wallet via trusted contacts)
+- [ ] Are there dispute resolution protocols? (Arbitration between parties)
+- [ ] Is there whistleblower protection? (Anonymous reporting + rewards)
+
+**Expected Gaps**:
+- **Likely**: Trust service doesn't exist yet (Phase 4+ feature)
+- Missing: Sybil resistance (proof-of-humanity or stake-based identity)
+- Missing: Reputation scoring algorithm (how to measure trustworthiness)
+- Missing: Social graph (who trusts whom, transitive trust)
+- Missing: Dispute resolution (arbitration for contract disputes)
+- Missing: Whistleblower protection (anonymous reporting channel)
+
+**Action Items to Create**:
+- [ ] Design Trust service architecture (if not exists):
+  - Reputation scoring (0-100 score based on verified actions)
+  - Identity verification (proof-of-humanity via biometrics or social proof)
+  - Social graph (web-of-trust, transitive reputation)
+  - Dispute resolution (3-of-5 arbitrator voting)
+  - Whistleblower channel (anonymous reporting + bounty)
+  
+- [ ] Implement Sybil resistance:
+  - **Option 1**: Proof-of-physical-robot-stake (verified kWh = real identity)
+  - **Option 2**: Social proof (5+ existing users vouch for newcomer)
+  - **Option 3**: Biometric verification (WorldCoin-style proof-of-humanity)
+  - **Chosen approach**: Hybrid (physical robot stake + social vouching)
+  
+- [ ] Design reputation scoring algorithm:
+  ```
+  ReputationScore = 
+    0.4 × VerifiedKwhContributed +
+    0.3 × ContractsCompleted +
+    0.2 × SocialVouches +
+    0.1 × TimeInEcosystem
+  ```
+  - Decays 10%/year (old reputation expires, prevents resting on laurels)
+  - Slashing events reduce score by 50% (fraud = major reputation hit)
+  
+- [ ] Build social graph infrastructure:
+  - Users explicitly vouch for others (cryptographically signed endorsements)
+  - Transitive trust: If A trusts B, and B trusts C → A partially trusts C
+  - Trust decay: Endorsements expire after 2 years (must re-vouch)
+  - Sybil detection: Sudden cluster of mutual vouches = suspicious
+  
+- [ ] Add dispute resolution protocol:
+  - Contract disputes escalate to Trust service
+  - 3-of-5 arbitrators vote (randomly selected from high-reputation users)
+  - Arbitrators stake collateral (lose stake if community overturns decision)
+  - Appeals process: 80% community vote can override arbitration
+  
+- [ ] Implement whistleblower protection:
+  - Anonymous submission channel (Tor hidden service)
+  - Zero-knowledge proof: "I know a fraud" without revealing identity
+  - Bounty: 50% of slashed collateral → whistleblower
+  - Protection: Whistleblower identity never revealed on-chain
+  
+- [ ] Create `TRUST_ARCHITECTURE.md` with reputation economics
+- [ ] Add Trust to Phase 4+ roadmap (needed before multi-verifier consensus)
+
+**Threat Mitigation Specifics**:
+
+1. **Threat #5 (Physical Backing Oracle)**:
+   - Verifiers must have high reputation score (>80) to be eligible
+   - Reputation based on verified kWh (can't fake physical robot work)
+   - Social vouching prevents Sybil attacks (can't create 1000 fake verifiers)
+
+2. **Threat #9 (Demurrage Wrapper)**:
+   - Detect coordinated attacks: Sudden cluster of new identities using wrapper
+   - Low-reputation users flagged if large wrapper transactions
+   - Social graph analysis reveals Sybil networks
+
+3. **Threat #12 (Succession)**:
+   - Board candidates must have proof-of-contribution (5+ years, high reputation)
+   - Community votes weighted by reputation (not just RT holdings)
+   - Prevents plutocracy (can't buy board seat with money alone)
+
+4. **Threat #14 (Moral Collapse)**:
+   - Public reputation creates accountability (fraud = permanent reputation loss)
+   - Whistleblower bounties incentivize reporting (50% of slashed collateral)
+   - Anonymous reporting protects whistleblowers from retaliation
+
+**Acceptance Tests**:
+1. **Sybil Resistance**: Attempt to create 1000 fake identities → social vouching requirement prevents scale
+2. **Reputation Decay**: User with 100 score inactive for 5 years → score decays to 60
+3. **Dispute Resolution**: Two parties disagree on contract → escalate to arbitration → 3-of-5 vote resolves
+4. **Whistleblower Protection**: Report verifier fraud anonymously → identity never revealed, bounty paid
+5. **Social Graph Analysis**: Detect Sybil network (100 accounts all vouching for each other) → flagged as suspicious
+
+**Timeline**: Phase 4 (2026-2027, needed before multi-verifier consensus)  
+**Priority**: HIGH (enables decentralized verification, prevents Sybil attacks)
+
+**Dependencies**:
+- Task 5 (Multi-Verifier) requires Trust for verifier eligibility
+- Task 14 (Verifier Oath) requires Trust for accountability
+- Task 12 (Succession) requires Trust for board elections
+- Task 9 (Wrapper Attack) requires Trust for Sybil detection
+
+**Integration with Existing Services**:
+- **Mint**: Queries Trust for verifier eligibility (reputation >80)
+- **Wallet**: Uses Trust for social recovery (restore via 3-of-5 trusted contacts)
+- **DistoDam**: Queries Trust for large transaction approval (>10,000 RT requires high reputation)
+- **BidNet**: Uses Trust for contractor reputation (prevents scam contracts)
+
+---
+
 ## 📊 Progress Tracking
 
 ### Completion Metrics
-- **Total Tasks**: 22 (14 threat reviews + 8 meta-tasks)
+- **Total Tasks**: 24 (14 threat reviews + 10 meta-tasks)
 - **Completed**: 0
 - **In Progress**: 0
 - **Blocked**: 0
-- **Not Started**: 22
+- **Not Started**: 24
 
 ### Critical Path Items (Must Complete Before Mainnet)
 1. ✅ Oracle removal (already done in Transaction arch)
@@ -1066,9 +1300,9 @@ Use **production services with synthetic inputs** (NOT abstract Python models):
 **Severity Breakdown**:
 - 🟣 Catastrophic: 2 tasks (7, 10) - **CANNOT GO TO MAINNET WITHOUT THESE**
 - 🔴 Critical: 4 tasks (1, 5, 11, 14) - **HIGH PRIORITY FOR MAINNET**
-- 🟠 High: 2 tasks (2, 4) - Phase 4
+- 🟠 High: 3 tasks (2, 4, 24) - Phase 4 (Trust is HIGH priority for multi-verifier)
 - 🟡 Medium: 3 tasks (3, 6, 9) - Phase 5+
-- 🟢 Low: 1 task (8) - Phase 5+
+- 🟢 Low: 2 tasks (8, 23) - Phase 5+ (Printer nice-to-have for adoption)
 - 🔵 Long-term: 2 tasks (12, 13) - 2050-2100
 
 ### Estimated Timeline
@@ -1079,13 +1313,16 @@ Use **production services with synthetic inputs** (NOT abstract Python models):
 - **Task 17** (Action plan): 1 day
 - **Task 18** (Architecture updates): 3-4 days
 - **Task 19** (Final review): 1 day
-- **Task 20** (Service-specific plans): 3-5 days (parallelizable)
+- **Task 20** (Service-specific plans): 4-6 days (parallelizable, now 9 services)
 - **Task 21** (Simulation framework): 6 weeks (parallelizable, Phase 4+)
 - **Task 22** (Annual security ritual): 5 days/year (Phase 5+, recurring)
+- **Task 23** (Printer service review): 2 days (Phase 5+, LOW priority)
+- **Task 24** (Trust service review): 3 days (Phase 4, HIGH priority)
 
-**Total**: ~16-21 working days for critical path (Tasks 1-20)  
+**Total**: ~18-24 working days for critical path (Tasks 1-20, 24)  
 **Extended**: +6 weeks for simulations (Task 21, can run in parallel)  
-**Recurring**: 5 days/year for security ceremonies (Task 22, starts Phase 5)
+**Recurring**: 5 days/year for security ceremonies (Task 22, starts Phase 5)  
+**Optional**: Task 23 (Printer) deferred to Phase 5+ (not blocking mainnet)
 
 ---
 
