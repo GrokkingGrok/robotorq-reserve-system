@@ -190,12 +190,41 @@ func (m *TorqedPledgeManager) CreatePledge(ctx context.Context, req *CreatePledg
 
 ### **2. Funding a Pledge (Auto-Diversion from UBD)**
 
+**⚠️ CRITICAL SECURITY FIX (Nov 18, 2025)**:
+- **Monthly pledge amount is HARD CAP enforced by DistoDam**
+- **Prevents reputation gaming**: User sets 10,000 RT/month pledge but configures DistoDam to divert 1 RT → pledge never matures but reputation still rises
+- **DistoDam validates**: If user configures auto-divert < monthly pledge amount → REJECT
+
 **Flow**:
 1. User configures DistoDam: "25% of my UBD → TorqedPledge#123"
-2. DistoDam publishes `ubd.vault_deposit` → Vault Service
-3. TorqedPledgeManager receives event, deposits to pledge
-4. Progress checked: saved >= target?
-5. If matured → publish `vault.pledge_ready` → Trust
+2. **DistoDam validates**: 25% of UBD ≥ pledge.MonthlyPledgeMicroRT?
+3. If valid → DistoDam publishes `ubd.vault_deposit` → Vault Service
+4. TorqedPledgeManager receives event, deposits to pledge
+5. Progress checked: saved >= target?
+6. If matured → publish `vault.pledge_ready` → Trust
+
+**DistoDam Validation** (prevents under-funding):
+```go
+// In DistoDam service
+func (dd *DistoDam) ConfigureVaultAutoDeposit(walletID, pledgeID string, ubdPercentage float64) error {
+    // Get pledge details
+    pledge := dd.vaultClient.GetPledge(pledgeID)
+    
+    // Calculate monthly UBD amount
+    monthlyUBDMicroRT := dd.getMonthlyUBD(walletID)
+    autoDivertMicroRT := int64(float64(monthlyUBDMicroRT) * ubdPercentage)
+    
+    // SECURITY FIX: Validate auto-divert ≥ monthly pledge
+    if autoDivertMicroRT < pledge.MonthlyPledgeMicroRT {
+        return fmt.Errorf("auto-divert %d microRT < monthly pledge %d microRT",
+            autoDivertMicroRT, pledge.MonthlyPledgeMicroRT)
+    }
+    
+    // Save configuration
+    dd.repo.SaveAutoDepositConfig(walletID, pledgeID, ubdPercentage)
+    return nil
+}
+```
 
 **Implementation**:
 ```go
@@ -471,7 +500,25 @@ func (m *TorqedPledgeManager) UpdateReputation(ctx context.Context, pledgeID str
 
 ## 💸 **Yield Calculation**
 
-**TorqedPledge Yield**: 1.2% - 2.0% per month (based on lock duration)
+**⚠️ CRITICAL SECURITY FIX (Nov 18, 2025)**:
+- **Yield CANNOT count toward maturity target** (prevents infinite money glitch)
+- **Yield paid to wallet** (separate from pledge balance)
+- **Why**: Yield compounding into target = 36-month pledge @ 2%/mo = >100% APY free lunch
+
+**Example of exploit**:
+```
+Pledge: 30,000 RT target, 1,250 RT/month, 24 months
+Yield: 1.5%/month on balance
+
+Month 1:  Balance = 1,250 RT,  Yield = 18.75 RT → Balance = 1,268.75 RT (OLD BUG)
+Month 24: Balance = 35,300 RT (exceeded target via compounding!)
+
+FIX: Yield goes to wallet, not pledge balance
+Month 1:  Pledge = 1,250 RT,  Wallet += 18.75 RT (separate)
+Month 24: Pledge = 30,000 RT (exactly),  Wallet += 5,300 RT (total yield earned)
+```
+
+**TorqedPledge Yield**: 1.2% - 2.0% per month (based on REMAINING duration, paid to wallet)
 
 **Formula**:
 ```
@@ -497,10 +544,19 @@ func (m *TorqedPledgeManager) DistributeYield(ctx context.Context) error {
     now := time.Now()
     
     for _, pledge := range pledges {
-        // Calculate yield rate based on lock duration
-        lockMonths := float64(pledge.LockDurationMonths)
-        yieldRateBPS := int64(120 + (80 * math.Min(lockMonths/36.0, 1.0)))
+        // SECURITY FIX: Recalculate yield rate based on REMAINING duration (not original)
+        monthsElapsed := int(now.Sub(pledge.CreatedAt).Hours() / (24 * 30))
+        remainingMonths := math.Max(0, float64(pledge.LockDurationMonths) - float64(monthsElapsed))
+        
+        // Yield rate based on remaining duration
+        yieldRateBPS := int64(120 + (80 * math.Min(remainingMonths/36.0, 1.0)))
         yieldRate := float64(yieldRateBPS) / 10000.0  // BPS to decimal
+        
+        m.logger.Info("recalculated yield rate",
+            "pledge_id", pledge.ID,
+            "original_lock_months", pledge.LockDurationMonths,
+            "remaining_months", remainingMonths,
+            "yield_rate_bps", yieldRateBPS)
         
         // Calculate months since last yield
         monthsSinceLastYield := now.Sub(pledge.UpdatedAt).Hours() / (24 * 30)
@@ -508,13 +564,23 @@ func (m *TorqedPledgeManager) DistributeYield(ctx context.Context) error {
         // Calculate yield
         yieldMicroRT := int64(float64(pledge.SavedMicroRT) * yieldRate * monthsSinceLastYield)
         
-        // Credit pledge
-        pledge.SavedMicroRT += yieldMicroRT
+        // SECURITY FIX: Pay yield to WALLET (NOT pledge balance)
+        m.natsClient.Publish("wallet.yield_payment", struct{
+            WalletID string `json:"wallet_id"`
+            PledgeID string `json:"pledge_id"`
+            YieldMicroRT int64 `json:"yield_micro_rt"`
+            Source string `json:"source"`
+        }{
+            WalletID: pledge.WalletID,
+            PledgeID: pledge.ID,
+            YieldMicroRT: yieldMicroRT,
+            Source: "torqed_pledge_yield",
+        })
+        
         pledge.UpdatedAt = now
         
-        // Check if yield pushed pledge to maturity
-        if pledge.SavedMicroRT >= pledge.TargetMicroRT && pledge.Status == "active" {
-            pledge.Status = "matured"
+        // SECURITY FIX: Yield does NOT count toward maturity
+        // (maturity check only looks at SavedMicroRT from deposits)
             pledge.MaturityAt = &now
             
             m.nats.PublishJSON("vault.pledge_ready", PledgeReady{
@@ -902,6 +968,58 @@ func TestTorqedPledge_FullLifecycle(t *testing.T) {
 **Test 8: Progress Calculation Edge Cases**
 **Test 9: Lock Invalid Status**
 **Test 10: Database Transaction Rollback**
+
+---
+
+## 🔐 **Event Sourcing Architecture**
+
+**⚠️ CRITICAL SECURITY FIX (Nov 18, 2025)**:
+- **Database is cache only** (not source of truth)
+- **NATS JetStream is source of truth** (replayable event log)
+- **Prevents data loss**: Node restart → replay events from NATS → rebuild pledge balances
+
+**Event Schema**:
+```go
+type TorqedPledgeEvent struct {
+    EventID       string    `json:"event_id"`
+    EventType     string    `json:"event_type"`  // "created", "deposited", "matured", "locked"
+    PledgeID      string    `json:"pledge_id"`
+    WalletID      string    `json:"wallet_id"`
+    AmountMicroRT int64     `json:"amount_micro_rt"`
+    BalanceAfter  int64     `json:"balance_after"`
+    Status        string    `json:"status"`
+    Timestamp     time.Time `json:"timestamp"`
+    Signature     []byte    `json:"signature"`  // Dilithium3
+}
+```
+
+**Event Replay**:
+```go
+func (m *TorqedPledgeManager) ReplayEvents(ctx context.Context) error {
+    m.logger.Info("replaying TorqedPledge events from NATS")
+    
+    js, _ := m.natsClient.JetStream()
+    
+    sub, err := js.Subscribe("vault.pledge.*", func(msg *nats.Msg) {
+        var event TorqedPledgeEvent
+        json.Unmarshal(msg.Data, &event)
+        
+        // Apply event to in-memory state
+        m.applyEvent(event)
+        msg.Ack()
+    }, nats.DeliverAll())  // Replay from beginning
+    
+    if err != nil {
+        return err
+    }
+    
+    time.Sleep(10 * time.Second)  // Wait for replay
+    sub.Unsubscribe()
+    
+    m.logger.Info("TorqedPledge event replay complete")
+    return nil
+}
+```
 
 ---
 

@@ -33,16 +33,18 @@ func NewSimpleBatchHasher() BatchHasher {
 	return &simpleBatchHasher{}
 }
 
-// Hash processes a batch of ingots and returns aggregated data.
+// Hash processes a batch of ingots and returns aggregated data + individual stakes.
+//
+// PHASE 6 UPDATE: Now returns IngotStakes[] instead of summing RoboStake.
+// This preserves proof chain granularity for DistoDam dual-vault architecture.
 //
 // Returns:
 //   - batchHash: SHA256 hex string of batch data
-//   - totalRobo: sum of all ingot.RoboTorq values
-//   - totalSale: sum of all ingot.Price values
+//   - ingotStakes: array of individual stakes (preserves contract provenance)
 //   - error: if batch is empty or hashing fails
-func (h *simpleBatchHasher) Hash(batch []*TokenTorqIngot) (string, float64, float64, error) {
+func (h *simpleBatchHasher) Hash(batch []*TokenTorqIngot) (string, []IngotStake, error) {
 	if len(batch) == 0 {
-		return "", 0, 0, fmt.Errorf("cannot hash empty batch")
+		return "", nil, fmt.Errorf("cannot hash empty batch")
 	}
 
 	// Sort batch by ingot branch hash for deterministic ordering
@@ -57,15 +59,19 @@ func (h *simpleBatchHasher) Hash(batch []*TokenTorqIngot) (string, float64, floa
 		return sorted[i].IngotID < sorted[j].IngotID
 	})
 
+	// Build IngotStakes array (preserves granularity, not summed)
+	ingotStakes := make([]IngotStake, len(sorted))
+
 	// Concatenate ingot data for hashing
 	var builder strings.Builder
-	var totalRobo float64
-	var totalSale float64 // NOTE: No longer calculated (PricePerRT removed)
 
-	for _, ingot := range sorted {
-		// Accumulate totals
-		totalRobo += ingot.RoboStakeTotal
-		// NOTE: totalSale removed - price tracking happens elsewhere in the system
+	for i, ingot := range sorted {
+		// Build individual IngotStake (CRITICAL: Each ingot processed separately)
+		ingotStakes[i] = IngotStake{
+			IngotID:        ingot.IngotID,
+			RoboStakeTotal: ingot.RoboStakeTotal,
+			ContractIDs:    ingot.ContractIDs,
+		}
 
 		// Build hash input: IngotID|JouleTorq|RoboStake|BranchHash|Contracts|UnitCount|MintedAt
 		fmt.Fprintf(&builder, "%s|%.2f|%.6f|%s|%s|%d|%s\n",
@@ -83,7 +89,7 @@ func (h *simpleBatchHasher) Hash(batch []*TokenTorqIngot) (string, float64, floa
 	hashBytes := sha256.Sum256([]byte(builder.String()))
 	batchHash := hex.EncodeToString(hashBytes[:])
 
-	return batchHash, totalRobo, totalSale, nil
+	return batchHash, ingotStakes, nil
 }
 
 // ─────────────────────────────────────────────────────────────

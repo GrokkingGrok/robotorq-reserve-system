@@ -26,27 +26,28 @@ type mockBatchHasher struct {
 	mu         sync.Mutex
 }
 
-func (m *mockBatchHasher) Hash(batch []*TokenTorqIngot) (string, float64, float64, error) {
+func (m *mockBatchHasher) Hash(batch []*TokenTorqIngot) (string, []IngotStake, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.hashCalls++
 
 	if m.shouldFail {
-		return "", 0, 0, fmt.Errorf("mock hasher failure")
+		return "", nil, fmt.Errorf("mock hasher failure")
 	}
 
-	// Calculate real totals
-	var totalRobo, totalSale float64
-	for _, ingot := range batch {
-		totalRobo += ingot.RoboStakeTotal
-		// Note: totalSale calculation removed - price tracking moved outside ingot structure
-		// For mock purposes, use a stub value
-		totalSale += 0.5 * ingot.RoboStakeTotal // Stub: assume $0.50 per RT
+	// Build IngotStakes array (Phase 6: Preserve granularity)
+	ingotStakes := make([]IngotStake, len(batch))
+	for i, ingot := range batch {
+		ingotStakes[i] = IngotStake{
+			IngotID:        ingot.IngotID,
+			RoboStakeTotal: ingot.RoboStakeTotal,
+			ContractIDs:    ingot.ContractIDs,
+		}
 	}
 
 	// Return deterministic hash
-	return "mock_hash_" + fmt.Sprint(len(batch)), totalRobo, totalSale, nil
+	return "mock_hash_" + fmt.Sprint(len(batch)), ingotStakes, nil
 }
 
 func (m *mockBatchHasher) getHashCalls() int {
@@ -142,8 +143,10 @@ func TestMintEngine_ProcessBatch_Success(t *testing.T) {
 
 	event := events[0]
 	assert.Equal(t, "mock_hash_2", event.BatchHash)
-	assert.Equal(t, 300.0, event.TotalRoboTorq)       // 100 + 200
-	assert.InDelta(t, 150.0, event.SaleValueUSD, 0.1) // Mock uses 0.5 * totalRobo = 0.5 * 300 = 150
+	// Phase 6: Check IngotStakes array instead of summed total
+	require.Len(t, event.IngotStakes, 2)
+	assert.Equal(t, 100.0, event.IngotStakes[0].RoboStakeTotal)
+	assert.Equal(t, 200.0, event.IngotStakes[1].RoboStakeTotal)
 	assert.Equal(t, 2, event.IngotsProcessed)
 	assert.NotEmpty(t, event.BatchID)
 	assert.WithinDuration(t, time.Now(), event.Timestamp, 1*time.Second)
@@ -294,8 +297,10 @@ func TestMintEngine_MintEvent_Structure(t *testing.T) {
 
 	// Verify all fields are populated
 	assert.NotEmpty(t, event.BatchHash)
-	assert.Equal(t, 1100.0, event.TotalRoboTorq)
-	assert.Equal(t, 550.0, event.SaleValueUSD) // Mock: 0.5 * 1100 = 550
+	// Phase 6: Check IngotStakes array
+	require.Len(t, event.IngotStakes, 2)
+	assert.Equal(t, 500.0, event.IngotStakes[0].RoboStakeTotal)
+	assert.Equal(t, 600.0, event.IngotStakes[1].RoboStakeTotal)
 	assert.Equal(t, 2, event.IngotsProcessed)
 	assert.NotEmpty(t, event.BatchID)
 	assert.False(t, event.Timestamp.IsZero())
@@ -397,10 +402,10 @@ func TestMintEngine_WithRealHasher(t *testing.T) {
 	assert.Len(t, event.BatchHash, 64)
 	assert.Regexp(t, "^[0-9a-f]{64}$", event.BatchHash)
 
-	// Totals should match
-	assert.Equal(t, 300.0, event.TotalRoboTorq)
-	// Note: Real hasher doesn't calculate sale value anymore (price removed from ingot)
-	// The value returned is a stub/placeholder
+	// Phase 6: Check IngotStakes array
+	require.Len(t, event.IngotStakes, 2)
+	assert.Equal(t, 100.0, event.IngotStakes[0].RoboStakeTotal)
+	assert.Equal(t, 200.0, event.IngotStakes[1].RoboStakeTotal)
 	assert.Equal(t, 2, event.IngotsProcessed)
 }
 
@@ -436,8 +441,14 @@ func TestMintEngine_WithRealHasher_LargeBatch(t *testing.T) {
 	require.Len(t, events, 1)
 
 	event := events[0]
-	assert.InDelta(t, expectedRobo, event.TotalRoboTorq, 0.01)
-	// Note: SaleValueUSD is no longer calculated from PricePerRT (removed from ingot)
+	// Phase 6: Verify IngotStakes array has 1000 entries
+	require.Len(t, event.IngotStakes, 1000)
+	// Calculate total from stakes
+	var totalFromStakes float64
+	for _, stake := range event.IngotStakes {
+		totalFromStakes += stake.RoboStakeTotal
+	}
+	assert.InDelta(t, expectedRobo, totalFromStakes, 0.01)
 	assert.Equal(t, 1000, event.IngotsProcessed)
 
 	t.Logf("Processed 1000-ingot batch in %v", elapsed)

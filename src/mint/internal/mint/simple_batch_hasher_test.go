@@ -20,15 +20,15 @@ func TestSimpleBatchHasher_BasicHashing(t *testing.T) {
 		createStubIngotForMintTests("ingot2", "contract2", 3600, 200.0),
 	}
 
-	batchHash, totalRobo, totalSale, err := hasher.Hash(batch)
+	batchHash, ingotStakes, err := hasher.Hash(batch)
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, batchHash)
-	assert.Equal(t, 300.0, totalRobo) // 100 + 200
-	// Note: totalSale no longer calculated (PricePerRT removed from ingot)
-	// Price tracking happens elsewhere in the system
-	assert.Equal(t, 0.0, totalSale) // Real hasher returns 0, not calculated
-	assert.Len(t, batchHash, 64)    // SHA256 hex string is 64 chars
+	// Phase 6: Check IngotStakes array instead of totals
+	require.Len(t, ingotStakes, 2)
+	assert.Equal(t, 100.0, ingotStakes[0].RoboStakeTotal)
+	assert.Equal(t, 200.0, ingotStakes[1].RoboStakeTotal)
+	assert.Len(t, batchHash, 64) // SHA256 hex string is 64 chars
 }
 
 func TestSimpleBatchHasher_EmptyBatch(t *testing.T) {
@@ -36,13 +36,12 @@ func TestSimpleBatchHasher_EmptyBatch(t *testing.T) {
 
 	batch := []*TokenTorqIngot{}
 
-	batchHash, totalRobo, totalSale, err := hasher.Hash(batch)
+	batchHash, ingotStakes, err := hasher.Hash(batch)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "empty batch")
 	assert.Empty(t, batchHash)
-	assert.Equal(t, 0.0, totalRobo)
-	assert.Equal(t, 0.0, totalSale)
+	assert.Nil(t, ingotStakes)
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -58,9 +57,14 @@ func TestSimpleBatchHasher_TotalRoboCalculation(t *testing.T) {
 		createStubIngotForMintTests("i3", "c3", 3600, 234.56),
 	}
 
-	_, totalRobo, _, err := hasher.Hash(batch)
+	_, ingotStakes, err := hasher.Hash(batch)
 
 	require.NoError(t, err)
+	// Phase 6: Calculate total from IngotStakes array
+	var totalRobo float64
+	for _, stake := range ingotStakes {
+		totalRobo += stake.RoboStakeTotal
+	}
 	assert.InDelta(t, 1036.91, totalRobo, 0.01) // 123.45 + 678.90 + 234.56
 }
 
@@ -79,12 +83,13 @@ func TestSimpleBatchHasher_ZeroValues(t *testing.T) {
 		createStubIngotForMintTests("i2", "c2", 3600, 0.0),
 	}
 
-	batchHash, totalRobo, totalSale, err := hasher.Hash(batch)
+	batchHash, ingotStakes, err := hasher.Hash(batch)
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, batchHash) // Should still generate hash
-	assert.Equal(t, 0.0, totalRobo)
-	assert.Equal(t, 0.0, totalSale)
+	require.Len(t, ingotStakes, 2)
+	assert.Equal(t, 0.0, ingotStakes[0].RoboStakeTotal)
+	assert.Equal(t, 0.0, ingotStakes[1].RoboStakeTotal)
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -103,7 +108,7 @@ func TestSimpleBatchHasher_Determinism(t *testing.T) {
 	// Hash the same batch 5 times
 	hashes := make([]string, 5)
 	for i := 0; i < 5; i++ {
-		hash, _, _, err := hasher.Hash(batch)
+		hash, _, err := hasher.Hash(batch)
 		require.NoError(t, err)
 		hashes[i] = hash
 	}
@@ -135,8 +140,8 @@ func TestSimpleBatchHasher_OrderIndependence(t *testing.T) {
 		createStubIngotForMintTests("ingot-bbb", "contract2", 3600, 200.0),
 	}
 
-	hash1, _, _, err1 := hasher.Hash(batch1)
-	hash2, _, _, err2 := hasher.Hash(batch2)
+	hash1, _, err1 := hasher.Hash(batch1)
+	hash2, _, err2 := hasher.Hash(batch2)
 
 	require.NoError(t, err1)
 	require.NoError(t, err2)
@@ -152,13 +157,13 @@ func TestSimpleBatchHasher_SingleIngot(t *testing.T) {
 		createStubIngotForMintTests("single-ingot", "contract-single", 3600, 500.0),
 	}
 
-	batchHash, totalRobo, totalSale, err := hasher.Hash(batch)
+	batchHash, ingotStakes, err := hasher.Hash(batch)
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, batchHash)
-	assert.Equal(t, 500.0, totalRobo)
-	assert.Equal(t, 0.0, totalSale) // No price calculation
-	assert.Len(t, batchHash, 64)    // SHA256 hex = 64 chars
+	require.Len(t, ingotStakes, 1)
+	assert.Equal(t, 500.0, ingotStakes[0].RoboStakeTotal)
+	assert.Len(t, batchHash, 64) // SHA256 hex = 64 chars
 }
 
 func TestSimpleBatchHasher_LargeBatch(t *testing.T) {
@@ -179,12 +184,17 @@ func TestSimpleBatchHasher_LargeBatch(t *testing.T) {
 		expectedRobo += robo
 	}
 
-	batchHash, totalRobo, totalSale, err := hasher.Hash(batch)
+	batchHash, ingotStakes, err := hasher.Hash(batch)
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, batchHash)
+	require.Len(t, ingotStakes, 1000)
+	// Calculate total from stakes
+	var totalRobo float64
+	for _, stake := range ingotStakes {
+		totalRobo += stake.RoboStakeTotal
+	}
 	assert.InDelta(t, expectedRobo, totalRobo, 0.01)
-	assert.Equal(t, 0.0, totalSale) // No price calculation
 	assert.Len(t, batchHash, 64)
 }
 
@@ -203,8 +213,8 @@ func TestSimpleBatchHasher_DifferentBatchesDifferentHashes(t *testing.T) {
 		createStubIngotForMintTests("ingot-2", "contract2", 3600, 200.0),
 	}
 
-	hash1, _, _, err1 := hasher.Hash(batch1)
-	hash2, _, _, err2 := hasher.Hash(batch2)
+	hash1, _, err1 := hasher.Hash(batch1)
+	hash2, _, err2 := hasher.Hash(batch2)
 
 	require.NoError(t, err1)
 	require.NoError(t, err2)
@@ -228,8 +238,8 @@ func TestSimpleBatchHasher_DifferentTimestampsSameData(t *testing.T) {
 
 	// Even though same IDs/values, BranchHash generation includes ingot ID in formatting
 	// which makes hashes unique per call
-	hash1, _, _, err1 := hasher.Hash(batch1)
-	hash2, _, _, err2 := hasher.Hash(batch2)
+	hash1, _, err1 := hasher.Hash(batch1)
+	hash2, _, err2 := hasher.Hash(batch2)
 
 	require.NoError(t, err1)
 	require.NoError(t, err2)
@@ -266,7 +276,7 @@ func TestSimpleBatchHasher_Performance(t *testing.T) {
 	iterations := 100
 
 	for i := 0; i < iterations; i++ {
-		_, _, _, err := hasher.Hash(batch)
+		_, _, err := hasher.Hash(batch)
 		require.NoError(t, err)
 	}
 

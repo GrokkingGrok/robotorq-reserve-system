@@ -104,13 +104,16 @@ type BatchAggregator interface {
 //
 // Design principle: Swap implementations without changing MintEngine code.
 type BatchHasher interface {
-	// Hash processes a batch of ingots and returns aggregated data.
+	// Hash processes a batch of ingots and returns batch hash + individual stakes.
+	//
+	// PHASE 6 UPDATE: Returns IngotStakes[] instead of summing RoboStake.
+	// This preserves proof chain granularity for DistoDam dual-vault architecture.
+	//
 	// Returns:
 	//   - batchHash: cryptographic hash of batch (SHA256 now, Merkle root later)
-	//   - totalRobo: sum of all ingot.RoboTorq values
-	//   - totalSale: sum of all ingot.Price values (for accounting)
+	//   - ingotStakes: array of individual ingot stakes (preserves contract provenance)
 	//   - error: if hashing fails
-	Hash(batch []*TokenTorqIngot) (batchHash string, totalRobo, totalSale float64, err error)
+	Hash(batch []*TokenTorqIngot) (batchHash string, ingotStakes []IngotStake, err error)
 }
 
 // MintEngine coordinates batch processing and event generation.
@@ -227,27 +230,41 @@ type JouleTorqUnit struct {
 // MintEvent is the OUTPUT from Mint - published to DistoDam via NATS.
 //
 // Economic model: NO NEW ROBOTORQ IS MINTED.
-// Mint simply aggregates existing RoboTorq from ingots and broadcasts
-// the batch to DistoDams for UBD distribution.
+// Mint aggregates RoboStake from ingots and broadcasts individual stakes
+// to DistoDam for dual-vault deposit (StakeVault/DistoVault).
+//
+// CRITICAL CHANGE (Phase 6 - Dual-Vault Architecture):
+// Instead of summing RoboStake (loses granularity), we now send individual
+// IngotStakes[] to preserve proof chain and enable loan repayment tracking.
 //
 // Structure:
 //   - BatchHash: cryptographic proof of batch (simple SHA256 now, Merkle root later)
-//   - TotalRoboTorq: sum of all ingot.RoboTorq in batch
+//   - IngotStakes: array of individual ingot stakes (preserves granularity)
 //   - IngotsProcessed: count of ingots in batch
-//   - SaleValueUSD: sum of all ingot.Price (accounting only)
 //   - Metadata: BatchID, Timestamp for tracking
 type MintEvent struct {
 	// Cryptographic proof
 	BatchHash string `json:"batch_hash"` // SHA256 of batch data (future: Merkle root)
 
-	// Economic data
-	TotalRoboTorq   float64 `json:"total_robo"`   // Sum from all ingots
-	IngotsProcessed int     `json:"ingots_count"` // Batch size (usually 1000)
-	SaleValueUSD    float64 `json:"sale_value"`   // Sum of prices (accounting)
+	// Individual ingot stakes (CRITICAL: Each ingot processed separately, not summed)
+	IngotStakes []IngotStake `json:"ingot_stakes"` // Array of stakes, preserves proof chain
 
 	// Metadata
-	BatchID   string    `json:"batch_id"`  // Unique identifier
-	Timestamp time.Time `json:"timestamp"` // UTC timestamp
+	IngotsProcessed int       `json:"ingots_count"` // Batch size (usually 1000)
+	BatchID         string    `json:"batch_id"`     // Unique identifier
+	Timestamp       time.Time `json:"timestamp"`    // UTC timestamp
+
+	// DEPRECATED (kept for backward compatibility - will be removed in Phase 7)
+	TotalRoboTorq float64 `json:"total_robo,omitempty"` // Deprecated: Use sum(IngotStakes[].RoboStakeTotal)
+	SaleValueUSD  float64 `json:"sale_value,omitempty"` // Deprecated: Accounting moved to separate service
+}
+
+// IngotStake represents the RoboStake from a single ingot
+// CRITICAL: Preserves proof chain (contract → ore → ingot → stake)
+type IngotStake struct {
+	IngotID        string   `json:"ingot_id"`         // Unique ingot identifier
+	RoboStakeTotal float64  `json:"robo_stake_total"` // RoboStake for THIS ingot (circulating RT)
+	ContractIDs    []string `json:"contract_ids"`     // Contracts that contributed to this ingot
 }
 
 // ─────────────────────────────────────────────────────────────
