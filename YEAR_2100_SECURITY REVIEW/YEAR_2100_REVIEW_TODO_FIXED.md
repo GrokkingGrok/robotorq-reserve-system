@@ -20,7 +20,7 @@
 
 ### After Mainnet (Phase 4 - 0-1 Year)
 6. **Multi-Verifier Consensus** (Task 5) - Eliminate single point of verification failure
-7. **Trust Service - Reputation Layer** (Task 24) - Sybil resistance for verifiers
+7. **Trust Service - Contract Orchestration** (Task 24) - ROI appraisal, opportunity execution pipeline
 8. **Vault Capacity Circuit-Breaker** (Task 4) - Prevent "success disaster" (>65% vaulted)
 9. **Demurrage Wrapper Monitoring** (Task 9) - Detect and deter centralized exchanges
 10. **Canonical Protocol Spec** (Task 13) - Human-readable mathematical specification
@@ -28,7 +28,7 @@
 ### Long-Term (Phase 5+ - 1-5 Years)
 11. **Governance Framework** (Task 3) - On-chain parameter changes with time-locks
 12. **Mobile UX Simplification** (Task 8) - Consumer-friendly "Savings" flow
-13. **Printer Service - Physical Currency** (Task 23) - Paper wallets, vouchers, gift cards
+13. **Printer Service - Off-Grid Physical RT** (Task 23) - 3D-printed NFC bills (design only, not implemented)
 14. **Optional Privacy Layer** (Task 6) - Stealth addresses + zk-SNARK mixer
 15. **Physical Protocol Archive** (Task 13) - 100 printed copies in fireproof vaults
 
@@ -36,7 +36,7 @@
 16. **Foundation + Succession** (Task 12) - Perpetual legal entity with 25-year board rotation
 17. **Annual Security Ritual** (Task 22) - Verifier oath ceremonies, knowledge transfer bootcamps
 
-**Key Insight**: Tasks 7, 10, 14, 24 are **catastrophic/critical/high severity**. Trust (Task 24) is needed for multi-verifier consensus (Task 5).
+**Key Insight**: Tasks 7, 10, 14 are **catastrophic/critical severity**. Trust (Task 24) orchestrates contracts, enabling economic opportunity discovery.
 
 ---
 
@@ -1152,131 +1152,135 @@ Use **production services with synthetic inputs** (NOT abstract Python models):
 
 ---
 
-### Task 24: Review Trust Service - Reputation & Identity Layer
+### Task 24: Review Trust Service - Contract Orchestration & Execution Pipeline
 **Status**: ⏳ TODO  
-**Purpose**: Document Trust's role in Year 2100 threat landscape and social proof mechanisms
+**Purpose**: Document Trust's role in Year 2100 threat landscape as the contract execution coordinator
 
-**Background**: Trust service manages reputation, identity verification, and social graph for RoboTorq participants. It's the anti-Sybil layer that prevents fake identities from gaming the system.
+**Background**: Trust service is the **contract orchestration pipeline** that evaluates opportunities (ROI-based appraisal), creates contracts, coordinates with DistoDam for funding, and executes contracts via Digger HTTP API. It's the brain of the contract lifecycle.
+
+**Architecture** (5-Step Pipeline):
+1. **Opportunity Intake** (Ticker auto-generates OR HTTP POST)
+2. **Appraisal** (ROI ≥ 10% threshold → creates contract → publishes `contracts.pending`)
+3. **Funding** (DistoDam subscribes to `contracts.pending`, funds contract, publishes `contracts.funded`)
+4. **Fund Sync** (FundSync subscribes to `contracts.funded`, forwards to Executor)
+5. **Execution** (Executor calls Digger HTTP API: `/robot/status` → `/stake`)
 
 **Threat Mapping** (Applicable to Trust):
-- **Threat #5 (Physical Backing Oracle)**: Verifier reputation, Sybil resistance
-- **Threat #9 (Demurrage Wrapper)**: Detect coordinated exchange attacks (multiple fake identities)
-- **Threat #12 (Succession)**: Board member reputation, proof-of-contribution
-- **Threat #14 (Moral Collapse)**: Public accountability, whistleblower protection
+- **Threat #3 (Governance Capture)**: ROI threshold manipulation, contract approval criteria
+- **Threat #9 (Demurrage Wrapper)**: Contract funding attacks (drain DistoDam via fake contracts)
+- **Threat #10 (NATS Entropy Death)**: Message bus failure breaks contract pipeline
+- **Threat #11 (Entropy Starvation)**: Contract generation rate affects backing
 
 **Documents to Review**:
-- `src/trust/TRUST_ARCHITECTURE.md` - Trust service design (if exists)
-- `docs/trust-economics.md` - Reputation economics
-- `src/mint/` - Verifier identity management
-- Any social recovery or web-of-trust designs
+- `src/trust/README.md` - Trust service architecture (exists)
+- `src/trust/internal/appraiser/appraiser.go` - ROI evaluation logic
+- `src/trust/internal/executor/executor.go` - Digger integration
+- `src/trust/internal/contract/contract.go` - Contract data model
 
 **Questions to Answer**:
-- [ ] Does Trust service exist in current architecture?
-- [ ] What is Trust's responsibility? (Reputation scores? Identity verification? Social graph?)
-- [ ] Is there Sybil resistance mechanism? (Prevent fake identities)
-- [ ] Is reputation on-chain or off-chain? (Immutability vs privacy)
-- [ ] Are there reputation decay mechanisms? (Old reputation expires)
-- [ ] Is there social recovery? (Restore wallet via trusted contacts)
-- [ ] Are there dispute resolution protocols? (Arbitration between parties)
-- [ ] Is there whistleblower protection? (Anonymous reporting + rewards)
+- [x] Does Trust service exist? **YES** (5-step pipeline implemented)
+- [ ] Is ROI threshold (10%) hard-coded or configurable?
+- [ ] Are there governance controls on contract approval criteria?
+- [ ] Is there fraud detection? (Fake opportunities, ROI manipulation)
+- [ ] Are there rate limits on contract creation? (Prevent DistoDam drain)
+- [ ] Does Trust handle NATS failures gracefully? (Circuit breaker, retry logic)
+- [ ] Are contract execution results verified? (Digger actually did work)
+- [ ] Is there audit trail for all contract decisions? (Why approved/rejected)
+- [ ] Are there collateral requirements for opportunity submitters? (Prevent spam)
 
 **Expected Gaps**:
-- **Likely**: Trust service doesn't exist yet (Phase 4+ feature)
-- Missing: Sybil resistance (proof-of-humanity or stake-based identity)
-- Missing: Reputation scoring algorithm (how to measure trustworthiness)
-- Missing: Social graph (who trusts whom, transitive trust)
-- Missing: Dispute resolution (arbitration for contract disputes)
-- Missing: Whistleblower protection (anonymous reporting channel)
+- Missing: Governance controls on ROI threshold (currently hard-coded 10%)
+- Missing: Fraud detection (fake opportunities with inflated ROI claims)
+- Missing: Rate limiting (prevent malicious contract spam → DistoDam drain)
+- Missing: Collateral requirements (anyone can submit opportunities)
+- Missing: Execution verification (Trust assumes Digger did work, doesn't verify)
+- Missing: Circuit breaker for NATS failures
+- Missing: Audit trail (why opportunity approved/rejected)
 
 **Action Items to Create**:
-- [ ] Design Trust service architecture (if not exists):
-  - Reputation scoring (0-100 score based on verified actions)
-  - Identity verification (proof-of-humanity via biometrics or social proof)
-  - Social graph (web-of-trust, transitive reputation)
-  - Dispute resolution (3-of-5 arbitrator voting)
-  - Whistleblower channel (anonymous reporting + bounty)
+- [ ] Add governance control for ROI threshold:
+  - Make ROI threshold configurable via NATS topic `trust.config.roi_threshold`
+  - Default: 10%, min: 5%, max: 50%
+  - Changes require governance vote (80% approval)
+  - Log all threshold changes with justification
   
-- [ ] Implement Sybil resistance:
-  - **Option 1**: Proof-of-physical-robot-stake (verified kWh = real identity)
-  - **Option 2**: Social proof (5+ existing users vouch for newcomer)
-  - **Option 3**: Biometric verification (WorldCoin-style proof-of-humanity)
-  - **Chosen approach**: Hybrid (physical robot stake + social vouching)
+- [ ] Implement fraud detection:
+  - Track opportunity submitter history (approval rate, execution success rate)
+  - Flag submitters with <50% execution success (possible fake opportunities)
+  - Require proof-of-stake for new submitters (lock 100 RT collateral)
+  - Slashing: If opportunity fails execution → 10% collateral burned
   
-- [ ] Design reputation scoring algorithm:
-  ```
-  ReputationScore = 
-    0.4 × VerifiedKwhContributed +
-    0.3 × ContractsCompleted +
-    0.2 × SocialVouches +
-    0.1 × TimeInEcosystem
-  ```
-  - Decays 10%/year (old reputation expires, prevents resting on laurels)
-  - Slashing events reduce score by 50% (fraud = major reputation hit)
+- [ ] Add rate limiting per submitter:
+  - Max 10 opportunities/hour per submitter
+  - Max 1000 RT total in pending contracts per submitter
+  - Prevents malicious drainage of DistoDam reservoir
   
-- [ ] Build social graph infrastructure:
-  - Users explicitly vouch for others (cryptographically signed endorsements)
-  - Transitive trust: If A trusts B, and B trusts C → A partially trusts C
-  - Trust decay: Endorsements expire after 2 years (must re-vouch)
-  - Sybil detection: Sudden cluster of mutual vouches = suspicious
+- [ ] Add execution verification:
+  - Trust subscribes to `refinery.ingots` NATS topic
+  - Verify that executed contracts actually produced ingots
+  - If no ingot within 2 hours → flag as failed execution
+  - Track execution success rate per Digger
   
-- [ ] Add dispute resolution protocol:
-  - Contract disputes escalate to Trust service
-  - 3-of-5 arbitrators vote (randomly selected from high-reputation users)
-  - Arbitrators stake collateral (lose stake if community overturns decision)
-  - Appeals process: 80% community vote can override arbitration
+- [ ] Implement NATS resilience (align with Task 10):
+  - Circuit breaker: If NATS unreachable >30s → cache contracts locally
+  - Retry logic: Exponential backoff (1s, 2s, 4s, 8s, max 60s)
+  - Dead letter queue: Failed publishes stored in PostgreSQL
+  - Recovery: On NATS reconnect, replay missed contracts
   
-- [ ] Implement whistleblower protection:
-  - Anonymous submission channel (Tor hidden service)
-  - Zero-knowledge proof: "I know a fraud" without revealing identity
-  - Bounty: 50% of slashed collateral → whistleblower
-  - Protection: Whistleblower identity never revealed on-chain
+- [ ] Add immutable audit trail:
+  - Log all appraisal decisions to NATS JetStream (append-only)
+  - Record: opportunity_id, submitter, ROI, decision (approved/rejected), reason, timestamp
+  - Enables forensic analysis if fraud suspected
   
-- [ ] Create `TRUST_ARCHITECTURE.md` with reputation economics
-- [ ] Add Trust to Phase 4+ roadmap (needed before multi-verifier consensus)
+- [ ] Create `TRUST_ARCHITECTURE.md` (if doesn't exist, or update README.md):
+  - Document governance controls
+  - Explain fraud detection mechanisms
+  - Detail rate limiting rules
+  - Describe execution verification
 
 **Threat Mitigation Specifics**:
 
-1. **Threat #5 (Physical Backing Oracle)**:
-   - Verifiers must have high reputation score (>80) to be eligible
-   - Reputation based on verified kWh (can't fake physical robot work)
-   - Social vouching prevents Sybil attacks (can't create 1000 fake verifiers)
+1. **Threat #3 (Governance Capture)**:
+   - ROI threshold controlled by governance (not Trust operator)
+   - Changes logged immutably (can audit if threshold manipulated)
+   - Parameter bounds prevent extreme settings (min 5%, max 50%)
 
 2. **Threat #9 (Demurrage Wrapper)**:
-   - Detect coordinated attacks: Sudden cluster of new identities using wrapper
-   - Low-reputation users flagged if large wrapper transactions
-   - Social graph analysis reveals Sybil networks
+   - Rate limiting prevents coordinated attack (1000 fake opportunities to drain DistoDam)
+   - Collateral requirements raise cost of attack (need 100 RT per submitter)
+   - Execution verification ensures contracts actually create value (not just siphon funds)
 
-3. **Threat #12 (Succession)**:
-   - Board candidates must have proof-of-contribution (5+ years, high reputation)
-   - Community votes weighted by reputation (not just RT holdings)
-   - Prevents plutocracy (can't buy board seat with money alone)
+3. **Threat #10 (NATS Entropy Death)**:
+   - Circuit breaker + local caching prevents complete pipeline halt
+   - Dead letter queue ensures no contracts lost during outage
+   - Retry logic maintains eventual consistency
 
-4. **Threat #14 (Moral Collapse)**:
-   - Public reputation creates accountability (fraud = permanent reputation loss)
-   - Whistleblower bounties incentivize reporting (50% of slashed collateral)
-   - Anonymous reporting protects whistleblowers from retaliation
+4. **Threat #11 (Entropy Starvation)**:
+   - Track contract generation rate vs backing (alert if contracts outpace verified kWh)
+   - If backing drops >20%, Trust auto-reduces ROI threshold (fewer contracts approved)
+   - Prevents runaway contract creation that outstrips physical work capacity
 
 **Acceptance Tests**:
-1. **Sybil Resistance**: Attempt to create 1000 fake identities → social vouching requirement prevents scale
-2. **Reputation Decay**: User with 100 score inactive for 5 years → score decays to 60
-3. **Dispute Resolution**: Two parties disagree on contract → escalate to arbitration → 3-of-5 vote resolves
-4. **Whistleblower Protection**: Report verifier fraud anonymously → identity never revealed, bounty paid
-5. **Social Graph Analysis**: Detect Sybil network (100 accounts all vouching for each other) → flagged as suspicious
+1. **Fraud Detection**: Submit 10 fake opportunities (high ROI, no execution) → submitter flagged after 5 failures
+2. **Rate Limiting**: Submit 20 opportunities in 1 hour → first 10 accepted, remaining rejected
+3. **Execution Verification**: Execute contract → no ingot produced → Trust marks as failed, submitter slashed
+4. **NATS Resilience**: Disconnect NATS → Trust caches 100 contracts locally → reconnect → contracts replayed
+5. **Governance Control**: Change ROI threshold from 10% to 15% → logged immutably → all future appraisals use 15%
 
-**Timeline**: Phase 4 (2026-2027, needed before multi-verifier consensus)  
-**Priority**: HIGH (enables decentralized verification, prevents Sybil attacks)
+**Timeline**: Phase 4 (2026, exists but needs hardening)  
+**Priority**: 🟠 HIGH (exists, but governance + fraud detection critical before mainnet)
 
 **Dependencies**:
-- Task 5 (Multi-Verifier) requires Trust for verifier eligibility
-- Task 14 (Verifier Oath) requires Trust for accountability
-- Task 12 (Succession) requires Trust for board elections
-- Task 9 (Wrapper Attack) requires Trust for Sybil detection
+- Task 10 (NATS Multi-Region) provides resilience foundation
+- Task 3 (Governance Framework) provides threshold control mechanism
+- Task 11 (Backing Monitor) provides entropy starvation feedback loop
+- Task 9 (Wrapper Monitoring) shares fraud detection patterns
 
 **Integration with Existing Services**:
-- **Mint**: Queries Trust for verifier eligibility (reputation >80)
-- **Wallet**: Uses Trust for social recovery (restore via 3-of-5 trusted contacts)
-- **DistoDam**: Queries Trust for large transaction approval (>10,000 RT requires high reputation)
-- **BidNet**: Uses Trust for contractor reputation (prevents scam contracts)
+- **DistoDam**: Funds contracts published to `contracts.pending`
+- **Digger**: Executes contracts via HTTP API (`/stake`, `/execute`)
+- **Refinery**: Produces ingots from executed work (verification signal)
+- **BidNet** (future): May replace Trust's centralized appraisal with decentralized auction
 
 ---
 
