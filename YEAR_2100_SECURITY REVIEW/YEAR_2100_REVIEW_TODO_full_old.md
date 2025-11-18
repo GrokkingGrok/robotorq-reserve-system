@@ -1,7 +1,7 @@
 # Year 2100 Security Review - TODO Tracker
 
 **Date**: November 18, 2025  
-**Branch**: feature/vault  
+**Branch**: year2100 
 **Purpose**: Complete security review of existing architecture against 14 long-term threats  
 **Status**: In Progress
 
@@ -162,7 +162,7 @@ Task 13 (Protocol Spec)
 
 ---
 
-## 📋 Review Tasks
+## 📋 Threat Review Loop
 
 ### Task 1: Review Threat #1 (Quantum Obsolescence) Against Current Crypto
 **Status**: ⏳ TODO  
@@ -631,7 +631,7 @@ Instead:
 - [ ] Design on-chain oath requirement (annual cryptographic commitment):
   - Template: "I, [NAME], swear I have not accepted bribes. All work logs I verified are true."
   - Stored permanently on-chain
-  - False oath = 100% collateral slash + permanent blacklist
+  - False oath = 100% collateral slash + public naming
 - [ ] Create public verifier registry service
 - [ ] Implement enhanced slashing:
   - False oath = 100% collateral loss (no appeals)
@@ -644,6 +644,8 @@ Instead:
 - [ ] **Priority: HIGH** (implement before mainnet)
 
 ---
+
+## Documentation
 
 ### Task 15: Update YEAR_2100_SECURITY_REVIEW.md - Remove Oracle References
 **Status**: ⏳ TODO  
@@ -661,11 +663,13 @@ Instead:
    - Both use DistoDam settlement (no centralized Oracle)
 
 **Action**:
-- [ ] Update Threat #5 title and description to clarify "verification oracle" vs "settlement oracle"
-- [ ] Add subsection: "Note: Payment Settlement Already Decentralized"
-- [ ] Reference `TRANSACTION_ARCHITECTURE.md` for DistoDam settlement architecture
+- [X] Update Threat #5 title and description to clarify "verification oracle" vs "settlement oracle"
+- [X] Add subsection: "Note: Payment Settlement Already Decentralized"
+- [X] Reference `TRANSACTION_ARCHITECTURE.md` for DistoDam settlement architecture
 
 ---
+
+## The Threat Review Loop is applied to the process
 
 ### Task 16: Cross-Reference Review - Find What's Already Handled
 **Status**: ⏳ TODO  
@@ -676,6 +680,7 @@ Instead:
 - `TRANSACTION_ARCHITECTURE.md` (DistoDam settlement, collateral, slashing)
 - `DISTODAM_ARCHITECTURE.md` (dual-vault, loan mechanism)
 - `PHASE5_COMPLETION.md` (SPHINCS+, merkle trees, verification API)
+// add mint, refinery, digger, wallet, bidnet, Trust to this list. I think this will be the first item we tackle based on my reading so far. We will loop through all 14 threats for every service and document our findings along the way.
 
 **Questions to Answer**:
 - [ ] Does Vault plan already include circuit-breaker monitoring? (Threat #4)
@@ -766,6 +771,8 @@ Instead:
    - Add section: "Verifier Accountability & Oath Requirements"
    - Add section: "Physical Backing Monitoring"
    - Reference: Threat #5 (physical backing oracle), Threat #11 (entropy starvation), Threat #14 (moral collapse)
+
+
 
 **Action**:
 - [ ] Add "Year 2100 Threat Mitigations" sections to all architecture docs

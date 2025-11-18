@@ -786,13 +786,53 @@ Instead:
 ## 📊 Progress Tracking
 
 ### Completion Metrics
-- **Total Tasks**: 25 (14 threat reviews + 11 meta-tasks)
+- **Total Tasks**: 18 (14 threat reviews + 4 meta-tasks)
 - **Completed**: 0
 - **In Progress**: 0
 - **Blocked**: 0
-- **Not Started**: 25
+- **Not Started**: 18
+
+### Review Process Workflow
+
+**Phase 1: Discovery (Task 16 - Cross-Reference)**
+- Loop through all 14 threats for each of 11 services
+- Document what's already handled vs what's missing
+- Create cross-reference matrix (threat → service → mitigation status)
+- Timeline: 1-2 days
+
+**Phase 2: Planning (Task 17 - Consolidated Action Plan)**
+- Merge all gaps into 4-tier priority structure:
+  1. PRE-VAULT (CRITICAL - blocks Vault development)
+  2. TESTNET (HIGH - functional testing requirements)
+  3. MAINNET (CRITICAL/HIGH - production readiness)
+  4. DEFERRED (MEDIUM/LOW - Phase 5+)
+- Assign owners, estimate timelines, map dependencies
+- Timeline: 1-2 days
+
+**Phase 3: Execution (Task 18 - Service Implementation Plans)**
+- Create 11 service-specific plans in dependency order:
+  1. Transactions (NATS) - Infrastructure foundation
+  2. Simulation - Testing framework (parallelizes with other work)
+  3. Digger - Work production source
+  4. Refinery - Unit/ingot processing
+  5. Mint - Verification and minting
+  6. DistoDam - Settlement layer
+  7. BidNet - Market mechanisms
+  8. Trust - Contract orchestration
+  9. Wallet - User transactions
+  10. Vault - Long-term storage (depends on all above)
+  11. Printer - Off-grid physical RT (Phase 5+, optional)
+- Each plan documents: threats, current state, gaps, prioritized actions
+- Timeline: 5-7 days (can parallelize across services)
+
+**Phase 4: Oracle Clarification (Task 15)**
+- Update YEAR_2100_SECURITY_REVIEW.md to clarify "verification oracle" vs "settlement oracle"
+- Already done: Settlement oracle removed (DistoDam + BidNet replace it)
+- Timeline: 0.5 days
 
 ### Critical Path Items (Must Complete Before Mainnet)
+
+**From Threat Reviews (Tasks 1-14)**:
 1. ✅ Oracle removal (already done in Transaction arch)
 2. ⏳ Task 7: NATS JetStream event sourcing backup (🟣 Catastrophic)
 3. ⏳ Task 10: Multi-region NATS cluster (🟣 Catastrophic)
@@ -800,34 +840,39 @@ Instead:
 5. ⏳ Task 14: On-chain oath requirement for verifiers (🔴 Critical)
 6. ⏳ Task 11: BackingMonitor service - monitoring only (🔴 Critical)
 
+**From Service Plans (Tasks 16-18)**:
+7. ⏳ Task 16: Cross-reference all threats across all services
+8. ⏳ Task 17: PRE-VAULT action items identified and prioritized
+9. ⏳ Task 18: Service plans for Transactions, Digger, Refinery, Mint complete
+
 **Severity Breakdown**:
 - 🟣 Catastrophic: 2 tasks (7, 10) - **CANNOT GO TO MAINNET WITHOUT THESE**
 - 🔴 Critical: 4 tasks (1, 5, 11, 14) - **HIGH PRIORITY FOR MAINNET**
-- 🟠 High: 3 tasks (2, 4, 24) - Phase 4 (Trust is HIGH priority for multi-verifier)
+- 🟠 High: 2 tasks (2, 4) - Phase 4
 - 🟡 Medium: 3 tasks (3, 6, 9) - Phase 5+
-- 🟢 Low: 2 tasks (8, 23) - Phase 5+ (Printer nice-to-have for adoption)
+- 🟢 Low: 1 task (8) - Phase 5+
 - 🔵 Long-term: 2 tasks (12, 13) - 2050-2100
 
 ### Estimated Timeline
-- **Tasks 1-10** (Original threat reviews): 3-5 days
-- **Tasks 11-14** (New threat reviews): 2-3 days
-- **Task 15** (Doc updates - Oracle clarification): 1 day
-- **Task 16** (Cross-reference): 1 day
-- **Task 17** (Action plan): 1 day
-- **Task 18** (Architecture updates): 3-4 days
-- **Task 19** (Final review): 1 day
-- **Task 20** (Service-specific plans): 4-6 days (parallelizable, now 10 services)
-- **Task 21** (Simulation framework): 6 weeks (parallelizable, Phase 4+)
-- **Task 22** (Annual security ritual): 5 days/year (Phase 5+, recurring)
-- **Task 23** (Printer service review): 2 days (Phase 5+, LOW priority)
-- **Task 24** (Trust service review): 3 days (Phase 4, HIGH priority)
-- **Task 25** (Service implementation plans): 5-7 days (parallelizable, 10 services)
 
-**Total**: ~18-24 working days for critical path (Tasks 1-20, 24)  
-**Extended**: +6 weeks for simulations (Task 21, can run in parallel)  
-**Recurring**: 5 days/year for security ceremonies (Task 22, starts Phase 5)  
-**Optional**: Task 23 (Printer) deferred to Phase 5+ (not blocking mainnet)
-**Service Plans**: Task 25 (5-7 days) creates detailed implementation roadmaps
+**Threat Reviews (Tasks 1-14)**: 3-5 days
+- Review each threat against existing docs
+- Document gaps and create action items
+- Status: Not started (will inform Tasks 16-18)
+
+**Meta-Tasks (Tasks 15-18)**: 7-11 days
+- **Task 15** (Oracle clarification): 0.5 days
+- **Task 16** (Cross-reference): 1-2 days
+- **Task 17** (Consolidated action plan): 1-2 days  
+- **Task 18** (Service implementation plans): 5-7 days (parallelizable)
+
+**Total Critical Path**: ~10-16 working days
+- Can parallelize: Simulation service plan + other service plans
+- Vault plan must be last (depends on all other services)
+
+**Note**: Tasks 19-25 from original plan have been restructured:
+- Tasks 19-20 (Final review, service plans) → merged into Task 18
+- Tasks 21-25 (Simulation, ceremony, Printer, Trust, plans) → integrated into Task 18 service-specific approach
 
 ---
 
