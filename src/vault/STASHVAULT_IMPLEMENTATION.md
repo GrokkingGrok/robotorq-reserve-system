@@ -787,6 +787,57 @@ func TestStashVault_UBDAutoSave(t *testing.T) {
 
 ---
 
+## 🔐 **Event Sourcing Architecture**
+
+**⚠️ CRITICAL SECURITY FIX (Nov 18, 2025)**:
+- **Database is cache only** (not source of truth)
+- **NATS JetStream is source of truth** (replayable event log)
+- **Prevents data loss**: Node restart → replay events from NATS → rebuild vault balances
+
+**Event Schema**:
+```go
+type StashVaultEvent struct {
+    EventID       string    `json:"event_id"`
+    EventType     string    `json:"event_type"`  // "created", "deposited", "withdrawn", "yield_distributed"
+    VaultID       string    `json:"vault_id"`
+    WalletID      string    `json:"wallet_id"`
+    AmountMicroRT int64     `json:"amount_micro_rt"`
+    BalanceAfter  int64     `json:"balance_after"`
+    Timestamp     time.Time `json:"timestamp"`
+    Signature     []byte    `json:"signature"`  // Dilithium3
+}
+```
+
+**Event Replay**:
+```go
+func (m *StashVaultManager) ReplayEvents(ctx context.Context) error {
+    m.logger.Info("replaying StashVault events from NATS")
+    
+    js, _ := m.natsClient.JetStream()
+    
+    sub, err := js.Subscribe("vault.stash.*", func(msg *nats.Msg) {
+        var event StashVaultEvent
+        json.Unmarshal(msg.Data, &event)
+        
+        // Apply event to in-memory state
+        m.applyEvent(event)
+        msg.Ack()
+    }, nats.DeliverAll())  // Replay from beginning
+    
+    if err != nil {
+        return err
+    }
+    
+    time.Sleep(10 * time.Second)  // Wait for replay
+    sub.Unsubscribe()
+    
+    m.logger.Info("StashVault event replay complete")
+    return nil
+}
+```
+
+---
+
 ## 📝 **Implementation Checklist**
 
 ### **Phase 1: Core StashVault** (Day 1)
