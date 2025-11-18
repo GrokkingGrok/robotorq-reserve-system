@@ -65,7 +65,7 @@ func (h *simpleBatchHasher) Hash(batch []*TokenTorqIngot) (string, float64, floa
 	for _, ingot := range sorted {
 		// Accumulate totals
 		totalRobo += ingot.RoboStakeTotal
-		// NOTE: totalSale removed - price tracking happens elsewhere in the system
+		// TODO: delete above line and send ingot.RoboSTakeTotal to DistoDam instead
 
 		// Build hash input: IngotID|JouleTorq|RoboStake|BranchHash|Contracts|UnitCount|MintedAt
 		fmt.Fprintf(&builder, "%s|%.2f|%.6f|%s|%s|%d|%s\n",
