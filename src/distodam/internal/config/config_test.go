@@ -306,12 +306,12 @@ func TestValidate_WaterMarks(t *testing.T) {
 	clearEnv()
 
 	tests := []struct {
-		name       string
-		stakeLow   float64
-		stakeHigh  float64
-		distoLow   float64
-		distoHigh  float64
-		wantError  bool
+		name      string
+		stakeLow  float64
+		stakeHigh float64
+		distoLow  float64
+		distoHigh float64
+		wantError bool
 	}{
 		{"valid", 0.001, 0.01, 0.0005, 0.005, false},
 		{"stake_high_below_low", 0.01, 0.001, 0.0005, 0.005, true},

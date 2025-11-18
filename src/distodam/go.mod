@@ -4,7 +4,10 @@ go 1.24
 
 require github.com/nats-io/nats.go v1.47.0
 
-require github.com/kr/text v0.2.0 // indirect
+require (
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
+)
 
 require (
 	b2b/natsx v0.0.0
