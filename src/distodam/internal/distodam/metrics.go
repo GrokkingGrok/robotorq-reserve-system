@@ -238,16 +238,131 @@ func NewVaultMetrics() *VaultMetrics {
 			Help: "Total number of NATS publish retries",
 		}),
 
-		// Performance
-		FundingLatencySeconds: promauto.NewHistogram(prometheus.HistogramOpts{
-			Name:    "distodam_funding_latency_seconds",
-			Help:    "Time from contract received to funded published",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
+	// Performance
+	FundingLatencySeconds: promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "distodam_funding_latency_seconds",
+		Help:    "Time from contract received to funded published",
+		Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
+	}),
+	IngotStakeProcessingSeconds: promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "distodam_ingot_stake_processing_seconds",
+		Help:    "Time to process a single ingot stake",
+		Buckets: prometheus.ExponentialBuckets(0.0001, 2, 10), // 0.1ms to ~100ms
+	}),
+}
+}
+
+// ReceiverMetrics holds Prometheus metrics for NATS event receivers
+type ReceiverMetrics struct {
+	// MintEventReceiver metrics
+	MintEventsReceivedTotal         prometheus.Counter
+	MintEventsProcessedTotal        prometheus.Counter
+	MintEventParseErrorsTotal       prometheus.Counter
+	MintEventValidationErrorsTotal  prometheus.Counter
+	IngotsProcessedTotal            prometheus.Counter
+	IngotStakeProcessingErrorsTotal prometheus.Counter
+	StakeDepositsTotal              prometheus.Counter
+	StakeDepositedRTTotal           prometheus.Counter
+
+	// ContractFunder metrics
+	ContractsReceivedTotal              prometheus.Counter
+	ContractsProcessedTotal             prometheus.Counter
+	ContractParseErrorsTotal            prometheus.Counter
+	ContractValidationErrorsTotal       prometheus.Counter
+	ContractsFundedTotal                prometheus.Counter
+	ContractsFundedRTTotal              prometheus.Counter
+	ContractsFundedWithLoanTotal        prometheus.Counter
+	ContractsRejectedInsufficientFunds  prometheus.Counter
+	ContractFundingErrorsTotal          prometheus.Counter
+
+	// UBDFunder metrics (future)
+	UBDRequestsReceivedTotal  prometheus.Counter
+	UBDRequestsProcessedTotal prometheus.Counter
+}
+
+// NewReceiverMetrics creates a new ReceiverMetrics instance
+func NewReceiverMetrics() *ReceiverMetrics {
+	return &ReceiverMetrics{
+		// MintEventReceiver
+		MintEventsReceivedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_mint_events_received_total",
+			Help: "Total number of MintEvents received from NATS",
 		}),
-		IngotStakeProcessingSeconds: promauto.NewHistogram(prometheus.HistogramOpts{
-			Name:    "distodam_ingot_stake_processing_seconds",
-			Help:    "Time to process a single ingot stake",
-			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 10), // 0.1ms to ~100ms
+		MintEventsProcessedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_mint_events_processed_total",
+			Help: "Total number of MintEvents successfully processed",
+		}),
+		MintEventParseErrorsTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_mint_event_parse_errors_total",
+			Help: "Total number of MintEvent JSON parse errors",
+		}),
+		MintEventValidationErrorsTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_mint_event_validation_errors_total",
+			Help: "Total number of MintEvent validation errors",
+		}),
+		IngotsProcessedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_ingots_processed_total",
+			Help: "Total number of ingot stakes processed",
+		}),
+		IngotStakeProcessingErrorsTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_ingot_stake_processing_errors_total",
+			Help: "Total number of ingot stake processing errors",
+		}),
+		StakeDepositsTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_stake_deposits_total",
+			Help: "Total number of StakeVault deposits",
+		}),
+		StakeDepositedRTTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_stake_deposited_rt_total",
+			Help: "Total RT deposited to StakeVault",
+		}),
+
+		// ContractFunder
+		ContractsReceivedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_contracts_received_total",
+			Help: "Total number of contracts received from NATS",
+		}),
+		ContractsProcessedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_contracts_processed_total",
+			Help: "Total number of contracts successfully processed",
+		}),
+		ContractParseErrorsTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_contract_parse_errors_total",
+			Help: "Total number of contract JSON parse errors",
+		}),
+		ContractValidationErrorsTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_contract_validation_errors_total",
+			Help: "Total number of contract validation errors",
+		}),
+		ContractsFundedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_contracts_funded_total",
+			Help: "Total number of contracts successfully funded",
+		}),
+		ContractsFundedRTTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_contracts_funded_rt_total",
+			Help: "Total RT allocated to funded contracts",
+		}),
+		ContractsFundedWithLoanTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_contracts_funded_with_loan_total",
+			Help: "Total number of contracts funded via DistoVault loan",
+		}),
+		ContractsRejectedInsufficientFunds: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_contracts_rejected_insufficient_funds_total",
+			Help: "Total number of contracts rejected due to insufficient funds",
+		}),
+		ContractFundingErrorsTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_contract_funding_errors_total",
+			Help: "Total number of contract funding errors",
+		}),
+
+		// UBDFunder (future)
+		UBDRequestsReceivedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_ubd_requests_received_total",
+			Help: "Total number of UBD requests received from NATS",
+		}),
+		UBDRequestsProcessedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_ubd_requests_processed_total",
+			Help: "Total number of UBD requests successfully processed",
 		}),
 	}
 }
