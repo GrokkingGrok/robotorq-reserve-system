@@ -92,11 +92,13 @@ func NewMintEngine(hasher BatchHasher, client DistoDamClient, logger *slog.Logge
 
 // ProcessBatch processes a batch of ingots and publishes a MintEvent.
 //
+// PHASE 6 UPDATE: Now sends individual IngotStakes[] instead of summing.
+//
 // Flow:
-//  1. Use BatchHasher to compute hash + totals
-//  2. Generate MintEvent with batch metadata
+//  1. Use BatchHasher to compute hash + individual stakes
+//  2. Generate MintEvent with IngotStakes array
 //  3. Publish to DistoDam via NATS (mint.batches topic)
-//  4. Update cumulative metrics
+//  4. Update cumulative metrics (sum from stakes for backward compat)
 //  5. Log structured event
 //
 // Error handling:
@@ -110,8 +112,8 @@ func (e *mintEngine) ProcessBatch(ctx context.Context, batch []*TokenTorqIngot) 
 		return fmt.Errorf("cannot process empty batch")
 	}
 
-	// Use BatchHasher to compute hash + totals
-	batchHash, totalRobo, totalSale, err := e.hasher.Hash(batch)
+	// Use BatchHasher to compute hash + individual stakes
+	batchHash, ingotStakes, err := e.hasher.Hash(batch)
 	if err != nil {
 		e.logger.Error("batch hashing failed",
 			"error", err,
@@ -120,14 +122,22 @@ func (e *mintEngine) ProcessBatch(ctx context.Context, batch []*TokenTorqIngot) 
 		return fmt.Errorf("batch hashing failed: %w", err)
 	}
 
-	// Generate MintEvent
+	// Calculate total for metrics (backward compatibility)
+	var totalRobo float64
+	for _, stake := range ingotStakes {
+		totalRobo += stake.RoboStakeTotal
+	}
+
+	// Generate MintEvent (PHASE 6: Now includes IngotStakes array)
 	event := &MintEvent{
 		BatchHash:       batchHash,
-		TotalRoboTorq:   totalRobo,
+		IngotStakes:     ingotStakes, // NEW: Individual stakes, not summed
 		IngotsProcessed: len(batch),
-		SaleValueUSD:    totalSale,
 		BatchID:         uuid.New().String(),
 		Timestamp:       time.Now().UTC(),
+		// DEPRECATED (kept for backward compat - will be removed in Phase 7)
+		TotalRoboTorq: totalRobo,
+		SaleValueUSD:  0, // No longer calculated
 	}
 
 	// Publish to DistoDam via NATS
@@ -138,6 +148,7 @@ func (e *mintEngine) ProcessBatch(ctx context.Context, batch []*TokenTorqIngot) 
 			"batch_id", event.BatchID,
 			"batch_hash", event.BatchHash,
 			"ingots", event.IngotsProcessed,
+			"stakes_count", len(event.IngotStakes),
 		)
 		return fmt.Errorf("failed to publish MintEvent: %w", err)
 	}
@@ -157,8 +168,8 @@ func (e *mintEngine) ProcessBatch(ctx context.Context, batch []*TokenTorqIngot) 
 		"batch_id", event.BatchID,
 		"batch_hash", event.BatchHash,
 		"ingots_count", event.IngotsProcessed,
-		"total_robo", event.TotalRoboTorq,
-		"sale_value_usd", event.SaleValueUSD,
+		"ingot_stakes_count", len(event.IngotStakes),
+		"total_robo", totalRobo,
 		"duration_ms", time.Since(startTime).Milliseconds(),
 	)
 
