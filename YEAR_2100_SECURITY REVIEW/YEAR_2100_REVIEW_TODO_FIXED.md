@@ -7,6 +7,37 @@
 
 ---
 
+## 📖 Simple View - Executive Summary
+
+**For stakeholders who need the 1-page version:**
+
+### Before Mainnet (CRITICAL - Must Complete)
+1. **NATS Multi-Region Cluster** (Task 10) - Prevents catastrophic message bus failure
+2. **Event Sourcing → JetStream** (Task 7) - Enables disaster recovery from immutable logs
+3. **Crypto Versioning** (Task 1) - Future-proofs against quantum attacks
+4. **Verifier Oath + Slashing** (Task 14) - Prevents verifier moral collapse
+5. **Backing Monitor** (Task 11) - Real-time tracking of physical kWh backing
+
+### After Mainnet (Phase 4 - 0-1 Year)
+6. **Multi-Verifier Consensus** (Task 5) - Eliminate single point of verification failure
+7. **Vault Capacity Circuit-Breaker** (Task 4) - Prevent "success disaster" (>65% vaulted)
+8. **Demurrage Wrapper Monitoring** (Task 9) - Detect and deter centralized exchanges
+9. **Canonical Protocol Spec** (Task 13) - Human-readable mathematical specification
+
+### Long-Term (Phase 5+ - 1-5 Years)
+10. **Governance Framework** (Task 3) - On-chain parameter changes with time-locks
+11. **Mobile UX Simplification** (Task 8) - Consumer-friendly "Savings" flow
+12. **Optional Privacy Layer** (Task 6) - Stealth addresses + zk-SNARK mixer
+13. **Physical Protocol Archive** (Task 13) - 100 printed copies in fireproof vaults
+
+### Existential (2050-2100)
+14. **Foundation + Succession** (Task 12) - Perpetual legal entity with 25-year board rotation
+15. **Annual Security Ritual** (Task 22) - Verifier oath ceremonies, knowledge transfer bootcamps
+
+**Key Insight**: Tasks 7, 10, 14 are **catastrophic/critical severity**. Nothing else matters if these fail.
+
+---
+
 ## Overview
 
 This tracker coordinates a **comprehensive security audit** of RoboTorq's existing architecture (Vault, Wallet, DistoDam, Mint, Refinery, BidNet) against the 14 identified Year 2100 threats. Each threat is analyzed against current implementation, gaps documented, and action items created.
@@ -22,23 +53,110 @@ This tracker coordinates a **comprehensive security audit** of RoboTorq's existi
 
 ## 🎯 Quick Status Summary
 
-| Threat # | Threat Name | Review Status | Gaps Identified | Actions Created |
-|----------|-------------|---------------|-----------------|------------------|
-| 1 | Quantum obsolescence | ⏳ TODO | ? | ? |
-| 2 | DistoDam key seizure | ⏳ TODO | ? | ? |
-| 3 | Governance capture | ⏳ TODO | ? | ? |
-| 4 | Success disaster (>65% vaulted) | ⏳ TODO | ? | ? |
-| 5 | Physical backing oracle | ⏳ TODO | ? | ? |
-| 6 | Legal attack (nation-state) | ⏳ TODO | ? | ? |
-| 7 | Event sourcing loss | ⏳ TODO | ? | ? |
-| 8 | Adoption ceiling (UX) | ⏳ TODO | ? | ? |
-| 9 | Demurrage wrapper attack | ⏳ TODO | ? | ? |
-| 10 | NATS entropy death | ⏳ TODO | ? | ? |
-| 11 | Entropy starvation (backing loss) | ⏳ TODO | ? | ? |
-| 12 | Succession after founders die | ⏳ TODO | ? | ? |
-| 13 | Knowledge loss / dark age | ⏳ TODO | ? | ? |
-| 14 | Moral collapse of verifiers | ⏳ TODO | ? | ? |
-| - | **Oracle removal** | ✅ COMPLETE | 0 | Transaction arch updated |
+| Threat # | Threat Name | Severity | Review Status | Gaps Identified | Actions Created |
+|----------|-------------|----------|---------------|-----------------|------------------|
+| 1 | Quantum obsolescence | 🔴 Critical | ⏳ TODO | ? | ? |
+| 2 | DistoDam key seizure | 🟠 High | ⏳ TODO | ? | ? |
+| 3 | Governance capture | 🟡 Medium | ⏳ TODO | ? | ? |
+| 4 | Success disaster (>65% vaulted) | 🟠 High | ⏳ TODO | ? | ? |
+| 5 | Physical backing oracle | 🔴 Critical | ⏳ TODO | ? | ? |
+| 6 | Legal attack (nation-state) | 🟡 Medium | ⏳ TODO | ? | ? |
+| 7 | Event sourcing loss | 🟣 Catastrophic | ⏳ TODO | ? | ? |
+| 8 | Adoption ceiling (UX) | 🟢 Low | ⏳ TODO | ? | ? |
+| 9 | Demurrage wrapper attack | 🟡 Medium | ⏳ TODO | ? | ? |
+| 10 | NATS entropy death | 🟣 Catastrophic | ⏳ TODO | ? | ? |
+| 11 | Entropy starvation (backing loss) | 🔴 Critical | ⏳ TODO | ? | ? |
+| 12 | Succession after founders die | 🔵 Long-term | ⏳ TODO | ? | ? |
+| 13 | Knowledge loss / dark age | 🔵 Long-term | ⏳ TODO | ? | ? |
+| 14 | Moral collapse of verifiers | 🔴 Critical | ⏳ TODO | ? | ? |
+| - | **Oracle removal** | - | ✅ COMPLETE | 0 | Transaction arch updated |
+
+**Severity Legend**:
+- 🟣 **Catastrophic**: System cannot recover, all value lost
+- 🔴 **Critical**: Major vulnerability, requires immediate mitigation
+- 🟠 **High**: Significant risk, prioritize for Phase 4
+- 🟡 **Medium**: Moderate risk, address in Phase 5+
+- 🟢 **Low**: Minor issue, cosmetic or long-term only
+- 🔵 **Long-term**: Existential (2050-2100 timeframe)
+
+---
+
+## 🛡️ Shared Resilience Checklist v1.0
+
+Many threats share common mitigation patterns. Use this checklist to avoid redundancy:
+
+### Infrastructure Resilience
+- [ ] **Multi-region deployment**: Services deployed in 3+ geographic regions (USA East, EU West, Asia Pacific)
+- [ ] **Automatic failover**: Failover triggers within 30-60 seconds of outage
+- [ ] **Circuit breaker**: Services cache critical state (last 1000 messages/events)
+- [ ] **Health monitoring**: Prometheus alerts for service degradation
+
+### Data Resilience  
+- [ ] **Immutable logs**: Events written to append-only storage (NATS JetStream)
+- [ ] **Long-term retention**: 10-year minimum retention policy configured
+- [ ] **Cold storage backup**: Weekly snapshots to S3 Glacier/Azure Archive
+- [ ] **Disaster recovery test**: Quarterly DR drills with documented procedures
+
+### Key Management
+- [ ] **Multi-sig custody**: Shamir Secret Sharing (5 shards, 3-of-5 threshold)
+- [ ] **Geographic distribution**: Key shards stored in separate jurisdictions
+- [ ] **Key rotation ceremony**: Documented procedure with 90-day notice
+- [ ] **Dead-man-switch**: Auto-trigger if key holders inactive >90 days
+
+### Transparency & Accountability
+- [ ] **Public canary statement**: Weekly cryptographic proof of non-compromise
+- [ ] **Verifier registry**: Public list of all verifiers (names, locations, reputation)
+- [ ] **Audit trail**: All critical actions logged immutably
+- [ ] **Whistleblower bounty**: 50% of slashed collateral for fraud reporting
+
+**Usage**: When reviewing threats, reference this checklist instead of repeating questions. Mark which items apply to each threat.
+
+---
+
+## 🔗 Task Interdependencies Map
+
+Understanding task dependencies prevents out-of-order execution and identifies critical path.
+
+```
+CRITICAL PATH (Before Mainnet):
+┌─────────────────────────────────────────────────────────┐
+│ Task 7 (Event Sourcing) ──────────┐                     │
+│ Task 10 (NATS Multi-Region) ──────┼──> Vault Ready      │
+│ Task 1 (Crypto Versioning) ───────┤                     │
+│ Task 14 (Verifier Oath) ──────────┘                     │
+└─────────────────────────────────────────────────────────┘
+
+PHASE 4 PATH (Post-Mainnet):
+Task 7 (Complete)
+  ├──> Task 4 (Vault Monitoring) ─┐
+  │                                ├──> Task 11 (Backing Monitor)
+  └──> Task 5 (Multi-Verifier) ───┘
+
+Task 1 (Crypto Complete)
+  └──> Task 14 (Verifier Slashing) ──> Task 5 (Multi-Verifier)
+
+Task 10 (NATS Complete)
+  └──> Task 2 (DistoDam Key Ceremony)
+
+META-TASKS SEQUENCE:
+Task 16 (Cross-Reference) ──> Task 17 (Action Plan) ──> Task 18 (Arch Docs)
+                                                              │
+                                                              └──> Task 19 (Final Review)
+                                                                     │
+                                                                     └──> Task 20 (Service Plans)
+
+LONG-TERM PATH (Phase 5+):
+Task 13 (Protocol Spec)
+  ├──> Task 12 (Foundation Charter)
+  └──> Task 3 (Governance Framework)
+```
+
+**Dependency Rules**:
+1. **No Vault implementation** until Tasks 7, 10, 14 complete (CRITICAL path)
+2. **Task 11 monitoring** must complete before Task 11 burn mechanism
+3. **Task 16** (cross-ref) must complete before Task 17 (action plan)
+4. **Task 18** (arch updates) must complete before Task 19 (final review)
+5. **Task 19** (final review) must complete before Task 20 (service plans)
 
 ---
 
@@ -220,17 +338,21 @@ This tracker coordinates a **comprehensive security audit** of RoboTorq's existi
 
 ### Task 7: Review Threat #7 (Event Sourcing Loss) Against Current Backup Strategy
 **Status**: ⏳ TODO  
+**Severity**: 🟣 Catastrophic  
 **Documents to Review**:
 - `src/vault/VAULT_IMPLEMENTATION_PLAN.md` - Event sourcing design (PostgreSQL)
 - `src/wallet/TRANSACTION_ARCHITECTURE.md` - Event sourcing (if any)
 - Docker compose configs - Database backup strategy
 
-**Questions to Answer**:
-- [ ] Is there NATS JetStream dual-write?
-- [ ] Are events written to immutable stream?
-- [ ] Is there 10-year retention configured?
-- [ ] Is there multi-region geo-replication (5+ regions)?
-- [ ] Is there disaster recovery test procedure?
+**Resilience Checklist Items** (See shared checklist above):
+- [ ] Immutable logs (NATS JetStream)
+- [ ] Long-term retention (10 years)
+- [ ] Cold storage backup
+- [ ] Multi-region deployment
+- [ ] Disaster recovery test
+
+**Critical Question**:
+- [ ] Is there NATS JetStream dual-write for all vault_events?
 
 **Expected Gaps**:
 - **CRITICAL**: Missing NATS JetStream immutable log
@@ -244,6 +366,11 @@ This tracker coordinates a **comprehensive security audit** of RoboTorq's existi
 - [ ] Add quarterly disaster recovery test to operations runbook
 - [ ] Update Vault architecture with event sourcing backup section
 - [ ] **Priority: CRITICAL** (implement before mainnet)
+
+**Acceptance Tests**:
+1. **Recovery Test**: Delete PostgreSQL → rebuild from JetStream → verify state matches
+2. **Failover Test**: Kill JetStream zone → reconnect <60s → no event loss
+3. **Replay Test**: Replay all events → deterministic state match (100% reproducibility)
 
 ---
 
@@ -307,16 +434,20 @@ This tracker coordinates a **comprehensive security audit** of RoboTorq's existi
 
 ### Task 10: Review Threat #10 (NATS Entropy Death) Against Current NATS Config
 **Status**: ⏳ TODO  
+**Severity**: 🟣 Catastrophic  
 **Documents to Review**:
 - `nats/nats-server.conf` - Current NATS configuration
 - `docker-compose.yaml` - NATS deployment
 - All service NATS connection code
 
-**Questions to Answer**:
-- [ ] Is there multi-region NATS cluster?
-- [ ] Is there automatic failover (>30s unreachable)?
+**Resilience Checklist Items** (See shared checklist above):
+- [ ] Multi-region deployment (NATS cluster)
+- [ ] Automatic failover (30s timeout)
+- [ ] Circuit breaker (services cache state)
+- [ ] Health monitoring
+
+**Additional Questions**:
 - [ ] Is there fallback message bus (Kafka/libp2p)?
-- [ ] Is there circuit-breaker (services cache state)?
 - [ ] Do services have `MessageBus` interface abstraction?
 
 **Expected Gaps**:
@@ -333,37 +464,68 @@ This tracker coordinates a **comprehensive security audit** of RoboTorq's existi
 - [ ] Update all service architectures with NATS failover section
 - [ ] **Priority: HIGH** (multi-region before mainnet)
 
+**Acceptance Tests**:
+1. **Partition Test**: Split NATS cluster → services reconnect <30s → no message loss
+2. **Zone Failure**: Kill entire AWS region → failover to EU → <60s recovery
+3. **Circuit Breaker**: Disconnect NATS → services use cached state → graceful degradation
+
 ---
 
 ### Task 11: Review Threat #11 (Entropy Starvation) Against Current Backing Monitoring
 **Status**: ⏳ TODO  
+**Severity**: 🔴 Critical  
 **Documents to Review**:
 - `src/mint/MINT_ARCHITECTURE.md` - Physical backing verification
 - `src/refinery/REFINERY_ARCHITECTURE.md` - kWh tracking
 - Prometheus metrics - Total kWh/year monitoring
 
+**Resilience Checklist Items** (See shared checklist above):
+- [ ] Health monitoring (Prometheus alerts)
+- [ ] Public transparency (dashboard)
+
 **Questions to Answer**:
 - [ ] Is there `BackingMonitor` service tracking total verified kWh/year?
 - [ ] Are there alerts for >20% backing drop?
-- [ ] Is there automatic supply contraction mechanism?
-- [ ] Is there proportional RT burn protocol?
-- [ ] Is there governance override (80% vote required)?
 - [ ] Is there public dashboard showing backing ratio?
 
 **Expected Gaps**:
 - Missing: BackingMonitor service
-- Missing: Automatic contraction rule (180-day threshold)
-- Missing: Proportional burn mechanism
+- Missing: Alert thresholds (>20% drop for 180 days)
 - Missing: Public transparency dashboard
 
 **Action Items to Create**:
 - [ ] Add `BackingMonitor` service (tracks rolling 365-day kWh total)
 - [ ] Implement alert: if kWh/year drops >20% for 180 days → publish `backing.emergency`
-- [ ] Design proportional burn protocol (burn RT from all wallets proportional to backing loss)
-- [ ] Add governance override (requires 80% validator vote to activate contraction)
 - [ ] Create public dashboard: "Total Verified kWh (Last 365 Days)" metric
+- [ ] Add governance override (requires 80% validator vote to activate contraction)
 - [ ] Update Mint architecture with backing monitoring section
-- [ ] Note: Implement monitoring now, defer burn mechanism to Phase 4+
+- [ ] **Priority: HIGH** (implement monitoring now, defer burn mechanism)
+
+**⚠️ GOVERNANCE CONSTRAINT - NOT AN IMPLEMENTATION TASK**:
+
+The **proportional burn mechanism** (burning RT from all wallets if backing drops) is a **protocol-breaking emergency action**. It should NOT be implemented as a regular feature.
+
+Instead:
+1. **Document as governance-level emergency protocol** (in `FOUNDATION_CHARTER.md`)
+2. **Hard-code a disable-by-default circuit breaker** (requires manual activation)
+3. **Require 90% cross-validator vote** (or 80% community referendum) to enable
+4. **Add constitutional limits**: Cannot activate without:
+   - 180-day sustained backing loss (>20%)
+   - Public transparency period (90 days)
+   - Emergency foundation vote
+   - Verifier consensus (3-of-5 minimum)
+
+**Rationale**: Proportional burn is too dangerous to automate. If implemented carelessly, a bug could destroy all value. This must be a **human-in-the-loop governance decision**, not automated code.
+
+**Implementation Plan**:
+- **Phase 4**: BackingMonitor service + alerts (monitoring only)
+- **Phase 5**: Document burn protocol in governance charter
+- **Phase 6+**: Implement burn mechanism with multiple safety interlocks (if ever needed)
+
+**Acceptance Tests** (Monitoring Only):
+1. **Alert Test**: Simulate 25% backing drop → alert fires within 5 minutes
+2. **Dashboard Test**: Public dashboard shows real-time kWh totals (updated hourly)
+3. **False Positive Test**: <20% drop → no alert (avoid noise)
 
 ---
 
@@ -680,22 +842,234 @@ This tracker coordinates a **comprehensive security audit** of RoboTorq's existi
 
 ---
 
+### Task 21: Economic Simulation Framework - Stress Testing Year 2100 Threats
+**Status**: ⏳ TODO  
+**Purpose**: Validate threat mitigations through Monte Carlo simulations and stress tests
+
+**Rationale**: Static analysis (Tasks 1-20) identifies gaps, but **simulations prove resilience** under extreme conditions. We need quantitative validation that our mitigations actually work.
+
+**Reference Document**: `research/SIMULATION_FRAMEWORK.md` (already exists)
+
+**Simulation Scenarios**:
+
+1. **Vault Success Disaster** (Threat #4):
+   - Simulate 30-day mass deposit event → 70% of RT vaulted
+   - Test: Does sigmoid cap prevent >65% lockup?
+   - Test: Does circuit-breaker trigger emergency withdraw flow?
+   - Expected: Sigmoid asymptote prevents >63% vaulting regardless of deposits
+
+2. **Demurrage Wrapper Attack** (Threat #9):
+   - Simulate 80% of users migrating to custodial exchange (no demurrage)
+   - Test: Does aged coin requirement prevent large wrapper withdrawals?
+   - Test: Do incentives re-align users back to native RT?
+   - Expected: Wrapper usage self-corrects below 20% due to demurrage advantage
+
+3. **Entropy Starvation** (Threat #11):
+   - Simulate sudden 50% drop in global robot activity (energy crisis)
+   - Test: Does BackingMonitor detect loss within 5 minutes?
+   - Test: Does alert propagate to governance within 1 hour?
+   - Expected: Early warning allows governance response before backing collapses
+
+4. **NATS Partitioning** (Threat #10):
+   - Simulate AWS region outage → 30% of network unreachable
+   - Test: Do services failover to backup regions within 60 seconds?
+   - Test: Is message loss <0.1%?
+   - Expected: Multi-region NATS prevents catastrophic failure
+
+5. **Quantum Attack** (Threat #1):
+   - Simulate 1% of signatures compromised by quantum computer
+   - Test: Does dual-verification mode detect compromised keys?
+   - Test: Does key rotation ceremony isolate damage?
+   - Expected: System detects attack, rotates keys, invalidates <1% of units
+
+**Implementation Approach**:
+
+Use **production services with synthetic inputs** (NOT abstract Python models):
+- Digger in `sim_mode=true` (1000x time compression)
+- Real Refinery, Mint, Vault services
+- Synthetic contract generation (10 years simulated in 3.65 days)
+- Result: 100% fidelity to production behavior
+
+**Tools**:
+- Python: `scripts/economic_analysis.py` (already in SIMULATION_FRAMEWORK.md)
+- Docker Compose: Multi-agent fleet (1000 robots)
+- Prometheus: Metrics collection
+- PostgreSQL: Ledger analysis
+
+**Deliverables**:
+1. **Monte Carlo Results** (100 scenarios):
+   - CSV exports: RT supply, velocity, Gini coefficient
+   - Confidence intervals: Mean ± 2σ for all metrics
+   
+2. **Stress Test Reports**:
+   - Pass/Fail for each scenario
+   - Recovery time measurements (MTTR)
+   - Failure mode analysis
+   
+3. **Academic Paper** (Optional):
+   - LaTeX source + compiled PDF
+   - Target: Journal of Economic Dynamics & Control
+   - Title: "Demurrage Currency Velocity: A Monte Carlo Analysis of RoboTorq"
+
+**Timeline**: 6 weeks (parallelizable with other tasks)
+
+**Dependencies**:
+- Task 7 complete (Event sourcing needed for replay)
+- Task 10 complete (Multi-region NATS needed for partition testing)
+- Task 11 complete (BackingMonitor needed for entropy starvation test)
+
+**Acceptance Criteria**:
+1. ✅ All 5 stress scenarios pass with <5% degradation
+2. ✅ 100 Monte Carlo runs complete in <7 days
+3. ✅ Results reproducible (deterministic random seeds)
+4. ✅ Data exported to CSV/Parquet for external validation
+
+**Priority**: MEDIUM (Phase 4+, valuable but not blocking mainnet)
+
+---
+
+### Task 22: Annual Global Security Audit Ceremony - Cultural Defense Against Moral Collapse
+**Status**: ⏳ TODO  
+**Purpose**: Institutionalize security rituals to combat Threats #13 (knowledge loss) and #14 (verifier moral collapse)
+
+**Rationale**: Technical mitigations (slashing, oaths) are necessary but insufficient. **Culture must reinforce protocol integrity** over decades. Annual ceremonies create accountability, knowledge transfer, and shared values.
+
+**Inspiration**: 
+- Bitcoin Core Dev meetings (technical alignment)
+- Nuclear safety protocols (high-stakes ritual compliance)
+- Japanese tea ceremony (precision through repetition)
+
+**Ceremony Components**:
+
+#### 1. Verifier Oath Renewal (Annual)
+- **All verifiers** cryptographically sign renewed oath:
+  ```
+  "I, [NAME], swear I have not accepted bribes.
+   All work logs I verified in [YEAR] are true to my knowledge.
+   I understand false oaths = 100% collateral loss + permanent blacklist."
+  ```
+- **On-chain commitment**: Oath hashes stored permanently in DistoDam
+- **Public registry**: Names, locations, oath signatures published
+- **Accountability**: Previous year's oath audited before renewal allowed
+
+#### 2. Knowledge Transfer Bootcamp (3-Day Workshop)
+- **Teach 10 new people/year** to re-implement protocol from canonical spec
+- **Hands-on exercises**:
+  - Build merkle tree from JouleTorqUnits
+  - Verify Falcon-1024 signature
+  - Implement Weibull flow formula (k=0.5)
+  - Reconstruct vault state from event log
+- **Graduation requirement**: Re-implement one core component (Refinery, Mint, Vault) in new language
+- **Retention**: Students become protocol experts, eligible for future verifier roles
+
+#### 3. Disaster Recovery Drill (Live Simulation)
+- **Full system teardown**: Delete all PostgreSQL databases
+- **Recovery from JetStream**: Rebuild entire ledger from NATS events
+- **Success criteria**: Deterministic state match (100% reproducibility)
+- **Measured metrics**: Recovery time (target: <6 hours), data loss (target: 0%)
+- **Debrief**: Document failures, update runbooks
+
+#### 4. Key Rotation Ceremony (Optional, if triggered)
+- **Shamir shard reconstitution**: 3-of-5 key holders physically present
+- **Offline signing**: Air-gapped laptop generates new keys
+- **Witness verification**: Independent auditors watch entire process
+- **Public announcement**: New public keys published 90 days before activation
+- **Dual-verification period**: Old + new keys both valid for 180 days
+
+#### 5. Moral Integrity Session (Ethics Discussion)
+- **Panel discussion**: "Why robotic work backing is sacred trust"
+- **Historical case studies**: Failures of other systems (fiat inflation, crypto scams)
+- **Verifier testimonials**: Personal stories of integrity under pressure
+- **Whistleblower recognition**: Honor past fraud reporters (if any)
+- **Cultural reinforcement**: "Integrity > Profit" ethos
+
+#### 6. Public Transparency Report
+- **Published metrics**:
+  - Total kWh verified (last 365 days)
+  - Verifier performance (accuracy, response time)
+  - Slash events (if any, with full details)
+  - Backing ratio (RT supply / verified kWh)
+- **Open Q&A**: Community asks verifiers questions
+- **Commitment**: Next year's improvement goals
+
+#### 7. Succession Planning Review (Board Elections)
+- **25-year term rotation**: 1-2 board seats up for election
+- **Proof-of-physical-robot-stake voting**: Only kWh producers vote (weighted by verified work)
+- **Candidate requirements**:
+  - 5+ years in RoboTorq ecosystem
+  - Completed Knowledge Transfer Bootcamp
+  - No conflicts of interest
+- **Constitutional limits**: Board cannot change core parameters without 90% community vote
+
+**Logistics**:
+
+- **Frequency**: Annual (same month every year, e.g., October = "RoboTorq Integrity Month")
+- **Location**: Rotating (USA, EU, Asia-Pacific) to prevent geographic capture
+- **Duration**: 5-day intensive (3 days bootcamp, 1 day DR drill, 1 day ceremony)
+- **Attendance**: 
+  - Mandatory: All verifiers (100% attendance or forfeit oath)
+  - Invited: 10 bootcamp students, 5 auditors, 3 journalists, community observers
+- **Cost**: Funded by transaction fees (0.1% allocation to "Security Ceremony Fund")
+- **Recording**: Full video archive (public), transcripts published
+
+**Deliverables**:
+1. **Annual Report**: "Year 2100 Security Audit [YEAR]"
+2. **Oath Registry**: Updated list of verified signers
+3. **Bootcamp Graduates**: 10 new protocol experts/year
+4. **DR Runbook**: Updated procedures based on drill learnings
+5. **Transparency Report**: Public-facing metrics + Q&A transcript
+
+**Timeline**: 
+- **Phase 4 (2026)**: Design ceremony framework, draft oath template
+- **Phase 5 (2027)**: First annual ceremony (pilot run)
+- **Long-term (2028+)**: Established annual tradition
+
+**Dependencies**:
+- Task 14 (Verifier Oath) must define oath format first
+- Task 12 (Foundation Charter) defines board election rules
+- Task 13 (Canonical Protocol Spec) needed for bootcamp curriculum
+
+**Acceptance Criteria**:
+1. ✅ 100% verifier attendance (or replacement verifiers appointed)
+2. ✅ 10 bootcamp graduates pass re-implementation test
+3. ✅ DR drill completes in <6 hours with 0% data loss
+4. ✅ Public transparency report published within 30 days
+5. ✅ Community satisfaction >80% (post-ceremony survey)
+
+**Threat Mitigation Mapping**:
+- **Threat #14 (Moral Collapse)**: Oath renewal + public accountability
+- **Threat #13 (Knowledge Loss)**: Bootcamp ensures 10 new experts/year = 200 experts by 2047
+- **Threat #12 (Succession)**: Board elections prevent founder lock-in
+- **Threat #7 (Event Sourcing Loss)**: DR drills validate backup strategy
+
+**Priority**: MEDIUM (Phase 5+, cultural defense builds over time)
+
+---
+
 ## 📊 Progress Tracking
 
 ### Completion Metrics
-- **Total Tasks**: 20
+- **Total Tasks**: 22 (14 threat reviews + 8 meta-tasks)
 - **Completed**: 0
 - **In Progress**: 0
 - **Blocked**: 0
-- **Not Started**: 20
+- **Not Started**: 22
 
 ### Critical Path Items (Must Complete Before Mainnet)
 1. ✅ Oracle removal (already done in Transaction arch)
-2. ⏳ Task 7: NATS JetStream event sourcing backup
-3. ⏳ Task 10: Multi-region NATS cluster
-4. ⏳ Task 1: Crypto versioning documentation
-5. ⏳ Task 14: On-chain oath requirement for verifiers
-6. ⏳ Task 11: BackingMonitor service (monitoring only)
+2. ⏳ Task 7: NATS JetStream event sourcing backup (🟣 Catastrophic)
+3. ⏳ Task 10: Multi-region NATS cluster (🟣 Catastrophic)
+4. ⏳ Task 1: Crypto versioning documentation (🔴 Critical)
+5. ⏳ Task 14: On-chain oath requirement for verifiers (🔴 Critical)
+6. ⏳ Task 11: BackingMonitor service - monitoring only (🔴 Critical)
+
+**Severity Breakdown**:
+- 🟣 Catastrophic: 2 tasks (7, 10) - **CANNOT GO TO MAINNET WITHOUT THESE**
+- 🔴 Critical: 4 tasks (1, 5, 11, 14) - **HIGH PRIORITY FOR MAINNET**
+- 🟠 High: 2 tasks (2, 4) - Phase 4
+- 🟡 Medium: 3 tasks (3, 6, 9) - Phase 5+
+- 🟢 Low: 1 task (8) - Phase 5+
+- 🔵 Long-term: 2 tasks (12, 13) - 2050-2100
 
 ### Estimated Timeline
 - **Tasks 1-10** (Original threat reviews): 3-5 days
@@ -706,22 +1080,38 @@ This tracker coordinates a **comprehensive security audit** of RoboTorq's existi
 - **Task 18** (Architecture updates): 3-4 days
 - **Task 19** (Final review): 1 day
 - **Task 20** (Service-specific plans): 3-5 days (parallelizable)
+- **Task 21** (Simulation framework): 6 weeks (parallelizable, Phase 4+)
+- **Task 22** (Annual security ritual): 5 days/year (Phase 5+, recurring)
 
-**Total**: ~16-21 working days to complete comprehensive security review
+**Total**: ~16-21 working days for critical path (Tasks 1-20)  
+**Extended**: +6 weeks for simulations (Task 21, can run in parallel)  
+**Recurring**: 5 days/year for security ceremonies (Task 22, starts Phase 5)
 
 ---
 
 ## 🎯 Success Criteria
 
 - [ ] All 14 threats reviewed against existing architecture
-- [ ] Gaps documented for each threat
-- [ ] Action items created and prioritized
+- [ ] Gaps documented for each threat with severity levels (Catastrophic → Low)
+- [ ] Action items created and prioritized (CRITICAL path identified)
 - [ ] CRITICAL items have implementation plans (Threats #7, #10, #14, #11 monitoring)
 - [ ] HIGH priority items scheduled for Phase 4 (Threats #1, #5, #11 burn, #13)
 - [ ] Architecture docs updated with mitigation strategies
 - [ ] Service-specific implementation plans created (7 services)
 - [ ] Consolidated action plan approved by stakeholders
+- [ ] Interdependencies mapped (no out-of-order execution)
+- [ ] Acceptance tests defined for all critical tasks
+- [ ] Simulation framework designed (Monte Carlo + stress tests)
+- [ ] Annual security ceremony protocol documented
 - [ ] Ready to proceed with Vault implementation
+
+**Enhanced Success Metrics**:
+- ✅ Shared Resilience Checklist reduces redundancy across tasks
+- ✅ 1-page Simple View enables stakeholder alignment
+- ✅ Task dependencies prevent execution errors
+- ✅ Governance constraints identified (proportional burn = human-in-loop, not automated)
+- ✅ Cultural defenses planned (Task 22 ceremonies prevent moral collapse)
+- ✅ Economic validation planned (Task 21 simulations prove resilience)
 
 ---
 
