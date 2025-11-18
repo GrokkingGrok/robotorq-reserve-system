@@ -9,7 +9,7 @@ import json
 import sys
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 # Add parent directories to path
@@ -62,8 +62,8 @@ async def test_contract_funder_valid_contract():
         "status": "approved",
         "robo_stake": 0.05,
         "digger_id": "digger-001",
-        "approved_at": datetime.utcnow().isoformat() + "Z",
-        "created_at": datetime.utcnow().isoformat() + "Z"
+        "approved_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat()
     }
     
     print_step(f"Publishing approved contract: {approved_contract['id']}")

@@ -9,7 +9,7 @@ import json
 import sys
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 # Add parent directories to path
@@ -59,7 +59,7 @@ async def test_mint_event_receiver_valid_event():
             }
         ],
         "ingots_processed": 2,
-        "timestamp": datetime.utcnow().isoformat() + "Z"
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
     
     print_step(f"Publishing MintEvent: {mint_event['batch_id']}")
@@ -230,7 +230,7 @@ async def test_mint_event_receiver_multiple_events():
                 }
             ],
             "ingots_processed": 1,
-            "timestamp": datetime.utcnow().isoformat() + "Z"
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         await nc.publish(MINT_BATCHES_TOPIC, json.dumps(event).encode())
     
