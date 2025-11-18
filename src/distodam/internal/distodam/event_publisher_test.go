@@ -121,34 +121,34 @@ func TestPublishContractFunded_Success(t *testing.T) {
 	logger.Info("contract funded event serialization test passed")
 }
 
-// TestPublishUBDFunded_Success tests successful UBD funding event publish
-func TestPublishUBDFunded_Success(t *testing.T) {
+// TestPublishUBDDistributed_Success tests successful UBD distribution event publish
+func TestPublishUBDDistributed_Success(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	event := &UBDFundedEvent{
+	event := &UBDDistributionEvent{
 		EventID:      "evt-ubd-001",
+		WalletID:     "wallet-abc-123",
 		AmountRT:     0.5,
-		RecipientID:  "citizen-123",
 		Timestamp:    time.Now(),
 		DistoBalance: 100.0,
+		Reason:       "periodic_distribution",
 	}
 
 	// Test JSON serialization
 	data, err := json.Marshal(event)
 	require.NoError(t, err)
 
-	var decoded UBDFundedEvent
+	var decoded UBDDistributionEvent
 	err = json.Unmarshal(data, &decoded)
 	require.NoError(t, err)
 
 	assert.Equal(t, event.EventID, decoded.EventID)
+	assert.Equal(t, event.WalletID, decoded.WalletID)
 	assert.Equal(t, event.AmountRT, decoded.AmountRT)
-	assert.Equal(t, event.RecipientID, decoded.RecipientID)
+	assert.Equal(t, event.Reason, decoded.Reason)
 
-	logger.Info("UBD funded event serialization test passed")
-}
-
-// TestEventPublisherInterface tests that EventPublisher can be mocked
+	logger.Info("UBD distribution event serialization test passed")
+} // TestEventPublisherInterface tests that EventPublisher can be mocked
 func TestEventPublisherInterface(t *testing.T) {
 	// This test demonstrates that we should create a Publisher interface
 	// for dependency injection in Phase 7+
@@ -281,41 +281,44 @@ func TestContractFundedEventValidation(t *testing.T) {
 	}
 }
 
-// TestUBDFundedEventValidation tests required fields in UBDFundedEvent
-func TestUBDFundedEventValidation(t *testing.T) {
+// TestUBDDistributionEventValidation tests required fields in UBDDistributionEvent
+func TestUBDDistributionEventValidation(t *testing.T) {
 	tests := []struct {
 		name  string
-		event UBDFundedEvent
+		event UBDDistributionEvent
 		valid bool
 	}{
 		{
-			name: "valid UBD event",
-			event: UBDFundedEvent{
+			name: "valid UBD distribution event",
+			event: UBDDistributionEvent{
 				EventID:      "evt-ubd-001",
+				WalletID:     "wallet-001",
 				AmountRT:     0.5,
-				RecipientID:  "citizen-001",
 				Timestamp:    time.Now(),
 				DistoBalance: 100.0,
+				Reason:       "periodic_distribution",
 			},
 			valid: true,
 		},
 		{
 			name: "missing event_id",
-			event: UBDFundedEvent{
+			event: UBDDistributionEvent{
+				WalletID:     "wallet-002",
 				AmountRT:     0.5,
-				RecipientID:  "citizen-002",
 				Timestamp:    time.Now(),
 				DistoBalance: 100.0,
+				Reason:       "manual",
 			},
 			valid: false,
 		},
 		{
-			name: "missing recipient_id",
-			event: UBDFundedEvent{
+			name: "missing wallet_id",
+			event: UBDDistributionEvent{
 				EventID:      "evt-ubd-002",
 				AmountRT:     0.5,
 				Timestamp:    time.Now(),
 				DistoBalance: 100.0,
+				Reason:       "periodic_distribution",
 			},
 			valid: false,
 		},
@@ -328,21 +331,19 @@ func TestUBDFundedEventValidation(t *testing.T) {
 			require.NoError(t, err)
 
 			// Deserialize
-			var decoded UBDFundedEvent
+			var decoded UBDDistributionEvent
 			err = json.Unmarshal(data, &decoded)
 			require.NoError(t, err)
 
 			// Validate required fields
 			isValid := decoded.EventID != "" &&
-				decoded.AmountRT > 0 &&
-				decoded.RecipientID != ""
+				decoded.WalletID != "" &&
+				decoded.AmountRT > 0
 
 			assert.Equal(t, tt.valid, isValid, "validation mismatch for %s", tt.name)
 		})
 	}
-}
-
-// TestFlushTimeout tests that Flush respects context timeout
+} // TestFlushTimeout tests that Flush respects context timeout
 func TestFlushTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()

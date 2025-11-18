@@ -238,18 +238,18 @@ func NewVaultMetrics() *VaultMetrics {
 			Help: "Total number of NATS publish retries",
 		}),
 
-	// Performance
-	FundingLatencySeconds: promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "distodam_funding_latency_seconds",
-		Help:    "Time from contract received to funded published",
-		Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
-	}),
-	IngotStakeProcessingSeconds: promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "distodam_ingot_stake_processing_seconds",
-		Help:    "Time to process a single ingot stake",
-		Buckets: prometheus.ExponentialBuckets(0.0001, 2, 10), // 0.1ms to ~100ms
-	}),
-}
+		// Performance
+		FundingLatencySeconds: promauto.NewHistogram(prometheus.HistogramOpts{
+			Name:    "distodam_funding_latency_seconds",
+			Help:    "Time from contract received to funded published",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
+		}),
+		IngotStakeProcessingSeconds: promauto.NewHistogram(prometheus.HistogramOpts{
+			Name:    "distodam_ingot_stake_processing_seconds",
+			Help:    "Time to process a single ingot stake",
+			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 10), // 0.1ms to ~100ms
+		}),
+	}
 }
 
 // ReceiverMetrics holds Prometheus metrics for NATS event receivers
@@ -265,19 +265,23 @@ type ReceiverMetrics struct {
 	StakeDepositedRTTotal           prometheus.Counter
 
 	// ContractFunder metrics
-	ContractsReceivedTotal              prometheus.Counter
-	ContractsProcessedTotal             prometheus.Counter
-	ContractParseErrorsTotal            prometheus.Counter
-	ContractValidationErrorsTotal       prometheus.Counter
-	ContractsFundedTotal                prometheus.Counter
-	ContractsFundedRTTotal              prometheus.Counter
-	ContractsFundedWithLoanTotal        prometheus.Counter
-	ContractsRejectedInsufficientFunds  prometheus.Counter
-	ContractFundingErrorsTotal          prometheus.Counter
+	ContractsReceivedTotal             prometheus.Counter
+	ContractsProcessedTotal            prometheus.Counter
+	ContractParseErrorsTotal           prometheus.Counter
+	ContractValidationErrorsTotal      prometheus.Counter
+	ContractsFundedTotal               prometheus.Counter
+	ContractsFundedRTTotal             prometheus.Counter
+	ContractsFundedWithLoanTotal       prometheus.Counter
+	ContractsRejectedInsufficientFunds prometheus.Counter
+	ContractFundingErrorsTotal         prometheus.Counter
 
-	// UBDFunder metrics (future)
-	UBDRequestsReceivedTotal  prometheus.Counter
-	UBDRequestsProcessedTotal prometheus.Counter
+	// UBDRegistryReceiver metrics (future)
+	UBDWalletsRegisteredTotal prometheus.Counter
+	UBDWalletsActiveTotal     prometheus.Gauge
+
+	// UBD distribution metrics (future)
+	UBDDistributionsTotal prometheus.Counter
+	UBDDistributedRTTotal prometheus.Counter
 }
 
 // NewReceiverMetrics creates a new ReceiverMetrics instance
@@ -355,14 +359,24 @@ func NewReceiverMetrics() *ReceiverMetrics {
 			Help: "Total number of contract funding errors",
 		}),
 
-		// UBDFunder (future)
-		UBDRequestsReceivedTotal: promauto.NewCounter(prometheus.CounterOpts{
-			Name: "distodam_ubd_requests_received_total",
-			Help: "Total number of UBD requests received from NATS",
+		// UBDRegistryReceiver (future)
+		UBDWalletsRegisteredTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_ubd_wallets_registered_total",
+			Help: "Total number of UBD wallets registered",
 		}),
-		UBDRequestsProcessedTotal: promauto.NewCounter(prometheus.CounterOpts{
-			Name: "distodam_ubd_requests_processed_total",
-			Help: "Total number of UBD requests successfully processed",
+		UBDWalletsActiveTotal: promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "distodam_ubd_wallets_active_total",
+			Help: "Current number of active UBD wallets",
+		}),
+
+		// UBD distributions (future)
+		UBDDistributionsTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_ubd_distributions_total",
+			Help: "Total number of UBD distributions made",
+		}),
+		UBDDistributedRTTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "distodam_ubd_distributed_rt_total",
+			Help: "Total RT distributed as UBD",
 		}),
 	}
 }

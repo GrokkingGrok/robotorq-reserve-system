@@ -32,11 +32,11 @@ type Config struct {
 	NatsURL string // Default: "nats://nats:4222"
 
 	// NATS topics
-	MintBatchesTopic       string // Default: "mint.batches"
-	ContractsApprovedTopic string // Default: "contracts.approved"
-	ContractsFundedTopic   string // Default: "contracts.funded"
-	UBDRequestsTopic       string // Default: "ubd.requests"
-	UBDFundedTopic         string // Default: "ubd.funded"
+	MintBatchesTopic          string // Default: "mint.batches"
+	ContractsApprovedTopic    string // Default: "contracts.approved"
+	ContractsFundedTopic      string // Default: "contracts.funded"
+	UBDWalletRegisteredTopic  string // Default: "ubd.wallet.registered"
+	UBDDistributedTopic       string // Default: "ubd.distributed"
 
 	// Vault genesis bootstrap (Phase 6 - internal state initialization)
 	InitialStakeVaultRT         float64 // Default: 0.0
@@ -112,8 +112,8 @@ func Load() (*Config, error) {
 		MintBatchesTopic:         getEnv("MINT_BATCHES_TOPIC", "mint.batches"),
 		ContractsApprovedTopic:   getEnv("CONTRACTS_APPROVED_TOPIC", "contracts.approved"),
 		ContractsFundedTopic:     getEnv("CONTRACTS_FUNDED_TOPIC", "contracts.funded"),
-		UBDRequestsTopic:         getEnv("UBD_REQUESTS_TOPIC", "ubd.requests"),
-		UBDFundedTopic:           getEnv("UBD_FUNDED_TOPIC", "ubd.funded"),
+		UBDWalletRegisteredTopic: getEnv("UBD_WALLET_REGISTERED_TOPIC", "ubd.wallet.registered"),
+		UBDDistributedTopic:      getEnv("UBD_DISTRIBUTED_TOPIC", "ubd.distributed"),
 		InitialStakeVaultRT:      0.0,
 		InitialDistoVaultRT:      0.0,
 		GenesisBootstrapStakePct: 0.95,
@@ -464,8 +464,8 @@ func (c *Config) String() string {
 		c.MintBatchesTopic,
 		c.ContractsApprovedTopic,
 		c.ContractsFundedTopic,
-		c.UBDRequestsTopic,
-		c.UBDFundedTopic,
+		c.UBDWalletRegisteredTopic,
+		c.UBDDistributedTopic,
 		c.InitialStakeVaultRT,
 		c.InitialDistoVaultRT,
 		c.GenesisBootstrapStakePct*100,

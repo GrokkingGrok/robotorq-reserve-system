@@ -51,14 +51,25 @@ type Contract struct {
 	VaultSource string    `json:"vault_source,omitempty"` // "stake_vault" or "disto_vault_loan"
 }
 
-// UBDRequest represents a UBD distribution request
-// Published to: ubd.requests (from Wallet service - future)
-type UBDRequest struct {
-	RequestID   string    `json:"request_id"`   // Unique request identifier
-	RecipientID string    `json:"recipient_id"` // Member wallet ID
-	AmountRT    float64   `json:"amount_rt"`    // Requested RT amount
-	Timestamp   time.Time `json:"timestamp"`    // Request time
-	Reason      string    `json:"reason"`       // "monthly_ubi", "bonus", "adjustment"
+// UBDWalletRegistration represents a wallet registered for UBD distributions
+// Published to: ubd.wallet.registered (from Wallet service - future)
+type UBDWalletRegistration struct {
+	WalletID     string    `json:"wallet_id"`     // Wallet address
+	MemberID     string    `json:"member_id"`     // Member identifier
+	RegisteredAt time.Time `json:"registered_at"` // Registration timestamp
+	Active       bool      `json:"active"`        // Whether wallet is active for distributions
+}
+
+// UBDDistributionEvent represents a UBD payment event
+// Published to: ubd.distributed (from DistoDam - future)
+// This is what DistoDam publishes when it distributes from DistoVault
+type UBDDistributionEvent struct {
+	EventID      string    `json:"event_id"`       // Unique event identifier
+	WalletID     string    `json:"wallet_id"`      // Recipient wallet
+	AmountRT     float64   `json:"amount_rt"`      // Amount distributed
+	Timestamp    time.Time `json:"timestamp"`      // Distribution time
+	DistoBalance float64   `json:"disto_balance"`  // DistoVault balance after distribution
+	Reason       string    `json:"reason"`         // "periodic_distribution", "manual", etc.
 }
 
 // ValidateMintEvent checks if a MintEvent is valid for processing

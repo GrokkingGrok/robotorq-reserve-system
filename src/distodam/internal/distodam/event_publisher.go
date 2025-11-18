@@ -45,15 +45,6 @@ type ContractFundedEvent struct {
 	VaultRatio float64   `json:"vault_ratio"`       // StakeVault / DistoVault ratio
 }
 
-// UBDFundedEvent represents a UBD distribution event
-type UBDFundedEvent struct {
-	EventID      string    `json:"event_id"`      // Unique event ID
-	AmountRT     float64   `json:"amount_rt"`     // Amount distributed in RT
-	RecipientID  string    `json:"recipient_id"`  // UBD recipient
-	Timestamp    time.Time `json:"timestamp"`     // When distribution occurred
-	DistoBalance float64   `json:"disto_balance"` // DistoVault balance after distribution
-}
-
 // PublishContractFunded publishes a contract funding event to NATS
 func (ep *EventPublisher) PublishContractFunded(ctx context.Context, event *ContractFundedEvent) error {
 	topic := "contracts.funded"
@@ -68,13 +59,13 @@ func (ep *EventPublisher) PublishContractFunded(ctx context.Context, event *Cont
 	return ep.publishWithRetry(ctx, topic, event)
 }
 
-// PublishUBDFunded publishes a UBD distribution event to NATS
-func (ep *EventPublisher) PublishUBDFunded(ctx context.Context, event *UBDFundedEvent) error {
-	topic := "ubd.funded"
+// PublishUBDDistributed publishes a UBD distribution event to NATS
+func (ep *EventPublisher) PublishUBDDistributed(ctx context.Context, event *UBDDistributionEvent) error {
+	topic := "ubd.distributed"
 
-	ep.logger.Info("publishing UBD funded event",
+	ep.logger.Info("publishing UBD distribution event",
 		"event_id", event.EventID,
-		"recipient_id", event.RecipientID,
+		"wallet_id", event.WalletID,
 		"amount_rt", event.AmountRT,
 		"topic", topic)
 
