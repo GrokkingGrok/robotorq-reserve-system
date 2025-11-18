@@ -1284,14 +1284,24 @@ Use **production services with synthetic inputs** (NOT abstract Python models):
 
 ---
 
+### Task 25: Create Service-Specific Implementation Plans
+**Status**: ⏳ TODO  
+**Purpose**: Document how each service addresses Year 2100 threats
+
+Refer to `TASK_25_SERVICE_PLANS.md` for complete template and guidance.
+
+**Services**: Vault, Wallet, Mint, Refinery, DistoDam, BidNet, Digger, Trust, Printer, Simulation (10 total)
+
+---
+
 ## 📊 Progress Tracking
 
 ### Completion Metrics
-- **Total Tasks**: 24 (14 threat reviews + 10 meta-tasks)
+- **Total Tasks**: 25 (14 threat reviews + 11 meta-tasks)
 - **Completed**: 0
 - **In Progress**: 0
 - **Blocked**: 0
-- **Not Started**: 24
+- **Not Started**: 25
 
 ### Critical Path Items (Must Complete Before Mainnet)
 1. ✅ Oracle removal (already done in Transaction arch)
@@ -1317,16 +1327,18 @@ Use **production services with synthetic inputs** (NOT abstract Python models):
 - **Task 17** (Action plan): 1 day
 - **Task 18** (Architecture updates): 3-4 days
 - **Task 19** (Final review): 1 day
-- **Task 20** (Service-specific plans): 4-6 days (parallelizable, now 9 services)
+- **Task 20** (Service-specific plans): 4-6 days (parallelizable, now 10 services)
 - **Task 21** (Simulation framework): 6 weeks (parallelizable, Phase 4+)
 - **Task 22** (Annual security ritual): 5 days/year (Phase 5+, recurring)
 - **Task 23** (Printer service review): 2 days (Phase 5+, LOW priority)
 - **Task 24** (Trust service review): 3 days (Phase 4, HIGH priority)
+- **Task 25** (Service implementation plans): 5-7 days (parallelizable, 10 services)
 
 **Total**: ~18-24 working days for critical path (Tasks 1-20, 24)  
 **Extended**: +6 weeks for simulations (Task 21, can run in parallel)  
 **Recurring**: 5 days/year for security ceremonies (Task 22, starts Phase 5)  
 **Optional**: Task 23 (Printer) deferred to Phase 5+ (not blocking mainnet)
+**Service Plans**: Task 25 (5-7 days) creates detailed implementation roadmaps
 
 ---
 
@@ -1338,7 +1350,7 @@ Use **production services with synthetic inputs** (NOT abstract Python models):
 - [ ] CRITICAL items have implementation plans (Threats #7, #10, #14, #11 monitoring)
 - [ ] HIGH priority items scheduled for Phase 4 (Threats #1, #5, #11 burn, #13)
 - [ ] Architecture docs updated with mitigation strategies
-- [ ] Service-specific implementation plans created (7 services)
+- [ ] Service-specific implementation plans created (10 services via Task 25)
 - [ ] Consolidated action plan approved by stakeholders
 - [ ] Interdependencies mapped (no out-of-order execution)
 - [ ] Acceptance tests defined for all critical tasks

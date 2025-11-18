@@ -18,7 +18,8 @@ RoboTorq is **NOT** a cryptocurrency—it's a NATS-based distributed system wher
 - **No gas fees**: Transaction fees fund operations (demurrage)
 
 **Critical Reading**:
-1. `DISTODAM.md`: Overall SPRINT architecture
+1. `VAULT_IMPLEMENTATION_PLAN.md`: Overall SPRINT architecture
+    - `src/vault/VAULT_ARCHITECTURE.md` also serves as doc template for all docs created while implementing the plan
 2. `BRANCHING.md`: Git workflow (`v0` baseline, `feature/*` branches)
 3. **`port mapping/PORT_MAPPINGS.md`**: **MANDATORY** - Check BEFORE any port changes
 4. Service-specific architecture docs:
