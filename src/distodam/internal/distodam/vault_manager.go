@@ -95,11 +95,6 @@ func (vm *VaultManager) FundContract(contractID string, amountRT float64) error 
 			"contract_id", contractID,
 			"amount_rt", amountRT)
 
-		if vm.metrics != nil {
-			vm.metrics.ContractsFundedTotal.Inc()
-			vm.metrics.ContractsFundedRoboTotal.Add(amountRT)
-		}
-
 		return nil
 	}
 
@@ -122,10 +117,6 @@ func (vm *VaultManager) FundContract(contractID string, amountRT float64) error 
 			"stake_balance_rt", stakeBalance,
 			"disto_balance_rt", distoBalance,
 			"shortfall_rt", shortfall)
-
-		if vm.metrics != nil {
-			vm.metrics.ContractsRejectedInsufficientFunds.Inc()
-		}
 
 		return fmt.Errorf("insufficient funds: requested %.6f RT, StakeVault %.6f RT, DistoVault %.6f RT (shortfall %.6f RT)",
 			amountRT, stakeBalance, distoBalance, shortfall)
@@ -181,14 +172,8 @@ func (vm *VaultManager) FundContract(contractID string, amountRT float64) error 
 		"loan_amount_rt", shortfall,
 		"torq_bump_requested", loan.TorqBumpRequested)
 
-	if vm.metrics != nil {
-		vm.metrics.ContractsFundedTotal.Inc()
-		vm.metrics.ContractsFundedRoboTotal.Add(amountRT)
-		vm.metrics.ContractsFundedWithLoan.Inc()
-
-		if loan.TorqBumpRequested {
-			vm.metrics.TorqBumpRequestsTotal.Inc()
-		}
+	if vm.metrics != nil && loan.TorqBumpRequested {
+		vm.metrics.TorqBumpRequestsTotal.Inc()
 	}
 
 	return nil

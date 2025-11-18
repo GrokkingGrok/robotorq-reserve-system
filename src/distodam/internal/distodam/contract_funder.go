@@ -200,9 +200,6 @@ func (cf *ContractFunder) handleContract(msg *nats.Msg) {
 	cf.receiverMetrics.ContractsFundedTotal.Inc()
 	cf.receiverMetrics.ContractsFundedRTTotal.Add(contract.RoboStake)
 
-	cf.vaultMetrics.ContractsFundedTotal.Inc()
-	cf.vaultMetrics.ContractsFundedRoboTotal.Add(contract.RoboStake)
-
 	duration := time.Since(startTime).Seconds()
 	cf.vaultMetrics.FundingLatencySeconds.Observe(duration)
 

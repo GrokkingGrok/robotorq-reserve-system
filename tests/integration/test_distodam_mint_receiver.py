@@ -7,10 +7,20 @@ Tests NATS subscription to mint.batches and StakeVault deposits
 import asyncio
 import json
 import sys
+import os
 import time
 from datetime import datetime
-sys.path.append('tests/fixtures')
-from helpers import *
+from typing import Optional
+
+# Add parent directories to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'fixtures'))
+
+from fixtures.helpers import (
+    print_section, print_step, print_success, print_error, print_warning,
+    check_docker_container, get_docker_logs, Colors
+)
+from nats.aio.client import Client as NATS
 
 NATS_URL = "nats://localhost:4222"
 MINT_BATCHES_TOPIC = "mint.batches"
@@ -260,7 +270,7 @@ async def fetch_metrics(url: str) -> Optional[str]:
         return None
 
 
-def extract_metric(metrics: str, metric_name: str) -> Optional[str]:
+def extract_metric(metrics: Optional[str], metric_name: str) -> Optional[str]:
     """Extract metric value from Prometheus text format"""
     if not metrics:
         return None

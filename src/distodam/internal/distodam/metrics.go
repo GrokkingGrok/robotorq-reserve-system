@@ -43,12 +43,8 @@ type VaultMetrics struct {
 	InflowsRoboTotal        prometheus.Counter
 	InflowsInvalid          prometheus.Counter
 
-	// Contract funding
-	ContractsReceivedTotal             prometheus.Counter
-	ContractsFundedTotal               prometheus.Counter
-	ContractsFundedRoboTotal           prometheus.Counter
-	ContractsFundedWithLoan            prometheus.Counter
-	ContractsRejectedInsufficientFunds prometheus.Counter
+	// Contract funding metrics moved to ReceiverMetrics
+	// (ContractFunder uses ReceiverMetrics, not VaultMetrics)
 
 	// UBD funding (future)
 	UBDRequestsReceivedTotal     prometheus.Counter
@@ -184,27 +180,7 @@ func NewVaultMetrics() *VaultMetrics {
 			Help: "Total number of invalid MintEvents (parse errors)",
 		}),
 
-		// Contract funding
-		ContractsReceivedTotal: promauto.NewCounter(prometheus.CounterOpts{
-			Name: "distodam_contracts_received_total",
-			Help: "Total number of approved contracts received",
-		}),
-		ContractsFundedTotal: promauto.NewCounter(prometheus.CounterOpts{
-			Name: "distodam_contracts_funded_total",
-			Help: "Total number of contracts successfully funded",
-		}),
-		ContractsFundedRoboTotal: promauto.NewCounter(prometheus.CounterOpts{
-			Name: "distodam_contracts_funded_robo_total",
-			Help: "Total RT funded to contracts",
-		}),
-		ContractsFundedWithLoan: promauto.NewCounter(prometheus.CounterOpts{
-			Name: "distodam_contracts_funded_with_loan_total",
-			Help: "Total number of contracts funded using DistoVault loans",
-		}),
-		ContractsRejectedInsufficientFunds: promauto.NewCounter(prometheus.CounterOpts{
-			Name: "distodam_contracts_rejected_insufficient_funds_total",
-			Help: "Total number of contracts rejected due to insufficient funds",
-		}),
+		// Contract funding metrics removed - see ReceiverMetrics
 
 		// UBD funding (future)
 		UBDRequestsReceivedTotal: promauto.NewCounter(prometheus.CounterOpts{
@@ -313,12 +289,12 @@ func NewReceiverMetrics() *ReceiverMetrics {
 			Help: "Total number of ingot stake processing errors",
 		}),
 		StakeDepositsTotal: promauto.NewCounter(prometheus.CounterOpts{
-			Name: "distodam_stake_deposits_total",
-			Help: "Total number of StakeVault deposits",
+			Name: "distodam_receiver_stake_deposits_total",
+			Help: "Total number of StakeVault deposits from receivers",
 		}),
 		StakeDepositedRTTotal: promauto.NewCounter(prometheus.CounterOpts{
-			Name: "distodam_stake_deposited_rt_total",
-			Help: "Total RT deposited to StakeVault",
+			Name: "distodam_receiver_stake_deposited_rt_total",
+			Help: "Total RT deposited to StakeVault from receivers",
 		}),
 
 		// ContractFunder

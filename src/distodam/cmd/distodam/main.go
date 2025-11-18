@@ -1,422 +1,261 @@
-// src/distodam/cmd/distodam/main.go
-// -----------------------------------------------------------
-// Service: DistoDam
-// Purpose: Acts as a **reservoir and labor router** in the RoboTorq
-//          network. It receives aggregated RoboTorq from the Mint
-//          via NATS, stores it in an atomic reservoir, and routes
-//          a fixed percentage (40%) of the base inflow rate to
-//          downstream labor (BRLa) every second.
-//
-//          **Key Responsibilities**:
-//          • Subscribe to Mint output on topic `distodam.robo`
-//          • Parse `total_robo` and convert to micro-RT (1 RT = 1M µRT)
-//          • Atomically add to reservoir
-//          • Every second, deduct 0.000667 RT and publish to `brla.funding`
-//          • Trigger rebalance if reservoir too low
-//          • Expose health, status, and Prometheus metrics
-//          • Graceful shutdown with NATS flush
-//
-//          **Production-Ready Features**:
-//          • Atomic reservoir with CompareAndSwap (race-free)
-//          • Structured JSON logging (slog)
-//          • Full Prometheus observability (counters, gauges, histogram)
-//          • Context-aware lifecycle (SIGINT/SIGTERM)
-//          • Configurable NATS URL
-//          • Rebalance latency tracking
-//          • Safe NATS publish (no panic on error)
-// -----------------------------------------------------------
-
+// cmd/distodam/main.go - DistoDam service orchestration
+// Phase 3: Complete service with dual-vault architecture
 package main
 
 import (
 	"context"
 	"encoding/json"
-	"log" // Legacy logging (used only in HTTP server for compatibility)
 	"log/slog"
-	"math"
 	"net/http"
 	"os"
 	"os/signal"
-	"sync/atomic"
 	"syscall"
 	"time"
 
-	"b2b/distorouter/internal/models"
-	"b2b/natsx"
+	"b2b/distorouter/internal/config"
+	"b2b/distorouter/internal/distodam"
 
 	"github.com/nats-io/nats.go"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// ────────────────────────────────────────────────────────────────
-// DOMAIN MODEL: DistoDam
-// ────────────────────────────────────────────────────────────────
-// DistoDam represents a single reservoir in the network.
-// It receives inflows from Mint, stores them in micro-RT units,
-// and routes labor shares to BRLa. All balance operations are
-// atomic to support high-throughput concurrent access.
-type DistoDam struct {
-	ID         string          // Unique identifier for this dam
-	nc         *nats.Conn      // NATS connection for publishing
-	natsClient *natsx.Client   // NATS client for publishing JSON
-	reservoir  atomic.Int64    // Reservoir balance in micro-RT (1 RT = 1,000,000 µRT)
-	ctx        context.Context // Lifecycle context for graceful shutdown
-	cancel     context.CancelFunc
-	port       string // HTTP port for health/metrics server
-
-	// Water level thresholds (currently unused, but reserved for future rebalancing logic)
-	lowWater  int64
-	highWater int64
-
-	// ─── Prometheus metrics (all registered in NewDistoDam) ──────────────────────────────
-	reservoirGauge    prometheus.Gauge     // Current reservoir balance in RT
-	inflowCounter     prometheus.Counter   // Total inflows received
-	outflowCounter    prometheus.Counter   // Total outflows routed to BRLa
-	rebalCounter      prometheus.Counter   // Number of rebalance operations triggered
-	rebalHistogram    prometheus.Histogram // Duration of rebalance operations
-	contractsReceived prometheus.Counter   // Total contracts received from Trust
-	contractsFunded   prometheus.Counter   // Total contracts successfully funded
-	contractsRejected prometheus.Counter   // Total contracts rejected (insufficient funds)
-}
-
-// NewDistoDam creates a new DistoDam instance with full observability.
-// It initializes atomic state, Prometheus metrics, and a cancellable context.
-func NewDistoDam(ctx context.Context, id string, nc *nats.Conn, natsClient *natsx.Client, port string) *DistoDam {
-	cctx, cancel := context.WithCancel(ctx)
-
-	d := &DistoDam{
-		ID:         id,
-		nc:         nc,
-		natsClient: natsClient,
-		ctx:        cctx,
-		cancel:     cancel,
-		port:       port,
-		lowWater:   1_000_000,  // 0.001 RT — future low-water trigger
-		highWater:  10_000_000, // 0.01 RT — future high-water trigger
-	}
-
-	// ─── Prometheus Metrics Registration ──────────────────────────────
-	// Each metric is scoped to this dam instance and registered globally.
-	d.reservoirGauge = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "distodam_reservoir_rt",
-		Help: "Current reservoir balance in RT (float)",
-	})
-	d.inflowCounter = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "distodam_inflows_total",
-		Help: "Total number of inflows added to the reservoir",
-	})
-	d.outflowCounter = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "distodam_outflows_total",
-		Help: "Total number of outflows (labor routing, etc.)",
-	})
-	d.rebalCounter = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "distodam_rebalances_total",
-		Help: "Number of rebalance operations triggered",
-	})
-	d.rebalHistogram = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "distodam_rebalance_duration_seconds",
-		Help:    "Duration of rebalance operations in seconds",
-		Buckets: prometheus.DefBuckets, // [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]
-	})
-	d.contractsReceived = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "distodam_contracts_received_total",
-		Help: "Total number of contracts received from Trust",
-	})
-	d.contractsFunded = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "distodam_contracts_funded_total",
-		Help: "Total number of contracts successfully funded",
-	})
-	d.contractsRejected = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "distodam_contracts_rejected_total",
-		Help: "Total number of contracts rejected due to insufficient funds",
-	})
-
-	prometheus.MustRegister(
-		d.reservoirGauge,
-		d.inflowCounter,
-		d.outflowCounter,
-		d.rebalCounter,
-		d.rebalHistogram,
-		d.contractsReceived,
-		d.contractsFunded,
-		d.contractsRejected,
-	)
-
-	return d
-}
-
-// ────────────────────────────────────────────────────────────────
-// MAIN
-// ────────────────────────────────────────────────────────────────
 func main() {
-	// Initialize structured JSON logging (cloud-native, parseable)
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	// ════════════════════════════════════════════════════════════
+	// INITIALIZATION
+	// ════════════════════════════════════════════════════════════
+
+	// Structured JSON logging
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
-	})))
+	}))
+	slog.SetDefault(logger)
 
-	// NATS connection with fallback URL
-	natsURL := os.Getenv("NATS_URL")
-	if natsURL == "" {
-		natsURL = "nats:4222" // Docker network default
-	}
+	logger.Info("starting distodam service",
+		"version", "phase3-dual-vault",
+		"architecture", "UBD")
 
-	// HTTP port configuration
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8082" // Default to 8082 to avoid conflict with Trust
-	}
-
-	nc, err := nats.Connect(natsURL)
+	// Load configuration
+	cfg, err := config.Load()
 	if err != nil {
-		slog.Error("nats_connect_failed", "error", err)
+		logger.Error("configuration failed", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("configuration loaded",
+		"nats_url", cfg.NatsURL,
+		"http_port", cfg.HTTPPort,
+		"loan_policy", cfg.LoanPolicy)
+
+	// Create context for graceful shutdown
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	// ════════════════════════════════════════════════════════════
+	// NATS CONNECTION
+	// ════════════════════════════════════════════════════════════
+
+	nc, err := nats.Connect(cfg.NatsURL,
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(2*time.Second),
+		nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
+			logger.Warn("nats disconnected", "error", err)
+		}),
+		nats.ReconnectHandler(func(nc *nats.Conn) {
+			logger.Info("nats reconnected", "url", nc.ConnectedUrl())
+		}),
+	)
+	if err != nil {
+		logger.Error("nats connection failed", "error", err)
 		os.Exit(1)
 	}
 	defer nc.Close()
 
-	natsClient, err := natsx.New(natsURL)
-	if err != nil {
-		slog.Error("natsx_client_failed", "error", err)
-		os.Exit(1)
-	}
-	defer natsClient.Close()
+	logger.Info("nats connected",
+		"url", cfg.NatsURL,
+		"server_name", nc.ConnectedServerName())
 
-	slog.Info("nats_connected", "url", natsURL)
+	// ════════════════════════════════════════════════════════════
+	// METRICS & OBSERVABILITY
+	// ════════════════════════════════════════════════════════════
 
-	// Context for graceful shutdown (SIGINT, SIGTERM)
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
+	vaultMetrics := distodam.NewVaultMetrics()
+	receiverMetrics := distodam.NewReceiverMetrics()
 
-	// Create and start the dam
-	dam := NewDistoDam(ctx, "dam-jon-001", nc, natsClient, port)
-	dam.startHTTP()          // Health, status, metrics
-	dam.subscribeMint()      // Listen for Mint output
-	dam.subscribeContracts() // Listen for contracts from Trust
-	dam.startFlowTicker()    // Route labor share every second
+	logger.Info("metrics initialized",
+		"vault_metrics", "enabled",
+		"receiver_metrics", "enabled")
 
-	slog.Info("distodam_running", "http_port", port, "metrics_path", "/metrics")
+	// ════════════════════════════════════════════════════════════
+	// DUAL-VAULT ARCHITECTURE
+	// ════════════════════════════════════════════════════════════
 
-	// Block until shutdown signal
-	<-ctx.Done()
-	dam.Shutdown()
-	slog.Info("distodam_exited_cleanly")
-}
+	// Create vault client (Phase 6 MVP: MockVaultClient with internal state)
+	vaultClient := distodam.NewMockVaultClient(
+		cfg.InitialStakeVaultRT,
+		cfg.InitialDistoVaultRT,
+		logger,
+		vaultMetrics,
+	)
 
-// ────────────────────────────────────────────────────────────────
-// HTTP SERVER
-// ────────────────────────────────────────────────────────────────
-func (d *DistoDam) startHTTP() {
+	// Create event publisher for NATS
+	eventPublisher := distodam.NewEventPublisher(nc, logger, vaultMetrics)
+
+	// Create vault manager (orchestrates StakeVault + DistoVault + loans)
+	vaultManager := distodam.NewVaultManager(
+		vaultClient,
+		cfg,
+		logger,
+		vaultMetrics,
+	)
+
+	logger.Info("dual-vault system initialized",
+		"stake_vault_rt", 0.0,
+		"disto_vault_rt", 0.0,
+		"outstanding_loans", 0)
+
+	// ════════════════════════════════════════════════════════════
+	// INPUT RECEIVERS (NATS Subscribers)
+	// ════════════════════════════════════════════════════════════
+
+	// MintEventReceiver: Receives RoboStake from Mint, deposits to StakeVault
+	mintReceiver := distodam.NewMintEventReceiver(
+		nc,
+		logger,
+		vaultManager,
+		receiverMetrics,
+		cfg.MintBatchesTopic, // "mint.batches"
+	)
+
+	// ContractFunder: Receives approved contracts, funds from vaults
+	contractFunder := distodam.NewContractFunder(
+		nc,
+		logger,
+		vaultManager,
+		eventPublisher,
+		receiverMetrics,
+		vaultMetrics,
+		cfg.ContractsApprovedTopic, // "contracts.approved"
+		cfg.DamID,                  // "distodam-001"
+	)
+
+	// UBDRegistryReceiver: Receives UBD wallet registrations (Phase 4+)
+	// TODO: Implement when UBD distribution is ready
+	// ubdReceiver := distodam.NewUBDRegistryReceiver(...)
+
+	logger.Info("input receivers created",
+		"mint_receiver_topic", cfg.MintBatchesTopic,
+		"contract_funder_topic", cfg.ContractsApprovedTopic)
+
+	// ════════════════════════════════════════════════════════════
+	// HTTP SERVER (Health, Status, Metrics)
+	// ════════════════════════════════════════════════════════════
+
 	mux := http.NewServeMux()
 
-	// Health check: returns 200 OK
-	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+	// Health check endpoint
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
 
-	// Status: human-readable reservoir state
-	mux.HandleFunc("/status", func(w http.ResponseWriter, _ *http.Request) {
-		current := float64(d.reservoir.Load()) / 1_000_000.0
-		data, _ := json.MarshalIndent(map[string]any{
-			"dam_id":    d.ID,
-			"reservoir": current,
-		}, "", "  ")
+	// Status endpoint (human-readable vault state)
+	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+		stakeBalance, _ := vaultClient.GetStakeVaultBalance()
+		distoBalance, _ := vaultClient.GetDistoVaultBalance()
+
+		status := map[string]interface{}{
+			"service": "distodam",
+			"version": "phase3-dual-vault",
+			"vaults": map[string]interface{}{
+				"stake_vault_rt": stakeBalance,
+				"disto_vault_rt": distoBalance,
+			},
+			"loans": map[string]interface{}{
+				"outstanding_count": len(vaultManager.GetOutstandingLoans()),
+			},
+			"uptime_seconds": time.Since(time.Now()).Seconds(),
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(data)
+		json.NewEncoder(w).Encode(status)
 	})
 
 	// Prometheus metrics endpoint
 	mux.Handle("/metrics", promhttp.Handler())
 
-	// Start HTTP server in background
+	// Start HTTP server
+	httpServer := &http.Server{
+		Addr:    ":" + cfg.HTTPPort,
+		Handler: mux,
+	}
+
 	go func() {
-		addr := ":" + d.port
-		log.Println("HTTP server listening on", addr)
-		if err := http.ListenAndServe(addr, mux); err != nil && err != http.ErrServerClosed {
-			log.Fatal("HTTP server error: ", err)
+		logger.Info("http server starting",
+			"port", cfg.HTTPPort,
+			"endpoints", []string{"/health", "/status", "/metrics"})
+
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("http server failed", "error", err)
 		}
 	}()
-}
 
-// ────────────────────────────────────────────────────────────────
-// NATS + FLOW LOGIC
-// ────────────────────────────────────────────────────────────────
-func (d *DistoDam) subscribeMint() {
-	_, err := d.nc.Subscribe("distodam.robo", func(m *nats.Msg) {
-		// Parse only the total RoboTorq from MintEvent
-		var ev struct {
-			TotalRoboTorq float64 `json:"total_robo"`
-		}
-		if err := json.Unmarshal(m.Data, &ev); err != nil {
-			slog.Error("invalid_mint_event", "error", err, "raw", string(m.Data))
-			return
-		}
+	// ════════════════════════════════════════════════════════════
+	// START RECEIVERS (NATS event loops)
+	// ════════════════════════════════════════════════════════════
 
-		// Convert RT → micro-RT (1 RT = 1,000,000 µRT)
-		amountMicroRT := int64(math.Round(ev.TotalRoboTorq * 1_000_000))
-
-		// Add to reservoir
-		d.addReservoir(amountMicroRT)
-
-		slog.Info("mint_event_processed",
-			"amount_rt", ev.TotalRoboTorq,
-			"micro_rt", amountMicroRT,
-		)
-	})
-	if err != nil {
-		slog.Error("subscribe_failed", "topic", "distodam.robo", "error", err)
-		os.Exit(1)
-	}
-	slog.Info("subscribed_to_topic", "topic", "distodam.robo")
-}
-
-// subscribeContracts listens for contracts from Trust on 'contracts.pending'
-// Checks reservoir balance, deducts funds, and publishes to 'contracts.funded'
-func (d *DistoDam) subscribeContracts() {
-	_, err := d.nc.Subscribe("contracts.pending", func(m *nats.Msg) {
-		d.contractsReceived.Inc()
-
-		// Parse contract from NATS message
-		var contract models.Contract
-		if err := json.Unmarshal(m.Data, &contract); err != nil {
-			slog.Error("invalid_contract_message", "error", err, "raw", string(m.Data))
-			return
-		}
-
-		slog.Info("contract_received",
-			"contract_id", contract.ID,
-			"opportunity_id", contract.OpportunityID,
-			"robo_stake", contract.RoboStake,
-			"roi", contract.ROI,
-			"status", contract.Status)
-
-		// Convert RT to micro-RT for reservoir deduction
-		requiredMicroRT := int64(math.Round(contract.RoboStake * 1_000_000))
-
-		// Try to fund the contract from reservoir
-		if d.deductReservoir(requiredMicroRT) {
-			// Successfully funded - update contract status
-			contract.Status = "funded"
-			now := time.Now()
-			contract.FundedAt = &now
-
-			// Publish to 'contracts.funded' topic
-			if err := d.natsClient.PublishJSON("contracts.funded", contract); err != nil {
-				slog.Error("failed_to_publish_funded_contract",
-					"contract_id", contract.ID,
-					"error", err)
-				// TODO: Add funded amount back to reservoir on publish failure
-				return
-			}
-
-			d.contractsFunded.Inc()
-			slog.Info("contract_funded",
-				"contract_id", contract.ID,
-				"robo_stake_rt", contract.RoboStake,
-				"robo_stake_micro", requiredMicroRT,
-				"reservoir_balance", float64(d.reservoir.Load())/1_000_000.0)
-		} else {
-			// Insufficient funds - reject contract
-			d.contractsRejected.Inc()
-			slog.Warn("contract_rejected_insufficient_funds",
-				"contract_id", contract.ID,
-				"required_rt", contract.RoboStake,
-				"reservoir_balance", float64(d.reservoir.Load())/1_000_000.0)
-		}
-	})
-
-	if err != nil {
-		slog.Error("subscribe_failed", "topic", "contracts.pending", "error", err)
-		os.Exit(1)
-	}
-	slog.Info("subscribed_to_topic", "topic", "contracts.pending")
-}
-
-func (d *DistoDam) startFlowTicker() {
-	ticker := time.NewTicker(1 * time.Second)
+	// Start MintEventReceiver in background
 	go func() {
-		defer ticker.Stop()
-		for {
-			select {
-			case <-d.ctx.Done():
-				return
-			case <-ticker.C:
-				d.routeLaborShare()
-			}
+		logger.Info("starting mint event receiver")
+		if err := mintReceiver.Start(ctx); err != nil {
+			logger.Error("mint receiver failed", "error", err)
 		}
 	}()
-}
 
-func (d *DistoDam) routeLaborShare() {
-	// 40% of base rate: 0.001667 RT/sec × 0.40 = 0.000667 RT/sec
-	amountMicro := int64(math.Round(0.001667 * 0.40 * 1_000_000.0))
-
-	if !d.deductReservoir(amountMicro) {
-		return // Not enough balance → rebalance triggered
-	}
-
-	// Publish funding event to BRLa
-	flow := map[string]any{
-		"brla_id":      "JON-3DPRINT-001",
-		"amount_rt":    amountMicro,
-		"source":       d.ID,
-		"trust_wallet": "torq1xyz",
-	}
-	payload, _ := json.Marshal(flow)
-
-	if err := d.nc.Publish("brla.funding", payload); err != nil {
-		slog.Error("nats_publish_failed", "topic", "brla.funding", "error", err)
-		return
-	}
-
-	d.outflowCounter.Inc()
-	slog.Info("labor_share_routed", "amount_micro", amountMicro)
-}
-
-// ────────────────────────────────────────────────────────────────
-// RESERVOIR OPS (Atomic-safe)
-// ────────────────────────────────────────────────────────────────
-func (d *DistoDam) addReservoir(amountMicroRT int64) {
-	newVal := d.reservoir.Add(amountMicroRT)
-	current := float64(newVal) / 1_000_000.0
-	d.inflowCounter.Inc()
-	d.reservoirGauge.Set(current)
-	log.Printf("RESERVOIR +%.6f RT → %.6f RT", float64(amountMicroRT)/1_000_000, current)
-}
-
-func (d *DistoDam) deductReservoir(amountMicroRT int64) bool {
-	for {
-		oldVal := d.reservoir.Load()
-		if oldVal < amountMicroRT {
-			go d.rebalance() // Not enough → trigger rebalance
-			return false
+	// Start ContractFunder in background
+	go func() {
+		logger.Info("starting contract funder")
+		if err := contractFunder.Start(ctx); err != nil {
+			logger.Error("contract funder failed", "error", err)
 		}
-		if d.reservoir.CompareAndSwap(oldVal, oldVal-amountMicroRT) {
-			current := float64(oldVal-amountMicroRT) / 1_000_000.0
-			d.reservoirGauge.Set(current)
-			log.Printf("RESERVOIR -%.6f RT → %.6f RT", float64(amountMicroRT)/1_000_000, current)
-			return true
-		}
-		// Loop: retry if another goroutine modified balance
+	}()
+
+	// Give receivers time to subscribe
+	time.Sleep(500 * time.Millisecond)
+
+	logger.Info("distodam service running",
+		"receivers", []string{"mint_events", "contracts"},
+		"http_port", cfg.HTTPPort)
+
+	// ════════════════════════════════════════════════════════════
+	// GRACEFUL SHUTDOWN
+	// ════════════════════════════════════════════════════════════
+
+	<-ctx.Done()
+	logger.Info("shutdown signal received, initiating graceful shutdown")
+
+	// Create shutdown timeout context
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	// Shutdown HTTP server
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		logger.Error("http server shutdown error", "error", err)
 	}
-}
 
-func (d *DistoDam) rebalance() {
-	start := time.Now()
-	d.rebalCounter.Inc()
+	// Shutdown receivers (they'll drain pending messages)
+	logger.Info("shutting down receivers")
+	if err := mintReceiver.Shutdown(); err != nil {
+		logger.Error("mint receiver shutdown error", "error", err)
+	}
+	if err := contractFunder.Shutdown(); err != nil {
+		logger.Error("contract funder shutdown error", "error", err)
+	}
 
-	// Simulate rebalance work (replace with real logic later)
-	time.Sleep(50 * time.Millisecond)
+	// Flush NATS messages
+	if err := nc.Flush(); err != nil {
+		logger.Error("nats flush error", "error", err)
+	}
 
-	duration := time.Since(start).Seconds()
-	d.rebalHistogram.Observe(duration)
-
-	slog.Info("rebalance_completed",
-		"duration_seconds", duration,
-		"current_balance_rt", float64(d.reservoir.Load())/1_000_000.0,
-	)
-}
-
-func (d *DistoDam) Shutdown() {
-	d.cancel()
-	_ = d.nc.Flush() // Ensure all messages are sent
+	logger.Info("distodam service stopped gracefully",
+		"final_stake_vault_rt", func() float64 { b, _ := vaultClient.GetStakeVaultBalance(); return b }(),
+		"final_disto_vault_rt", func() float64 { b, _ := vaultClient.GetDistoVaultBalance(); return b }())
 }
