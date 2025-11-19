@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"b2b/mint/internal/models"
 
@@ -218,20 +219,44 @@ func buildMerkleTree(hashes []string) (string, int, [][]string, error) {
 	// Keep combining pairs until we reach the root
 	for len(currentLevel) > 1 {
 		height++
-		nextLevel := make([]string, 0, (len(currentLevel)+1)/2)
+		numPairs := (len(currentLevel) + 1) / 2
+		nextLevel := make([]string, numPairs)
 
-		for i := 0; i < len(currentLevel); i += 2 {
-			var combinedHash string
-
-			if i+1 < len(currentLevel) {
-				// Pair exists: hash(left + right)
-				combinedHash = hashPair(currentLevel[i], currentLevel[i+1])
-			} else {
-				// Odd number: duplicate last hash
-				combinedHash = hashPair(currentLevel[i], currentLevel[i])
+		// Use parallel processing for larger batches (>100 pairs)
+		// This threshold avoids goroutine overhead for small batches
+		if numPairs > 100 {
+			var wg sync.WaitGroup
+			for i := 0; i < len(currentLevel); i += 2 {
+				wg.Add(1)
+				idx := i
+				pairIdx := i / 2
+				go func() {
+					defer wg.Done()
+					var combinedHash string
+					if idx+1 < len(currentLevel) {
+						// Pair exists: hash(left + right)
+						combinedHash = hashPair(currentLevel[idx], currentLevel[idx+1])
+					} else {
+						// Odd number: duplicate last hash
+						combinedHash = hashPair(currentLevel[idx], currentLevel[idx])
+					}
+					nextLevel[pairIdx] = combinedHash
+				}()
 			}
-
-			nextLevel = append(nextLevel, combinedHash)
+			wg.Wait()
+		} else {
+			// Sequential processing for small batches
+			for i := 0; i < len(currentLevel); i += 2 {
+				var combinedHash string
+				if i+1 < len(currentLevel) {
+					// Pair exists: hash(left + right)
+					combinedHash = hashPair(currentLevel[i], currentLevel[i+1])
+				} else {
+					// Odd number: duplicate last hash
+					combinedHash = hashPair(currentLevel[i], currentLevel[i])
+				}
+				nextLevel[i/2] = combinedHash
+			}
 		}
 
 		allLevels = append(allLevels, nextLevel)
