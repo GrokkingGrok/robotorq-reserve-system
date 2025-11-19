@@ -135,100 +135,116 @@ async fn hash_sender_task(state: ApiState, batch_interval_sec: u64) {
         
         tracing::info!("📤 Sending hashes for {} contracts", ready_contracts.len());
         
+        // Process contracts concurrently instead of sequentially
+        let mut tasks = vec![];
+        
         for contract_id in ready_contracts {
-            // Get contract RoboStake
-            let robo_stake = {
-                let manager = state.contract_manager.lock().unwrap();
-                match manager.get(&contract_id) {
-                    Some(contract) => contract.robo_stake,
-                    None => {
-                        tracing::error!("Contract {} not found in manager", contract_id);
-                        continue;
-                    }
-                }
-            };
+            let state_clone = state.clone();
+            let contract_id_clone = contract_id.clone();
             
-            // Get all hashes for this contract
-            let hashes = {
-                let storage = state.storage_manager.lock().unwrap();
-                match storage.get_all_hashes(&contract_id) {
-                    Ok(h) => h,
+            // Spawn concurrent task for each contract
+            let task = tokio::spawn(async move {
+                // Get contract RoboStake
+                let robo_stake = {
+                    let manager = state_clone.contract_manager.lock().unwrap();
+                    match manager.get(&contract_id_clone) {
+                        Some(contract) => contract.robo_stake,
+                        None => {
+                            tracing::error!("Contract {} not found in manager", contract_id_clone);
+                            return;
+                        }
+                    }
+                };
+                
+                // Get all hashes for this contract
+                let hashes = {
+                    let storage = state_clone.storage_manager.lock().unwrap();
+                    match storage.get_all_hashes(&contract_id_clone) {
+                        Ok(h) => h,
+                        Err(e) => {
+                            tracing::error!("Failed to get hashes for {}: {}", contract_id_clone, e);
+                            return;
+                        }
+                    }
+                };
+                
+                if hashes.is_empty() {
+                    tracing::warn!("No hashes found for contract {}", contract_id_clone);
+                    return;
+                }
+                
+                // Build NATS message (hash-only, TOON format in Phase 6)
+                let message_data = serde_json::json!({
+                    "contract_id": contract_id_clone,
+                    "digger_id": state_clone.config.digger_id,
+                    "hashes": hashes,
+                    "hash_count": hashes.len(),
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                });
+                
+                // Sign the batch (Phase 4: Falcon-1024)
+                // Hash the entire batch for deterministic signing
+                let batch_hash = crate::crypto::hash_ore_for_signing(
+                    &contract_id_clone,
+                    &state_clone.config.digger_id,
+                    0, // milestone index (simplified for now)
+                    0.0, // joules (not needed for hash batch)
+                    robo_stake, // actual RoboStake from contract
+                    &hashes,
+                    &chrono::Utc::now().to_rfc3339(),
+                );
+                
+                let signature = state_clone.keypair.sign(&batch_hash);
+                
+                // Complete message with signature
+                let signed_message = serde_json::json!({
+                    "contract_id": contract_id_clone,
+                    "digger_id": state_clone.config.digger_id,
+                    "hashes": hashes,
+                    "hash_count": hashes.len(),
+                    "robo_stake": robo_stake,
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                    "signature": hex::encode(&signature),
+                    "public_key": hex::encode(state_clone.keypair.public_key_bytes()),
+                });
+                
+                // Publish to NATS
+                match state_clone.nats_client
+                    .publish("ore.batch", signed_message.to_string().into())
+                    .await 
+                {
+                    Ok(_) => {
+                        tracing::info!(
+                            "✅ Sent {} hashes for contract {} to NATS (signed with Falcon-1024)",
+                            hashes.len(),
+                            contract_id_clone
+                        );
+                        
+                        // Update metrics
+                        state_clone.metrics.robostake_sent_total.inc_by(robo_stake);
+                        
+                        // Mark hash send in contract state
+                        let mut manager = state_clone.contract_manager.lock().unwrap();
+                        if let Some(contract) = manager.get_mut(&contract_id_clone) {
+                            contract.mark_hash_send();
+                        }
+                    }
                     Err(e) => {
-                        tracing::error!("Failed to get hashes for {}: {}", contract_id, e);
-                        continue;
+                        tracing::error!(
+                            "❌ Failed to send hashes for {}: {}",
+                            contract_id_clone,
+                            e
+                        );
                     }
                 }
-            };
-            
-            if hashes.is_empty() {
-                tracing::warn!("No hashes found for contract {}", contract_id);
-                continue;
-            }
-            
-            // Build NATS message (hash-only, TOON format in Phase 6)
-            let message_data = serde_json::json!({
-                "contract_id": contract_id,
-                "digger_id": state.config.digger_id,
-                "hashes": hashes,
-                "hash_count": hashes.len(),
-                "timestamp": chrono::Utc::now().to_rfc3339(),
             });
             
-            // Sign the batch (Phase 4: Falcon-1024)
-            // Hash the entire batch for deterministic signing
-            let batch_hash = crate::crypto::hash_ore_for_signing(
-                &contract_id,
-                &state.config.digger_id,
-                0, // milestone index (simplified for now)
-                0.0, // joules (not needed for hash batch)
-                robo_stake, // actual RoboStake from contract
-                &hashes,
-                &chrono::Utc::now().to_rfc3339(),
-            );
-            
-            let signature = state.keypair.sign(&batch_hash);
-            
-            // Complete message with signature
-            let signed_message = serde_json::json!({
-                "contract_id": contract_id,
-                "digger_id": state.config.digger_id,
-                "hashes": hashes,
-                "hash_count": hashes.len(),
-                "robo_stake": robo_stake,
-                "timestamp": chrono::Utc::now().to_rfc3339(),
-                "signature": hex::encode(&signature),
-                "public_key": hex::encode(state.keypair.public_key_bytes()),
-            });
-            
-            // Publish to NATS
-            match state.nats_client
-                .publish("ore.batch", signed_message.to_string().into())
-                .await 
-            {
-                Ok(_) => {
-                    tracing::info!(
-                        "✅ Sent {} hashes for contract {} to NATS (signed with Falcon-1024)",
-                        hashes.len(),
-                        contract_id
-                    );
-                    
-                    // Update metrics
-                    state.metrics.robostake_sent_total.inc_by(robo_stake);
-                    
-                    // Mark hash send in contract state
-                    let mut manager = state.contract_manager.lock().unwrap();
-                    if let Some(contract) = manager.get_mut(&contract_id) {
-                        contract.mark_hash_send();
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "❌ Failed to send hashes for {}: {}",
-                        contract_id,
-                        e
-                    );
-                }
-            }
+            tasks.push(task);
+        }
+        
+        // Wait for all contracts to finish processing
+        for task in tasks {
+            let _ = task.await;
         }
     }
 }
