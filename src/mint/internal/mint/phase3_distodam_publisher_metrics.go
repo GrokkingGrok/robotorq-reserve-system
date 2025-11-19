@@ -55,7 +55,7 @@ func NewPhase3DistoDamPublisherMetrics(registry prometheus.Registerer) *Phase3Di
 	}
 
 	// Use custom registry
-	return &Phase3DistoDamPublisherMetrics{
+	m := &Phase3DistoDamPublisherMetrics{
 		UnitsPublishedTotal: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "mint_phase3_units_published_total",
 			Help: "Total number of Phase3RoboTorqUnit successfully published to NATS",
@@ -77,4 +77,14 @@ func NewPhase3DistoDamPublisherMetrics(registry prometheus.Registerer) *Phase3Di
 			Help: "Total number of Phase3RoboTorqUnit publish retry attempts",
 		}),
 	}
+
+	// Register all metrics with custom registry
+	registry.MustRegister(
+		m.UnitsPublishedTotal,
+		m.PublishErrorsTotal,
+		m.PublishLatency,
+		m.RetryAttemptsTotal,
+	)
+
+	return m
 }
