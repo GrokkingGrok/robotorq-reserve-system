@@ -92,13 +92,14 @@ func initLevel2MerkleMetrics() *Level2MerkleMetrics {
 
 // Level2MerkleResult contains the result of building a Level 2 merkle tree
 type Level2MerkleResult struct {
-	MerkleRoot  string                   // Level 2 merkle root (64-char hex SHA256)
-	HashEntries []*models.IngotHashEntry // Original 1000 hash entries
-	TreeHeight  int                      // Tree height (should be 10 for 1000 hashes)
-	TreeNodes   [][]string               // All tree levels for proof generation (nodes[0] = leaves, nodes[height-1] = root)
-	ContractIDs []string                 // Unique contract IDs from all entries
-	DiggerIDs   []string                 // Unique digger IDs from all entries
-	RefineryIDs []string                 // Unique refinery IDs from all entries
+	MerkleRoot     string                   // Level 2 merkle root (64-char hex SHA256)
+	HashEntries    []*models.IngotHashEntry // Original 1000 hash entries
+	TreeHeight     int                      // Tree height (should be 10 for 1000 hashes)
+	TreeNodes      [][]string               // All tree levels for proof generation (nodes[0] = leaves, nodes[height-1] = root)
+	ContractIDs    []string                 // Unique contract IDs from all entries
+	DiggerIDs      []string                 // Unique digger IDs from all entries
+	RefineryIDs    []string                 // Unique refinery IDs from all entries
+	RoboStakeTotal float64                  // Total RoboStake from all 1000 ingots
 }
 
 // BuildLevel2Tree blocks until 1000 hashes are available, then builds merkle tree
@@ -149,21 +150,29 @@ func (b *Level2MerkleBuilder) BuildLevel2Tree(ctx context.Context) (*Level2Merkl
 	b.metrics.TreesBuiltTotal.Inc()
 	b.metrics.TreeHeightGauge.Set(float64(height))
 
+	// Sum RoboStake from all ingots
+	var totalRoboStake float64
+	for _, entry := range entries {
+		totalRoboStake += entry.RoboStakeTotal
+	}
+
 	// Aggregate metadata (unique contract/digger/refinery IDs)
 	result := &Level2MerkleResult{
-		MerkleRoot:  merkleRoot,
-		HashEntries: entries,
-		TreeHeight:  height,
-		TreeNodes:   treeNodes,
-		ContractIDs: extractUniqueIDs(entries, func(e *models.IngotHashEntry) []string { return e.ContractIDs }),
-		DiggerIDs:   extractUniqueIDs(entries, func(e *models.IngotHashEntry) []string { return e.DiggerIDs }),
-		RefineryIDs: extractUniqueStrings(entries, func(e *models.IngotHashEntry) string { return e.RefineryID }),
+		MerkleRoot:     merkleRoot,
+		HashEntries:    entries,
+		TreeHeight:     height,
+		TreeNodes:      treeNodes,
+		RoboStakeTotal: totalRoboStake,
+		ContractIDs:    extractUniqueIDs(entries, func(e *models.IngotHashEntry) []string { return e.ContractIDs }),
+		DiggerIDs:      extractUniqueIDs(entries, func(e *models.IngotHashEntry) []string { return e.DiggerIDs }),
+		RefineryIDs:    extractUniqueStrings(entries, func(e *models.IngotHashEntry) string { return e.RefineryID }),
 	}
 
 	b.logger.Info("Level 2 merkle tree built",
 		"merkle_root", merkleRoot,
 		"tree_height", height,
 		"hash_count", len(entries),
+		"robo_stake", totalRoboStake,
 		"contracts", len(result.ContractIDs),
 		"diggers", len(result.DiggerIDs),
 		"refineries", len(result.RefineryIDs))

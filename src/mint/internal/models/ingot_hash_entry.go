@@ -18,6 +18,9 @@ type IngotHashEntry struct {
 	// DiggerIDs are the unique digger IDs that contributed to this ingot
 	DiggerIDs []string `json:"digger_ids"`
 
+	// RoboStakeTotal is the accumulated RoboStake for this ingot (3600 units)
+	RoboStakeTotal float64 `json:"robo_stake_total"`
+
 	// RefineryID identifies which Refinery sent this ingot (future multi-refinery support)
 	RefineryID string `json:"refinery_id,omitempty"`
 
@@ -28,10 +31,11 @@ type IngotHashEntry struct {
 // NewIngotHashEntry creates an IngotHashEntry from a Phase2Ingot
 func NewIngotHashEntry(ingot *Phase2Ingot) *IngotHashEntry {
 	return &IngotHashEntry{
-		BranchHash:  ingot.BranchHash,
-		ContractIDs: ingot.ContractIDs,
-		DiggerIDs:   ingot.DiggerIDs,
-		RefineryID:  "", // Future: extract from ingot metadata
-		Timestamp:   ingot.Timestamp,
+		BranchHash:     ingot.BranchHash,
+		ContractIDs:    ingot.ContractIDs,
+		DiggerIDs:      ingot.DiggerIDs,
+		RoboStakeTotal: ingot.RoboStakeTotal,
+		RefineryID:     "", // Future: extract from ingot metadata
+		Timestamp:      ingot.Timestamp,
 	}
 }

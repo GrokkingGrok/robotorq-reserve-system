@@ -19,12 +19,13 @@ import (
 // - Sends Phase2Ingot with branch_hash (merkle root)
 // - Mint receives, validates, and aggregates 1000 ingots into RoboTorqUnit
 type Phase2Ingot struct {
-	ID          string    `json:"id"`           // UUID from Refinery
-	BranchHash  string    `json:"branch_hash"`  // Merkle root (64-char hex SHA256)
-	HashCount   int       `json:"hash_count"`   // Always 3600
-	ContractIDs []string  `json:"contract_ids"` // Unique contracts in this ingot
-	DiggerIDs   []string  `json:"digger_ids"`   // Unique diggers who contributed
-	Timestamp   time.Time `json:"timestamp"`    // When assembled by Refinery
+	ID             string    `json:"id"`               // UUID from Refinery
+	BranchHash     string    `json:"branch_hash"`      // Merkle root (64-char hex SHA256)
+	HashCount      int       `json:"hash_count"`       // Always 3600
+	ContractIDs    []string  `json:"contract_ids"`     // Unique contracts in this ingot
+	DiggerIDs      []string  `json:"digger_ids"`       // Unique diggers who contributed
+	RoboStakeTotal float64   `json:"robo_stake_total"` // Total RoboStake for 3600 units
+	Timestamp      time.Time `json:"timestamp"`        // When assembled by Refinery
 
 	// Phase 5: Falcon-1024 signature from Refinery (proof of assembly)
 	Signature string `json:"signature"`  // Hex-encoded Falcon-1024 signature

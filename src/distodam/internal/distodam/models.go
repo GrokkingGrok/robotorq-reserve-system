@@ -3,6 +3,21 @@ package distodam
 
 import "time"
 
+// Phase3RoboTorqUnit represents a 1 RT unit from Mint (Phase 3)
+// Published to: distodam.units
+type Phase3RoboTorqUnit struct {
+	UnitID         string    `json:"unit_id"`
+	MerkleRoot     string    `json:"merkle_root"`
+	TreeHeight     int       `json:"tree_height"`
+	RoboStakeTotal float64   `json:"robo_stake_total"`
+	ContractIDs    []string  `json:"contract_ids"`
+	DiggerIDs      []string  `json:"digger_ids"`
+	MerkleProofAPI string    `json:"merkle_proof_api"`
+	MintedAt       time.Time `json:"minted_at"`
+	Signature      string    `json:"signature,omitempty"`
+	PublicKey      string    `json:"public_key,omitempty"`
+}
+
 // MintEvent represents a batch of processed ingots from the Mint service
 // Published to: mint.batches
 type MintEvent struct {
@@ -64,12 +79,12 @@ type UBDWalletRegistration struct {
 // Published to: ubd.distributed (from DistoDam - future)
 // This is what DistoDam publishes when it distributes from DistoVault
 type UBDDistributionEvent struct {
-	EventID      string    `json:"event_id"`       // Unique event identifier
-	WalletID     string    `json:"wallet_id"`      // Recipient wallet
-	AmountRT     float64   `json:"amount_rt"`      // Amount distributed
-	Timestamp    time.Time `json:"timestamp"`      // Distribution time
-	DistoBalance float64   `json:"disto_balance"`  // DistoVault balance after distribution
-	Reason       string    `json:"reason"`         // "periodic_distribution", "manual", etc.
+	EventID      string    `json:"event_id"`      // Unique event identifier
+	WalletID     string    `json:"wallet_id"`     // Recipient wallet
+	AmountRT     float64   `json:"amount_rt"`     // Amount distributed
+	Timestamp    time.Time `json:"timestamp"`     // Distribution time
+	DistoBalance float64   `json:"disto_balance"` // DistoVault balance after distribution
+	Reason       string    `json:"reason"`        // "periodic_distribution", "manual", etc.
 }
 
 // ValidateMintEvent checks if a MintEvent is valid for processing

@@ -232,9 +232,12 @@ func (ns *NATSSubscriber) handleHashBatch(msg *nats.Msg) {
 			"security_risk", "HIGH - unverified work",
 		)
 	} // Add hashes to queue (Phase 2 Milestone 2)
+	// Distribute RoboStake across all hashes
+	roboStakePerHash := batch.RoboStake / float64(len(batch.Hashes))
+
 	hashesQueued := 0
 	for _, hash := range batch.Hashes {
-		err := ns.queueMgr.AddHash(hash, batch.ContractID, batch.DiggerID)
+		err := ns.queueMgr.AddHash(hash, batch.ContractID, batch.DiggerID, roboStakePerHash)
 		if err != nil {
 			ns.logger.Error("failed to queue hash",
 				"error", err,

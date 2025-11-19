@@ -53,12 +53,13 @@ func init() {
 // Phase2Ingot is the simplified ingot structure for Phase 2 (hash-only flow)
 // Contains ONLY the merkle root and metadata - NO full JTU data
 type Phase2Ingot struct {
-	ID          string    `json:"id"`           // UUID
-	BranchHash  string    `json:"branch_hash"`  // Merkle root (64 char hex)
-	HashCount   int       `json:"hash_count"`   // Always 3600
-	ContractIDs []string  `json:"contract_ids"` // Unique contracts
-	DiggerIDs   []string  `json:"digger_ids"`   // Unique diggers
-	Timestamp   time.Time `json:"timestamp"`    // When assembled
+	ID             string    `json:"id"`               // UUID
+	BranchHash     string    `json:"branch_hash"`      // Merkle root (64 char hex)
+	HashCount      int       `json:"hash_count"`       // Always 3600
+	ContractIDs    []string  `json:"contract_ids"`     // Unique contracts
+	DiggerIDs      []string  `json:"digger_ids"`       // Unique diggers
+	RoboStakeTotal float64   `json:"robo_stake_total"` // Total RoboStake for 3600 units
+	Timestamp      time.Time `json:"timestamp"`        // When assembled
 
 	// Phase 5: Falcon-1024 signature (proof of assembly by Refinery)
 	Signature string `json:"signature"`  // Hex-encoded Falcon-1024 signature
@@ -164,12 +165,14 @@ func (ia *Phase2IngotAssembler) assembleIngot(hashEntries []HashEntry) error {
 		"build_time_ms", merkleDuration*1000,
 	)
 
-	// Extract unique contract IDs and digger IDs
+	// Extract unique contract IDs, digger IDs, and sum RoboStake
 	contractMap := make(map[string]bool)
 	diggerMap := make(map[string]bool)
+	var totalRoboStake float64
 	for _, entry := range hashEntries {
 		contractMap[entry.ContractID] = true
 		diggerMap[entry.DiggerID] = true
+		totalRoboStake += entry.RoboStakePaid
 	}
 
 	contractIDs := make([]string, 0, len(contractMap))
@@ -184,12 +187,13 @@ func (ia *Phase2IngotAssembler) assembleIngot(hashEntries []HashEntry) error {
 
 	// Create ingot
 	ingot := &Phase2Ingot{
-		ID:          uuid.New().String(),
-		BranchHash:  tree.Root,
-		HashCount:   len(hashes),
-		ContractIDs: contractIDs,
-		DiggerIDs:   diggerIDs,
-		Timestamp:   time.Now(),
+		ID:             uuid.New().String(),
+		BranchHash:     tree.Root,
+		HashCount:      len(hashes),
+		ContractIDs:    contractIDs,
+		DiggerIDs:      diggerIDs,
+		RoboStakeTotal: totalRoboStake,
+		Timestamp:      time.Now(),
 	}
 
 	// Phase 5: Sign the ingot with Falcon-1024 before sending to Mint

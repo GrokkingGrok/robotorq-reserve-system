@@ -18,7 +18,7 @@ scrape_configs:
   # ─── Scrape DistoDam ────────────────────────────
   - job_name: 'distodam'
     static_configs:
-      - targets: ['distodam:8080']
+      - targets: ['distodam:8082']
     metrics_path: /metrics
 
   # ─── Scrape TrustService ────────────────────────

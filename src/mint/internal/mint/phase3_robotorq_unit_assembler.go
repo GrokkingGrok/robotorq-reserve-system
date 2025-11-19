@@ -325,7 +325,13 @@ func (a *Phase3RoboTorqUnitAssembler) assembleUnit(merkleResult *Level2MerkleRes
 	}
 
 	// Create minimal Phase 3 unit (merkle root only)
-	unit, err := models.NewPhase3RoboTorqUnit(merkleResult.MerkleRoot, merkleResult.TreeHeight)
+	unit, err := models.NewPhase3RoboTorqUnit(
+		merkleResult.MerkleRoot,
+		merkleResult.TreeHeight,
+		merkleResult.RoboStakeTotal,
+		merkleResult.ContractIDs,
+		merkleResult.DiggerIDs,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create phase3 unit: %w", err)
 	}

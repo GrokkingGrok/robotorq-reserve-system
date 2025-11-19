@@ -149,9 +149,12 @@ func (hbr *HashBatchReceiver) ReceiveHashBatch(batch *models.HashBatchOre) error
 
 	hbr.metrics.HashesReceivedTotal.Add(float64(batch.HashCount))
 
-	// 3. Process verified hashes - add to queue for Phase2 ingot assembly
+	// 3. Distribute RoboStake across all hashes
+	roboStakePerHash := batch.RoboStake / float64(batch.HashCount)
+
+	// 4. Process verified hashes - add to queue for Phase2 ingot assembly
 	for _, hash := range batch.Hashes {
-		if err := hbr.queueMgr.AddHash(hash, batch.ContractID, batch.DiggerID); err != nil {
+		if err := hbr.queueMgr.AddHash(hash, batch.ContractID, batch.DiggerID, roboStakePerHash); err != nil {
 			slog.Warn("failed to queue hash after verification",
 				"contract", batch.ContractID,
 				"digger", batch.DiggerID,

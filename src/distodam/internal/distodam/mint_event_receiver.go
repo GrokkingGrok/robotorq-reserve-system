@@ -11,7 +11,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// MintEventReceiver subscribes to mint.batches and deposits ingot stakes to StakeVault
+// MintEventReceiver subscribes to distodam.units and processes Phase3RoboTorqUnit
 type MintEventReceiver struct {
 	nc           *nats.Conn
 	logger       *slog.Logger
@@ -78,18 +78,18 @@ func (mer *MintEventReceiver) Start(ctx context.Context) error {
 	return mer.Shutdown()
 }
 
-// handleMintEvent processes a single MintEvent message
+// handleMintEvent processes a single Phase3RoboTorqUnit message
 func (mer *MintEventReceiver) handleMintEvent(msg *nats.Msg) {
 	mer.metrics.MintEventsReceivedTotal.Inc()
 
-	mer.logger.Debug("received mint event",
+	mer.logger.Debug("received Phase3 RT unit",
 		"subject", msg.Subject,
 		"size_bytes", len(msg.Data))
 
-	// Parse MintEvent from JSON
-	var event MintEvent
-	if err := json.Unmarshal(msg.Data, &event); err != nil {
-		mer.logger.Error("failed to parse mint event",
+	// Parse Phase3RoboTorqUnit from JSON
+	var unit Phase3RoboTorqUnit
+	if err := json.Unmarshal(msg.Data, &unit); err != nil {
+		mer.logger.Error("failed to parse Phase3 unit",
 			"error", err,
 			"data_preview", string(msg.Data[:min(100, len(msg.Data))]))
 		mer.metrics.MintEventParseErrorsTotal.Inc()
@@ -99,93 +99,62 @@ func (mer *MintEventReceiver) handleMintEvent(msg *nats.Msg) {
 		return
 	}
 
-	// Validate event
-	if err := ValidateMintEvent(&event); err != nil {
-		mer.logger.Error("invalid mint event",
-			"error", err,
-			"batch_id", event.BatchID)
+	// Validate unit
+	if unit.UnitID == "" || unit.RoboStakeTotal <= 0 {
+		mer.logger.Error("invalid Phase3 unit",
+			"unit_id", unit.UnitID,
+			"robo_stake", unit.RoboStakeTotal)
 		mer.metrics.MintEventValidationErrorsTotal.Inc()
 
-		// ACK anyway - invalid events shouldn't be redelivered
+		// ACK anyway - invalid units shouldn't be redelivered
 		msg.Ack()
 		return
 	}
 
-	mer.logger.Info("processing mint event",
-		"batch_id", event.BatchID,
-		"ingots_count", len(event.IngotStakes),
-		"batch_hash", event.BatchHash)
+	mer.logger.Info("processing Phase3 RT unit",
+		"unit_id", unit.UnitID,
+		"robo_stake_rt", unit.RoboStakeTotal,
+		"contracts", len(unit.ContractIDs),
+		"diggers", len(unit.DiggerIDs),
+		"merkle_root", unit.MerkleRoot)
 
-	// Process each ingot stake separately
-	totalDeposited := 0.0
-	for i, stake := range event.IngotStakes {
-		if err := mer.processIngotStake(&stake); err != nil {
-			mer.logger.Error("failed to process ingot stake",
-				"batch_id", event.BatchID,
-				"ingot_index", i,
-				"ingot_id", stake.IngotID,
-				"error", err)
-			mer.metrics.IngotStakeProcessingErrorsTotal.Inc()
-			// Continue processing other stakes despite failure
-			continue
-		}
-
-		totalDeposited += stake.RoboStakeTotal
-	}
-
-	mer.logger.Info("mint event processed successfully",
-		"batch_id", event.BatchID,
-		"ingots_processed", len(event.IngotStakes),
-		"total_deposited_rt", totalDeposited)
-
-	mer.metrics.MintEventsProcessedTotal.Inc()
-	mer.metrics.StakeDepositedRTTotal.Add(totalDeposited)
-
-	// Trigger loan repayment after deposits (RoboStake has returned)
-	if totalDeposited > 0 {
-		mer.logger.Debug("triggering loan repayment",
-			"deposited_rt", totalDeposited)
-		mer.vaultManager.RepayOutstandingLoans()
-	}
-
-	// ACK message
-	msg.Ack()
-}
-
-// processIngotStake deposits RoboStake from a single ingot to StakeVault
-func (mer *MintEventReceiver) processIngotStake(stake *IngotStake) error {
-	if stake.RoboStakeTotal <= 0 {
-		mer.logger.Warn("skipping ingot stake with non-positive amount",
-			"ingot_id", stake.IngotID,
-			"robo_stake", stake.RoboStakeTotal)
-		return fmt.Errorf("invalid robo_stake: %f", stake.RoboStakeTotal)
-	}
-
-	mer.logger.Debug("depositing ingot stake to StakeVault",
-		"ingot_id", stake.IngotID,
-		"robo_stake_rt", stake.RoboStakeTotal,
-		"contracts", stake.ContractIDs)
-
-	// Deposit to StakeVault via VaultClient
-	err := mer.vaultManager.vaultClient.DepositToStakeVault(stake.RoboStakeTotal)
-	if err != nil {
+	// Deposit RoboStake to StakeVault
+	if err := mer.vaultManager.vaultClient.DepositToStakeVault(unit.RoboStakeTotal); err != nil {
 		mer.logger.Error("failed to deposit to StakeVault",
-			"ingot_id", stake.IngotID,
-			"robo_stake_rt", stake.RoboStakeTotal,
+			"unit_id", unit.UnitID,
+			"robo_stake_rt", unit.RoboStakeTotal,
 			"error", err)
-		return fmt.Errorf("deposit to StakeVault: %w", err)
+		mer.metrics.IngotStakeProcessingErrorsTotal.Inc()
+		msg.Nak()
+		return
 	}
 
 	balance, _ := mer.vaultManager.vaultClient.GetStakeVaultBalance()
-	mer.logger.Debug("ingot stake deposited successfully",
-		"ingot_id", stake.IngotID,
-		"robo_stake_rt", stake.RoboStakeTotal,
-		"stake_vault_balance_rt", balance)
+	mer.logger.Info("Phase3 unit processed successfully",
+		"unit_id", unit.UnitID,
+		"robo_stake_deposited_rt", unit.RoboStakeTotal,
+		"stake_vault_balance_rt", balance,
+		"contracts", unit.ContractIDs)
 
+	mer.metrics.MintEventsProcessedTotal.Inc()
 	mer.metrics.IngotsProcessedTotal.Inc()
 	mer.metrics.StakeDepositsTotal.Inc()
+	mer.metrics.StakeDepositedRTTotal.Add(unit.RoboStakeTotal)
 
-	return nil
+	// Update VaultMetrics inflow counters (for Grafana dashboard)
+	if mer.vaultManager.metrics != nil {
+		mer.vaultManager.metrics.InflowsTotal.Inc()
+		mer.vaultManager.metrics.InflowsIngotStakesTotal.Inc()
+		mer.vaultManager.metrics.InflowsRoboTotal.Add(unit.RoboStakeTotal)
+	}
+
+	// Trigger loan repayment after deposit (RoboStake has returned)
+	mer.logger.Debug("triggering loan repayment",
+		"deposited_rt", unit.RoboStakeTotal)
+	mer.vaultManager.RepayOutstandingLoans()
+
+	// ACK message
+	msg.Ack()
 }
 
 // Shutdown stops the MintEventReceiver and unsubscribes from NATS

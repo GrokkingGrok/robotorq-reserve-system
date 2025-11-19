@@ -57,11 +57,12 @@ func init() {
 // HashEntry represents a single hash in the queue
 // Phase 2: Store hashes only, NOT full JTU data (98% bandwidth reduction)
 type HashEntry struct {
-	Hash       string    `json:"hash"`        // 32-byte hex SHA256 hash of JTU
-	ContractID string    `json:"contract_id"` // Which contract generated this hash
-	DiggerID   string    `json:"digger_id"`   // Which Digger sent this hash
-	Timestamp  time.Time `json:"timestamp"`   // When hash was received
-	Index      int64     `json:"index"`       // Sequential index in queue (for FIFO ordering)
+	Hash          string    `json:"hash"`            // 32-byte hex SHA256 hash of JTU
+	ContractID    string    `json:"contract_id"`     // Which contract generated this hash
+	DiggerID      string    `json:"digger_id"`       // Which Digger sent this hash
+	RoboStakePaid float64   `json:"robo_stake_paid"` // RoboStake for this unit
+	Timestamp     time.Time `json:"timestamp"`       // When hash was received
+	Index         int64     `json:"index"`           // Sequential index in queue (for FIFO ordering)
 }
 
 // QueueManager handles buffered queue for hash entries
@@ -98,8 +99,8 @@ func NewQueueManager(ctx context.Context, capacity int) *QueueManager {
 // Non-blocking with backpressure: returns ErrQueueFull when at capacity.
 //
 // Thread-safe: uses mutex for concurrent access.
-// AddHash adds a hash to the queue (non-blocking with backpressure)
-func (qm *QueueManager) AddHash(hash, contractID, diggerID string) error {
+// AddHash adds a hash to the queue with RoboStake amount
+func (qm *QueueManager) AddHash(hash, contractID, diggerID string, roboStakePaid float64) error {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
 
@@ -121,11 +122,12 @@ func (qm *QueueManager) AddHash(hash, contractID, diggerID string) error {
 
 	// Add hash entry
 	entry := HashEntry{
-		Hash:       hash,
-		ContractID: contractID,
-		DiggerID:   diggerID,
-		Timestamp:  time.Now(),
-		Index:      qm.nextIndex,
+		Hash:          hash,
+		ContractID:    contractID,
+		DiggerID:      diggerID,
+		RoboStakePaid: roboStakePaid,
+		Timestamp:     time.Now(),
+		Index:         qm.nextIndex,
 	}
 	qm.nextIndex++
 

@@ -56,6 +56,16 @@ type Phase3RoboTorqUnit struct {
 	// Used to validate proof size and tree structure
 	TreeHeight int `json:"tree_height"`
 
+	// RoboStakeTotal is the total RoboStake for this RT unit (sum of 1000 ingots)
+	// Represents the economic value paid for 3.6M units of robotic work
+	RoboStakeTotal float64 `json:"robo_stake_total"`
+
+	// ContractIDs lists all unique contracts that contributed to this RT unit
+	ContractIDs []string `json:"contract_ids"`
+
+	// DiggerIDs lists all unique diggers that contributed to this RT unit
+	DiggerIDs []string `json:"digger_ids"`
+
 	// MerkleProofAPI is the URL endpoint for retrieving merkle proofs
 	// Format: /verify/proof/{unit_id}
 	// Allows anyone to request proof that a specific ingot exists in this RT unit
@@ -79,14 +89,14 @@ type Phase3RoboTorqUnit struct {
 // Parameters:
 //   - merkleRoot: Level 2 merkle root (64-char hex from 1000 ingot hashes)
 //   - treeHeight: Number of levels in the merkle tree (should be 10 for 1000 ingots)
+//   - roboStakeTotal: Total RoboStake for this RT unit (sum from 1000 ingots)
+//   - contractIDs: All unique contracts that contributed to this unit
+//   - diggerIDs: All unique diggers that contributed to this unit
 //
 // Returns:
 //   - Phase3RoboTorqUnit ready for DistoDam publishing
 //   - Error if validation fails
-//
-// Note: Metadata (contracts, diggers, refineries, joules, robo stake) is NOT stored.
-// It can be reconstructed by querying proof archives when needed.
-func NewPhase3RoboTorqUnit(merkleRoot string, treeHeight int) (*Phase3RoboTorqUnit, error) {
+func NewPhase3RoboTorqUnit(merkleRoot string, treeHeight int, roboStakeTotal float64, contractIDs []string, diggerIDs []string) (*Phase3RoboTorqUnit, error) {
 	// Validate merkle root format (64-char hex SHA256)
 	if len(merkleRoot) != 64 {
 		return nil, fmt.Errorf("invalid merkle_root length: got %d, expected 64", len(merkleRoot))
@@ -110,6 +120,9 @@ func NewPhase3RoboTorqUnit(merkleRoot string, treeHeight int) (*Phase3RoboTorqUn
 		UnitID:         unitID,
 		MerkleRoot:     merkleRoot,
 		TreeHeight:     treeHeight,
+		RoboStakeTotal: roboStakeTotal,
+		ContractIDs:    contractIDs,
+		DiggerIDs:      diggerIDs,
 		MerkleProofAPI: fmt.Sprintf("/verify/proof/%s", unitID),
 		MintedAt:       time.Now().UTC(),
 	}

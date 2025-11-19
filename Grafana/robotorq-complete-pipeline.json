@@ -96,7 +96,38 @@
           }
         }
       },
-      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 1 }
+      "gridPos": { "h": 6, "w": 6, "x": 16, "y": 1 }
+    },
+    {
+      "type": "stat",
+      "title": "RoboStake Sent",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "digger_robostake_sent_total",
+          "legendFormat": "RoboStake RT"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 0.01, "color": "green" }
+            ]
+          },
+          "unit": "short",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 22, "y": 1 }
     },
     {
       "type": "row",
@@ -124,7 +155,7 @@
           }
         }
       },
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 }
+      "gridPos": { "h": 6, "w": 5, "x": 0, "y": 8 }
     },
     {
       "type": "stat",
@@ -146,7 +177,7 @@
           }
         }
       },
-      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 }
+      "gridPos": { "h": 6, "w": 7, "x": 5, "y": 8 }
     },
     {
       "type": "stat",
@@ -168,7 +199,7 @@
           }
         }
       },
-      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 8 }
+      "gridPos": { "h": 6, "w": 5, "x": 12, "y": 8 }
     },
     {
       "type": "stat",
@@ -190,7 +221,38 @@
           }
         }
       },
-      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 8 }
+      "gridPos": { "h": 6, "w": 5, "x": 12, "y": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "RoboStake in Ingots",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "refinery_robostake_aggregated_total",
+          "legendFormat": "RoboStake RT"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 0.01, "color": "green" }
+            ]
+          },
+          "unit": "short",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 6, "w": 7, "x": 17, "y": 8 }
     },
     {
       "type": "row",
@@ -276,23 +338,31 @@
     },
     {
       "type": "stat",
-      "title": "Batches Processed",
+      "title": "RoboStake in Phase3",
       "datasource": {
         "type": "prometheus",
         "uid": "ff4c4su9ayigwe"
       },
       "targets": [
         {
-          "expr": "mint_batches_processed_total",
-          "legendFormat": "Batches"
+          "expr": "mint_robostake_aggregated_total",
+          "legendFormat": "RoboStake RT"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
-          "unit": "short"
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 0.01, "color": "green" }
+            ]
+          },
+          "unit": "short",
+          "decimals": 2
         }
       },
       "gridPos": { "h": 6, "w": 6, "x": 18, "y": 15 }
@@ -325,7 +395,38 @@
           "decimals": 2
         }
       },
-      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 22 }
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 22 }
+    },
+    {
+      "type": "stat",
+      "title": "RoboStake Received",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "distodam_inflows_robo_total",
+          "legendFormat": "RoboStake RT"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 0.01, "color": "green" }
+            ]
+          },
+          "unit": "short",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 22 }
     },
     {
       "type": "stat",
@@ -349,7 +450,7 @@
           "decimals": 2
         }
       },
-      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 22 }
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 22 }
     },
     {
       "type": "stat",
@@ -381,7 +482,7 @@
           "decimals": 2
         }
       },
-      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 22 }
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 22 }
     },
     {
       "type": "row",
@@ -391,27 +492,27 @@
     },
     {
       "type": "graph",
-      "title": "Complete Pipeline Flow",
+      "title": "RoboStake Flow Through Pipeline",
       "datasource": {
         "type": "prometheus",
         "uid": "ff4c4su9ayigwe"
       },
       "targets": [
         {
-          "expr": "rate(digger_ore_generated_total[1m])",
-          "legendFormat": "Digger: Ore/sec"
+          "expr": "rate(digger_robostake_sent_total[1m])",
+          "legendFormat": "Digger: RoboStake/sec"
         },
         {
-          "expr": "rate(refinery_phase2_ingots_assembled_total[1m])",
-          "legendFormat": "Refinery: Ingots/sec"
+          "expr": "rate(refinery_robostake_aggregated_total[1m])",
+          "legendFormat": "Refinery: RoboStake/sec"
         },
         {
-          "expr": "rate(mint_robo_aggregated_total[1m])",
-          "legendFormat": "Mint: RT Aggregated/sec"
+          "expr": "rate(mint_robostake_aggregated_total[1m])",
+          "legendFormat": "Mint: RoboStake/sec"
         },
         {
           "expr": "rate(distodam_inflows_robo_total[1m])",
-          "legendFormat": "DistoDam: RT Inflow/sec"
+          "legendFormat": "DistoDam: RoboStake/sec"
         }
       ],
       "yaxes": [

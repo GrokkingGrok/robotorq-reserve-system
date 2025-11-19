@@ -32,17 +32,17 @@ type Config struct {
 	NatsURL string // Default: "nats://nats:4222"
 
 	// NATS topics
-	MintBatchesTopic          string // Default: "mint.batches"
-	ContractsApprovedTopic    string // Default: "contracts.approved"
-	ContractsFundedTopic      string // Default: "contracts.funded"
-	UBDWalletRegisteredTopic  string // Default: "ubd.wallet.registered"
-	UBDDistributedTopic       string // Default: "ubd.distributed"
+	MintBatchesTopic         string // Default: "distodam.units"
+	ContractsApprovedTopic   string // Default: "contracts.approved"
+	ContractsFundedTopic     string // Default: "contracts.funded"
+	UBDWalletRegisteredTopic string // Default: "ubd.wallet.registered"
+	UBDDistributedTopic      string // Default: "ubd.distributed"
 
 	// Vault genesis bootstrap (Phase 6 - internal state initialization)
-	InitialStakeVaultRT         float64 // Default: 0.0
-	InitialDistoVaultRT         float64 // Default: 0.0
-	GenesisBootstrapStakePct    float64 // Default: 0.95 (95%)
-	GenesisBootstrapDistoPct    float64 // Default: 0.05 (5%)
+	InitialStakeVaultRT      float64 // Default: 0.0
+	InitialDistoVaultRT      float64 // Default: 0.0
+	GenesisBootstrapStakePct float64 // Default: 0.95 (95%)
+	GenesisBootstrapDistoPct float64 // Default: 0.05 (5%)
 
 	// Loan policy
 	LoanPolicy LoanPolicy // Default: "natural"
@@ -109,7 +109,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		HTTPPort:                 getEnv("HTTP_PORT", "8082"),
 		NatsURL:                  getEnv("NATS_URL", "nats://nats:4222"),
-		MintBatchesTopic:         getEnv("MINT_BATCHES_TOPIC", "mint.batches"),
+		MintBatchesTopic:         getEnv("MINT_BATCHES_TOPIC", "distodam.units"),
 		ContractsApprovedTopic:   getEnv("CONTRACTS_APPROVED_TOPIC", "contracts.approved"),
 		ContractsFundedTopic:     getEnv("CONTRACTS_FUNDED_TOPIC", "contracts.funded"),
 		UBDWalletRegisteredTopic: getEnv("UBD_WALLET_REGISTERED_TOPIC", "ubd.wallet.registered"),
