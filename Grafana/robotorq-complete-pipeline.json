@@ -1,0 +1,516 @@
+{
+  "id": null,
+  "uid": "robotorq-complete-pipeline",
+  "title": "RoboTorq Complete Pipeline",
+  "tags": ["robotorq", "pipeline", "complete"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 0,
+  "refresh": "5s",
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Digger - Ore Generation",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Ore Dug (Total RT)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "digger_ore_generated_total",
+          "legendFormat": "Ore RT"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 1 }
+    },
+    {
+      "type": "stat",
+      "title": "Ore Sent (Hash Batches)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "digger_hash_batches_sent_total",
+          "legendFormat": "Batches"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 1 }
+    },
+    {
+      "type": "stat",
+      "title": "Ore Sent (Total Hashes)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "digger_hashes_sent_total",
+          "legendFormat": "Hashes"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 1 }
+    },
+    {
+      "type": "row",
+      "title": "Refinery - Ingot Processing",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 }
+    },
+    {
+      "type": "stat",
+      "title": "Ore Received (Batches)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "refinery_nats_batches_received_total",
+          "legendFormat": "Batches"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Ore Received (Total Hashes)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "refinery_nats_hashes_received_total",
+          "legendFormat": "Hashes"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Ingots Refined",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "refinery_phase2_ingots_assembled_total",
+          "legendFormat": "Ingots"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Ingots Sent to Mint",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "refinery_phase2_ingots_sent_total",
+          "legendFormat": "Sent"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 8 }
+    },
+    {
+      "type": "row",
+      "title": "Mint - RoboTorq Creation",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 }
+    },
+    {
+      "type": "stat",
+      "title": "Ingots Received",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "mint_phase2_ingots_received_total",
+          "legendFormat": "Ingots"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 1, "color": "green" }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 15 }
+    },
+    {
+      "type": "stat",
+      "title": "RoboTorq Aggregated",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "mint_robo_aggregated_total",
+          "legendFormat": "RT Aggregated"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 15 }
+    },
+    {
+      "type": "stat",
+      "title": "Phase3 Units Published",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "mint_phase3_units_published_total",
+          "legendFormat": "Units Published"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 15 }
+    },
+    {
+      "type": "stat",
+      "title": "Batches Processed",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "mint_batches_processed_total",
+          "legendFormat": "Batches"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 15 }
+    },
+    {
+      "type": "row",
+      "title": "DistoDam - Reservoir Management",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 21 }
+    },
+    {
+      "type": "stat",
+      "title": "RoboTorq Received",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "distodam_inflows_robo_total",
+          "legendFormat": "RT Received"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 22 }
+    },
+    {
+      "type": "stat",
+      "title": "StakeVault Balance",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "distodam_stake_vault_balance_rt",
+          "legendFormat": "Stake RT"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 22 }
+    },
+    {
+      "type": "stat",
+      "title": "DistoVault Balance",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "distodam_disto_vault_balance_rt",
+          "legendFormat": "Disto RT"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 100, "color": "yellow" },
+              { "value": 1000, "color": "green" }
+            ]
+          },
+          "unit": "short",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 22 }
+    },
+    {
+      "type": "row",
+      "title": "Pipeline Flow Visualization",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 }
+    },
+    {
+      "type": "graph",
+      "title": "Complete Pipeline Flow",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "rate(digger_ore_generated_total[1m])",
+          "legendFormat": "Digger: Ore/sec"
+        },
+        {
+          "expr": "rate(refinery_phase2_ingots_assembled_total[1m])",
+          "legendFormat": "Refinery: Ingots/sec"
+        },
+        {
+          "expr": "rate(mint_robo_aggregated_total[1m])",
+          "legendFormat": "Mint: RT Aggregated/sec"
+        },
+        {
+          "expr": "rate(distodam_inflows_robo_total[1m])",
+          "legendFormat": "DistoDam: RT Inflow/sec"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ops",
+          "label": "Rate (per second)"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 29 }
+    },
+    {
+      "type": "row",
+      "title": "System Health Summary",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 37 }
+    },
+    {
+      "type": "table",
+      "title": "Pipeline Metrics Summary",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "digger_ore_generated_total",
+          "legendFormat": "Digger: Ore Dug",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "digger_hash_batches_sent_total",
+          "legendFormat": "Digger: Batches Sent",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "refinery_nats_batches_received_total",
+          "legendFormat": "Refinery: Batches Received",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "refinery_phase2_ingots_assembled_total",
+          "legendFormat": "Refinery: Ingots Refined",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "mint_phase2_ingots_received_total",
+          "legendFormat": "Mint: Ingots Received",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "mint_robo_aggregated_total",
+          "legendFormat": "Mint: RT Aggregated",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "mint_phase3_units_published_total",
+          "legendFormat": "Mint: Phase3 Units Published",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "distodam_inflows_robo_total",
+          "legendFormat": "DistoDam: RT Received",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "distodam_stake_vault_balance_rt",
+          "legendFormat": "DistoDam: StakeVault Balance",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "distodam_disto_vault_balance_rt",
+          "legendFormat": "DistoDam: DistoVault Balance",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            }
+          }
+        }
+      ],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 38 }
+    }
+  ]
+}

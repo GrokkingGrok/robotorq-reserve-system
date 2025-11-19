@@ -33,7 +33,7 @@
       {
         "type": "stat",
         "title": "Active Contracts",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "digger_contracts_active",
@@ -59,7 +59,7 @@
       {
         "type": "stat",
         "title": "Contracts Created",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "digger_contracts_created_total",
@@ -78,7 +78,7 @@
       {
         "type": "stat",
         "title": "Contracts Staked",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "digger_contracts_staked_total",
@@ -97,7 +97,7 @@
       {
         "type": "stat",
         "title": "Contracts Executed",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "digger_contracts_executed_total",
@@ -116,7 +116,7 @@
       {
         "type": "graph",
         "title": "Contract Creation Rate",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "rate(digger_contracts_created_total[1m])",
@@ -134,7 +134,7 @@
       {
         "type": "graph",
         "title": "Contract Execution Rate",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "rate(digger_contracts_executed_total[1m])",
@@ -158,7 +158,7 @@
       {
         "type": "stat",
         "title": "Jobs Started",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "digger_printer_jobs_started_total",
@@ -177,7 +177,7 @@
       {
         "type": "stat",
         "title": "Milestones Reported",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "digger_printer_milestones_reported_total",
@@ -196,7 +196,7 @@
       {
         "type": "stat",
         "title": "Jobs Completed",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "digger_printer_jobs_completed_total",
@@ -222,7 +222,7 @@
       {
         "type": "graph",
         "title": "Milestone Reporting Rate",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "rate(digger_printer_milestones_reported_total[1m])",
@@ -240,7 +240,7 @@
       {
         "type": "graph",
         "title": "Job Completion Rate",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "rate(digger_printer_jobs_completed_total[1m])",
@@ -264,7 +264,7 @@
       {
         "type": "stat",
         "title": "Total JTUs Generated",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "digger_jtus_generated_total",
@@ -284,7 +284,7 @@
       {
         "type": "stat",
         "title": "JTUs Stored in Database",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "digger_jtus_stored_total",
@@ -304,7 +304,7 @@
       {
         "type": "graph",
         "title": "JTU Generation Rate",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "rate(digger_jtus_generated_total[1m])",
@@ -322,7 +322,7 @@
       {
         "type": "graph",
         "title": "JTU Storage Rate",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "rate(digger_jtus_stored_total[1m])",
@@ -346,7 +346,7 @@
       {
         "type": "stat",
         "title": "Total Ore Generated (RT)",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "digger_ore_generated_total",
@@ -367,7 +367,7 @@
       {
         "type": "stat",
         "title": "Hash Batches Sent",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "digger_hash_batches_sent_total",
@@ -386,7 +386,7 @@
       {
         "type": "stat",
         "title": "Total Hashes Sent",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "digger_hashes_sent_total",
@@ -405,7 +405,7 @@
       {
         "type": "graph",
         "title": "Ore Generation Rate (RT/sec)",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "rate(digger_ore_generated_total[1m])",
@@ -423,7 +423,7 @@
       {
         "type": "graph",
         "title": "Hash Batch Transmission Rate",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "rate(digger_hash_batches_sent_total[1m])",
@@ -447,7 +447,7 @@
       {
         "type": "graph",
         "title": "API Request Duration (p50, p95, p99)",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "histogram_quantile(0.50, rate(digger_api_request_duration_bucket[1m]))",
@@ -473,7 +473,7 @@
       {
         "type": "graph",
         "title": "API Error Rate",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "rate(digger_api_errors_total[1m])",
@@ -497,7 +497,7 @@
       {
         "type": "table",
         "title": "Metric Summary",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "ff4c4su9ayigwe" },
         "targets": [
           {
             "expr": "digger_contracts_active",
@@ -553,5 +553,6 @@
       }
     ]
 }
+
 
 
