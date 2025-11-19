@@ -101,7 +101,7 @@ services:
       nats:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3030/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3030/health"]
       interval: 30s
       timeout: 3s
       retries: 3

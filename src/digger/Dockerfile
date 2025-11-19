@@ -21,7 +21,7 @@ RUN cargo build --release --bin digger
 FROM alpine:3.20
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates curl
 
 WORKDIR /app
 
@@ -36,7 +36,7 @@ EXPOSE 3030
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-  CMD wget -qO- http://localhost:3030/health || exit 1
+  CMD curl -f http://localhost:3030/health || exit 1
 
 # Run the binary
 CMD ["./digger"]
