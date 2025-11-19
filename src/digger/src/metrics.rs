@@ -34,6 +34,7 @@ pub struct DiggerMetrics {
     // Hash transmission metrics
     pub hash_batches_sent_total: IntCounter,
     pub hashes_sent_total: IntCounter,
+    pub robostake_sent_total: Counter,
     
     // API latency metrics
     pub api_request_duration: HistogramVec,
@@ -114,6 +115,11 @@ impl DiggerMetrics {
         )?;
         registry.register(Box::new(hashes_sent_total.clone()))?;
         
+        let robostake_sent_total = Counter::with_opts(
+            Opts::new("digger_robostake_sent_total", "Total RoboStake sent in ore batches")
+        )?;
+        registry.register(Box::new(robostake_sent_total.clone()))?;
+        
         // API latency metrics
         let api_request_duration = HistogramVec::new(
             prometheus::HistogramOpts::new(
@@ -144,6 +150,7 @@ impl DiggerMetrics {
             ore_generated_total,
             hash_batches_sent_total,
             hashes_sent_total,
+            robostake_sent_total,
             api_request_duration,
             api_errors_total,
             registry: Arc::new(registry),

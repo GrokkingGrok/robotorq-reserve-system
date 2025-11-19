@@ -79,7 +79,13 @@ func TestPhase3DistoDamPublisher_PublishUnit_Success(t *testing.T) {
 	publisher := NewPhase3DistoDamPublisher(conn, unitChannel, logger, metrics)
 
 	// Create test unit
-	unit, err := models.NewPhase3RoboTorqUnit("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", 10)
+	unit, err := models.NewPhase3RoboTorqUnit(
+		"1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+		10,
+		5.0,
+		[]string{"test-contract-1"},
+		[]string{"test-digger-1"},
+	)
 	require.NoError(t, err)
 
 	// Publish unit
@@ -230,7 +236,13 @@ func TestPhase3DistoDamPublisher_Start_PublishesMultipleUnits(t *testing.T) {
 	units := make([]*models.Phase3RoboTorqUnit, 5)
 	for i := 0; i < 5; i++ {
 		merkleRoot := "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-		unit, err := models.NewPhase3RoboTorqUnit(merkleRoot, 10)
+		unit, err := models.NewPhase3RoboTorqUnit(
+			merkleRoot,
+			10,
+			5.0,
+			[]string{"test-contract-1"},
+			[]string{"test-digger-1"},
+		)
 		require.NoError(t, err)
 		units[i] = unit
 		unitChannel <- unit
@@ -288,7 +300,13 @@ func TestPhase3DistoDamPublisher_DrainRemainingUnits(t *testing.T) {
 	units := make([]*models.Phase3RoboTorqUnit, 3)
 	for i := 0; i < 3; i++ {
 		merkleRoot := "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-		unit, err := models.NewPhase3RoboTorqUnit(merkleRoot, 10)
+		unit, err := models.NewPhase3RoboTorqUnit(
+			merkleRoot,
+			10,
+			5.0,
+			[]string{"test-contract-1"},
+			[]string{"test-digger-1"},
+		)
 		require.NoError(t, err)
 		units[i] = unit
 		unitChannel <- unit
@@ -341,7 +359,13 @@ func TestPhase3DistoDamPublisher_MetricsRecorded(t *testing.T) {
 
 	// Publish 1 unit
 	merkleRoot := "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-	unit, err := models.NewPhase3RoboTorqUnit(merkleRoot, 10)
+	unit, err := models.NewPhase3RoboTorqUnit(
+		merkleRoot,
+		10,
+		5.0,
+		[]string{"test-contract-1"},
+		[]string{"test-digger-1"},
+	)
 	require.NoError(t, err)
 	unitChannel <- unit
 

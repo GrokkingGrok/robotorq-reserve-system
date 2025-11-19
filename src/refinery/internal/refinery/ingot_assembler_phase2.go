@@ -42,12 +42,18 @@ var (
 		Name: "refinery_phase2_ingots_assembled_total",
 		Help: "Total Phase 2 ingots assembled (hash-only, with merkle roots)",
 	})
+
+	robostakeAggregatedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "refinery_robostake_aggregated_total",
+		Help: "Total RoboStake aggregated into Phase 2 ingots",
+	})
 )
 
 func init() {
 	prometheus.MustRegister(merkleTreesBuiltTotal)
 	prometheus.MustRegister(merkleBuildDuration)
 	prometheus.MustRegister(phase2IngotsAssembledTotal)
+	prometheus.MustRegister(robostakeAggregatedTotal)
 }
 
 // Phase2Ingot is the simplified ingot structure for Phase 2 (hash-only flow)
@@ -230,6 +236,7 @@ func (ia *Phase2IngotAssembler) assembleIngot(hashEntries []HashEntry) error {
 	ia.mu.Unlock()
 
 	phase2IngotsAssembledTotal.Inc()
+	robostakeAggregatedTotal.Add(totalRoboStake)
 
 	totalDuration := time.Since(startTime).Milliseconds()
 

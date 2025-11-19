@@ -125,6 +125,7 @@ type Phase3RoboTorqUnitAssembler struct {
 type Phase3AssemblerMetrics struct {
 	UnitsAssembledTotal     prometheus.Counter
 	AssemblyErrorsTotal     prometheus.Counter
+	RoboStakeAggregated     prometheus.Counter
 	AssemblyDurationSeconds prometheus.Histogram
 	ContractsPerUnit        prometheus.Histogram
 	DiggersPerUnit          prometheus.Histogram
@@ -141,6 +142,10 @@ func NewPhase3AssemblerMetrics(reg prometheus.Registerer) *Phase3AssemblerMetric
 		AssemblyErrorsTotal: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "mint_phase3_assembly_errors_total",
 			Help: "Total number of Phase 3 unit assembly errors",
+		}),
+		RoboStakeAggregated: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "mint_robostake_aggregated_total",
+			Help: "Total RoboStake aggregated into Phase 3 RoboTorq units",
 		}),
 		AssemblyDurationSeconds: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name:    "mint_phase3_assembly_duration_seconds",
@@ -168,6 +173,7 @@ func NewPhase3AssemblerMetrics(reg prometheus.Registerer) *Phase3AssemblerMetric
 		reg.MustRegister(
 			m.UnitsAssembledTotal,
 			m.AssemblyErrorsTotal,
+			m.RoboStakeAggregated,
 			m.AssemblyDurationSeconds,
 			m.ContractsPerUnit,
 			m.DiggersPerUnit,
@@ -401,6 +407,8 @@ func (a *Phase3RoboTorqUnitAssembler) assembleUnit(merkleResult *Level2MerkleRes
 	a.metrics.DiggersPerUnit.Observe(float64(len(merkleResult.DiggerIDs)))
 	a.metrics.RefineriesPerUnit.Observe(float64(len(merkleResult.RefineryIDs)))
 	a.metrics.UnitsAssembledTotal.Inc()
+	a.metrics.RoboStakeAggregated.Add(merkleResult.RoboStakeTotal)
+	a.metrics.RoboStakeAggregated.Add(merkleResult.RoboStakeTotal)
 
 	return unit, nil
 }

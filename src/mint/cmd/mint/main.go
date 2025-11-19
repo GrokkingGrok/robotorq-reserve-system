@@ -26,6 +26,7 @@ import (
 
 	"net/http"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -172,7 +173,7 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 	logger.Info("Level2MerkleBuilder initialized", "batch_size", 1000)
 
 	// Create Phase3AssemblerMetrics (Phase 3 Milestone 4b: Prometheus metrics)
-	phase3Metrics := mint.NewPhase3AssemblerMetrics(nil) // TODO: Register with Prometheus registry
+	phase3Metrics := mint.NewPhase3AssemblerMetrics(prometheus.DefaultRegisterer)
 	logger.Info("Phase3AssemblerMetrics initialized")
 
 	// Create Phase3RoboTorqUnitAssembler (Phase 3 Milestone 4b: RT unit assembler)
@@ -189,7 +190,7 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 	logger.Info("Phase3RoboTorqUnitAssembler initialized", "channel_capacity", 10)
 
 	// Create Phase3DistoDamPublisher (Phase 3 Milestone 5a: DistoDam publisher)
-	phase3PublisherMetrics := mint.NewPhase3DistoDamPublisherMetrics(nil) // TODO: Register with Prometheus registry
+	phase3PublisherMetrics := mint.NewPhase3DistoDamPublisherMetrics(prometheus.DefaultRegisterer)
 	phase3Publisher := mint.NewPhase3DistoDamPublisher(
 		client.GetConnection(),
 		phase3Assembler.GetUnitChannel(),

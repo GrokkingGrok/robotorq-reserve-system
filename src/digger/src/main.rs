@@ -212,6 +212,9 @@ async fn hash_sender_task(state: ApiState, batch_interval_sec: u64) {
                         contract_id
                     );
                     
+                    // Update metrics
+                    state.metrics.robostake_sent_total.inc_by(robo_stake);
+                    
                     // Mark hash send in contract state
                     let mut manager = state.contract_manager.lock().unwrap();
                     if let Some(contract) = manager.get_mut(&contract_id) {

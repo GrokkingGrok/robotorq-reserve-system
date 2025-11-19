@@ -13,7 +13,13 @@ func TestNewPhase3RoboTorqUnit_Success(t *testing.T) {
 	merkleRoot := generateTestMerkleRoot()
 	treeHeight := 10 // 1000 ingots
 
-	unit, err := NewPhase3RoboTorqUnit(merkleRoot, treeHeight)
+	unit, err := NewPhase3RoboTorqUnit(
+		merkleRoot,
+		treeHeight,
+		5.0,
+		[]string{"test-contract-1"},
+		[]string{"test-digger-1"},
+	)
 
 	require.NoError(t, err)
 	assert.NotNil(t, unit)
@@ -43,7 +49,7 @@ func TestNewPhase3RoboTorqUnit_InvalidMerkleRoot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			unit, err := NewPhase3RoboTorqUnit(tt.merkleRoot, 10)
+			unit, err := NewPhase3RoboTorqUnit(tt.merkleRoot, 10, 5.0, []string{"test-contract"}, []string{"test-digger"})
 
 			assert.Error(t, err)
 			assert.Nil(t, unit)
@@ -70,7 +76,7 @@ func TestNewPhase3RoboTorqUnit_HexValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			unit, err := NewPhase3RoboTorqUnit(tt.merkleRoot, 10)
+			unit, err := NewPhase3RoboTorqUnit(tt.merkleRoot, 10, 5.0, []string{"test-contract"}, []string{"test-digger"})
 
 			if tt.shouldPass {
 				assert.NoError(t, err)
@@ -86,7 +92,13 @@ func TestNewPhase3RoboTorqUnit_HexValidation(t *testing.T) {
 // TestPhase3RoboTorqUnit_Validate tests validation method
 func TestPhase3RoboTorqUnit_Validate(t *testing.T) {
 	// Valid unit
-	validUnit, err := NewPhase3RoboTorqUnit(generateTestMerkleRoot(), 10)
+	validUnit, err := NewPhase3RoboTorqUnit(
+		generateTestMerkleRoot(),
+		10,
+		5.0,
+		[]string{"test-contract-1"},
+		[]string{"test-digger-1"},
+	)
 	require.NoError(t, err)
 
 	err = validUnit.Validate()
@@ -120,7 +132,7 @@ func TestPhase3RoboTorqUnit_Validate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create fresh valid unit
-			unit, _ := NewPhase3RoboTorqUnit(generateTestMerkleRoot(), 10)
+			unit, _ := NewPhase3RoboTorqUnit(generateTestMerkleRoot(), 10, 5.0, []string{"test-contract"}, []string{"test-digger"})
 
 			// Apply modification
 			tt.modify(unit)
@@ -135,7 +147,13 @@ func TestPhase3RoboTorqUnit_Validate(t *testing.T) {
 
 // TestPhase3RoboTorqUnit_ToJSON tests JSON serialization
 func TestPhase3RoboTorqUnit_ToJSON(t *testing.T) {
-	unit, err := NewPhase3RoboTorqUnit(generateTestMerkleRoot(), 10)
+	unit, err := NewPhase3RoboTorqUnit(
+		generateTestMerkleRoot(),
+		10,
+		5.0,
+		[]string{"test-contract-1"},
+		[]string{"test-digger-1"},
+	)
 	require.NoError(t, err)
 
 	data, err := unit.ToJSON()
@@ -159,7 +177,13 @@ func TestPhase3RoboTorqUnit_ToJSON(t *testing.T) {
 
 // TestPhase3RoboTorqUnit_SizeBytes tests size estimation
 func TestPhase3RoboTorqUnit_SizeBytes(t *testing.T) {
-	unit, err := NewPhase3RoboTorqUnit(generateTestMerkleRoot(), 10)
+	unit, err := NewPhase3RoboTorqUnit(
+		generateTestMerkleRoot(),
+		10,
+		5.0,
+		[]string{"test-contract-1"},
+		[]string{"test-digger-1"},
+	)
 	require.NoError(t, err)
 
 	size := unit.SizeBytes()
@@ -172,7 +196,13 @@ func TestPhase3RoboTorqUnit_SizeBytes(t *testing.T) {
 
 // TestPhase3RoboTorqUnit_NFCCompatibility tests NFC tag size requirements
 func TestPhase3RoboTorqUnit_NFCCompatibility(t *testing.T) {
-	unit, err := NewPhase3RoboTorqUnit(generateTestMerkleRoot(), 10)
+	unit, err := NewPhase3RoboTorqUnit(
+		generateTestMerkleRoot(),
+		10,
+		5.0,
+		[]string{"test-contract-1"},
+		[]string{"test-digger-1"},
+	)
 	require.NoError(t, err)
 
 	// NTAG215 capacity: 540 bytes usable
@@ -202,13 +232,25 @@ func TestPhase3RoboTorqUnit_NFCCompatibility(t *testing.T) {
 
 // TestPhase3RoboTorqUnit_UniqueIDs tests ID generation uniqueness
 func TestPhase3RoboTorqUnit_UniqueIDs(t *testing.T) {
-	unit1, err := NewPhase3RoboTorqUnit(generateTestMerkleRoot(), 10)
+	unit1, err := NewPhase3RoboTorqUnit(
+		generateTestMerkleRoot(),
+		10,
+		5.0,
+		[]string{"test-contract-1"},
+		[]string{"test-digger-1"},
+	)
 	require.NoError(t, err)
 
 	// Sleep briefly to ensure different timestamps
 	time.Sleep(1 * time.Millisecond)
 
-	unit2, err := NewPhase3RoboTorqUnit(generateTestMerkleRoot(), 10)
+	unit2, err := NewPhase3RoboTorqUnit(
+		generateTestMerkleRoot(),
+		10,
+		5.0,
+		[]string{"test-contract-1"},
+		[]string{"test-digger-1"},
+	)
 	require.NoError(t, err)
 
 	assert.NotEqual(t, unit1.UnitID, unit2.UnitID, "unit IDs should be unique")
@@ -217,7 +259,13 @@ func TestPhase3RoboTorqUnit_UniqueIDs(t *testing.T) {
 // TestPhase3RoboTorqUnit_ComparisonWithOldFormat tests size comparison
 func TestPhase3RoboTorqUnit_ComparisonWithOldFormat(t *testing.T) {
 	// Phase 3 unit (pure hash-only)
-	phase3Unit, err := NewPhase3RoboTorqUnit(generateTestMerkleRoot(), 10)
+	phase3Unit, err := NewPhase3RoboTorqUnit(
+		generateTestMerkleRoot(),
+		10,
+		5.0,
+		[]string{"test-contract-1"},
+		[]string{"test-digger-1"},
+	)
 	require.NoError(t, err)
 
 	phase3Size := phase3Unit.SizeBytes()
