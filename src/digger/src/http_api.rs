@@ -93,6 +93,57 @@ pub struct ExecuteContractRequest {
     pub duration_seconds: u64,  // How long to simulate work
 }
 
+// ============================================================================
+// Printer-facing DTOs (Printer → Digger communication)
+// ============================================================================
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PrinterJobStartRequest {
+    pub printer_id: String,
+    pub contract_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PrinterJobStartResponse {
+    pub job_id: String,
+    pub contract_id: String,
+    pub milestones_total: i64,
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PrinterMilestoneRequest {
+    pub contract_id: String,
+    pub milestone_number: i64,
+    pub photo_base64: Option<String>,  // Optional photo data
+    pub notes: Option<String>,         // Optional notes from printer
+}
+
+#[derive(Debug, Serialize)]
+pub struct PrinterMilestoneResponse {
+    pub contract_id: String,
+    pub milestone_number: i64,
+    pub milestones_completed: i64,
+    pub milestones_total: i64,
+    pub progress: f64,
+    pub is_complete: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PrinterJobCompleteRequest {
+    pub contract_id: String,
+    pub total_duration_seconds: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PrinterJobCompleteResponse {
+    pub contract_id: String,
+    pub jtu_count: i64,
+    pub ore_generated: f64,
+    pub message: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ExecuteContractResponse {
     pub contract_id: String,
@@ -526,6 +577,232 @@ pub async fn get_jtu_stats(
     }))
 }
 
+// ============================================================================
+// Printer Endpoints (Printer → Digger)
+// ============================================================================
+
+/// POST /printer/job/start - Printer acknowledges job start
+///
+/// Called by printer when it begins physical work on a contract.
+///
+/// Example:
+///   POST /printer/job/start
+///   {
+///     "printer_id": "printer-001",
+///     "contract_id": "contract-abc123"
+///   }
+pub async fn printer_job_start(
+    State(state): State<ApiState>,
+    Json(req): Json<PrinterJobStartRequest>,
+) -> Result<Json<PrinterJobStartResponse>, (StatusCode, Json<ErrorResponse>)> {
+    info!(
+        "Printer {} starting job for contract: {}",
+        req.printer_id, req.contract_id
+    );
+
+    let manager = state.contract_manager.lock().unwrap();
+    
+    let contract = match manager.get(&req.contract_id) {
+        Some(c) => c,
+        None => {
+            warn!("Contract not found: {}", req.contract_id);
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("Contract {} not found", req.contract_id),
+                }),
+            ));
+        }
+    };
+
+    // Must be approved
+    if contract.approval_status != ApprovalStatus::StakeApproved
+        && contract.approval_status != ApprovalStatus::ExecutionComplete
+    {
+        warn!(
+            "Contract {} not approved for execution (status: {:?})",
+            req.contract_id, contract.approval_status
+        );
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Contract must be approved before printer can start".to_string(),
+            }),
+        ));
+    }
+
+    info!(
+        "Printer {} acknowledged for contract {} ({} milestones)",
+        req.printer_id, req.contract_id, contract.milestones_total
+    );
+
+    Ok(Json(PrinterJobStartResponse {
+        job_id: format!("job-{}-{}", req.contract_id, chrono::Utc::now().timestamp()),
+        contract_id: req.contract_id,
+        milestones_total: contract.milestones_total,
+        message: format!("Job started. Report {} milestones as work progresses.", contract.milestones_total),
+    }))
+}
+
+/// POST /printer/milestone - Report milestone completion from printer
+///
+/// Allows printer to report milestone progress during contract execution.
+/// Each milestone report increments the milestone counter and can include
+/// photo data for verification.
+///
+/// Example:
+///   POST /printer/milestone
+///   {
+///     "contract_id": "contract-abc123",
+///     "milestone_number": 1,
+///     "photo_base64": "iVBORw0KGgo...",
+///     "notes": "Print bed at 50% completion"
+///   }
+pub async fn printer_report_milestone(
+    State(state): State<ApiState>,
+    Json(req): Json<PrinterMilestoneRequest>,
+) -> Result<Json<PrinterMilestoneResponse>, (StatusCode, Json<ErrorResponse>)> {
+    info!(
+        "Milestone {} reported for contract: {}",
+        req.milestone_number, req.contract_id
+    );
+
+    let mut manager = state.contract_manager.lock().unwrap();
+    
+    let contract = match manager.get_mut(&req.contract_id) {
+        Some(c) => c,
+        None => {
+            warn!("Contract not found: {}", req.contract_id);
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("Contract {} not found", req.contract_id),
+                }),
+            ));
+        }
+    };
+
+    // Must be approved or already executing
+    if contract.approval_status != ApprovalStatus::StakeApproved
+        && contract.approval_status != ApprovalStatus::ExecutionComplete
+    {
+        warn!(
+            "Contract {} not approved for milestone reporting (status: {:?})",
+            req.contract_id, contract.approval_status
+        );
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Contract must be approved before milestone reporting".to_string(),
+            }),
+        ));
+    }
+
+    // Complete the milestone
+    if let Err(e) = contract.complete_milestone() {
+        error!("Failed to complete milestone: {}", e);
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse { error: e }),
+        ));
+    }
+
+    let milestones_completed = contract.milestones_completed;
+    let milestones_total = contract.milestones_total;
+    let progress = contract.progress();
+    let is_complete = contract.is_complete();
+
+    // Log photo receipt if provided
+    if let Some(photo) = &req.photo_base64 {
+        info!(
+            "Milestone {} photo received: {} bytes",
+            req.milestone_number,
+            photo.len()
+        );
+    }
+
+    // Log notes if provided
+    if let Some(notes) = &req.notes {
+        info!("Milestone {} notes: {}", req.milestone_number, notes);
+    }
+
+    info!(
+        "Contract {} milestone {} completed ({:.1}% complete)",
+        req.contract_id,
+        req.milestone_number,
+        progress * 100.0
+    );
+
+    Ok(Json(PrinterMilestoneResponse {
+        contract_id: req.contract_id,
+        milestone_number: req.milestone_number,
+        milestones_completed,
+        milestones_total,
+        progress,
+        is_complete,
+        message: if is_complete {
+            "All milestones complete! Contract execution finished.".to_string()
+        } else {
+            format!(
+                "Milestone {} of {} complete ({:.1}% done)",
+                milestones_completed,
+                milestones_total,
+                progress * 100.0
+            )
+        },
+    }))
+}
+
+/// POST /printer/job/complete - Printer reports job completion
+///
+/// Called by printer when physical work is done.
+///
+/// Example:
+///   POST /printer/job/complete
+///   {
+///     "contract_id": "contract-abc123",
+///     "total_duration_seconds": 300
+///   }
+pub async fn printer_job_complete(
+    State(state): State<ApiState>,
+    Json(req): Json<PrinterJobCompleteRequest>,
+) -> Result<Json<PrinterJobCompleteResponse>, (StatusCode, Json<ErrorResponse>)> {
+    info!(
+        "Printer reports job complete for contract: {} ({}s)",
+        req.contract_id, req.total_duration_seconds
+    );
+
+    let manager = state.contract_manager.lock().unwrap();
+    
+    let contract = match manager.get(&req.contract_id) {
+        Some(c) => c,
+        None => {
+            warn!("Contract not found: {}", req.contract_id);
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("Contract {} not found", req.contract_id),
+                }),
+            ));
+        }
+    };
+
+    info!(
+        "Job complete for contract {}: {} JTUs, {} RT ore",
+        req.contract_id, contract.jtu_count, contract.ore_generated
+    );
+
+    Ok(Json(PrinterJobCompleteResponse {
+        contract_id: req.contract_id,
+        jtu_count: contract.jtu_count,
+        ore_generated: contract.ore_generated,
+        message: format!(
+            "Job complete! Generated {} JTUs worth {} RT",
+            contract.jtu_count, contract.ore_generated
+        ),
+    }))
+}
+
 /// GET /health - Health check
 pub async fn health_check() -> impl IntoResponse {
     Json(serde_json::json!({
@@ -537,13 +814,19 @@ pub async fn health_check() -> impl IntoResponse {
 
 /// GET / - Root endpoint
 pub async fn root() -> impl IntoResponse {
-    "Digger v0.2.0 - Contract Management API\n\nEndpoints:\n\
-     POST   /contracts/create - Create contract\n\
-     POST   /contracts/stake  - Pay stake\n\
-     POST   /contracts/execute - Execute contract\n\
-     GET    /contracts/:id    - Get contract status\n\
-     GET    /jtus/:id         - Get JTU stats\n\
-     GET    /health           - Health check\n"
+    "Digger v0.2.0 - Contract Management & Printer API\n\n\
+     Contract Endpoints (Trust → Digger):\n\
+     POST   /contracts/create       - Create contract\n\
+     POST   /contracts/stake        - Pay stake\n\
+     POST   /contracts/execute      - Execute contract (generate JTUs)\n\
+     GET    /contracts/:id          - Get contract status\n\
+     GET    /jtus/:id               - Get JTU stats\n\n\
+     Printer Endpoints (Printer → Digger):\n\
+     POST   /printer/job/start      - Acknowledge job start\n\
+     POST   /printer/milestone      - Report milestone progress\n\
+     POST   /printer/job/complete   - Report job completion\n\n\
+     System:\n\
+     GET    /health                 - Health check\n"
 }
 
 // ============================================================================
@@ -554,11 +837,16 @@ pub fn create_router(state: ApiState) -> Router {
     Router::new()
         .route("/", get(root))
         .route("/health", get(health_check))
+        // Contract endpoints (Trust → Digger)
         .route("/contracts/create", post(create_contract))
         .route("/contracts/stake", post(pay_stake))
         .route("/contracts/execute", post(execute_contract))
         .route("/contracts/{id}", get(get_contract_status))
         .route("/jtus/{id}", get(get_jtu_stats))
+        // Printer endpoints (Printer → Digger)
+        .route("/printer/job/start", post(printer_job_start))
+        .route("/printer/milestone", post(printer_report_milestone))
+        .route("/printer/job/complete", post(printer_job_complete))
         .with_state(state)
 }
 

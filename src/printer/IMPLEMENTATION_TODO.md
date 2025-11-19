@@ -31,7 +31,7 @@ RoboTorq had to start somewhere. Here's the transparent accounting of how the fi
 
 **The Calculation**:
 ```
-RoboTorq_genesis = (H_tokens + AI_tokens) × Watts × Hours × torq_factor
+ore_genesis = (H_tokens + AI_tokens) × Watts × Hours × torq_factor
 
 Input = 86 tokens/sec × 5W × 500 hrs × 3600 sec/hr
       = 215,000 watt-hours of AI-assisted thinking
