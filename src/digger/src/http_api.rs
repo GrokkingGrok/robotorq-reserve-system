@@ -428,36 +428,40 @@ pub async fn execute_contract(
     // Get current JTU count for token indexing
     let starting_index = contract.jtu_count;
     
-    // Create actual JTUs
-    let mut jtus = Vec::with_capacity(jtus_generated as usize);
+    // Create actual JTUs in parallel (use rayon for CPU-bound hash calculations)
     let now = chrono::Utc::now().timestamp();
+    let contract_id = req.contract_id.clone();
+    let digger_id = state.config.digger_id.clone();
     
-    for i in 0..jtus_generated {
-        let token_index = starting_index + i;
-        let token_id = format!("{}-t{}", req.contract_id, token_index);
-        
-        // Create JTU
-        let jtu = crate::jtu_storage::JouleTorqUnit {
-            hash: crate::jtu_hasher::calculate_jtu_hash(
-                &token_id,
-                joules_per_jtu,
-                robo_stake_per_jtu,
-                now,
-                &req.contract_id,
-                &state.config.digger_id,
-            ),
-            signature: crate::jtu_hasher::create_placeholder_signature(), // TODO(phase-4): Falcon-1024
-            digger_id: state.config.digger_id.clone(),
-            contract_id: req.contract_id.clone(),
-            token_index,
-            milestone_index: 0, // Simplified for now
-            timestamp: now,
-            joules_consumed: joules_per_jtu,
-            robo_stake_paid: robo_stake_per_jtu,
-        };
-        
-        jtus.push(jtu);
-    }
+    // Generate range and compute JTUs in parallel
+    use rayon::prelude::*;
+    let jtus: Vec<crate::jtu_storage::JouleTorqUnit> = (0..jtus_generated)
+        .into_par_iter()
+        .map(|i| {
+            let token_index = starting_index + i;
+            let token_id = format!("{}-t{}", contract_id, token_index);
+            
+            // Create JTU (each thread computes hash independently)
+            crate::jtu_storage::JouleTorqUnit {
+                hash: crate::jtu_hasher::calculate_jtu_hash(
+                    &token_id,
+                    joules_per_jtu,
+                    robo_stake_per_jtu,
+                    now,
+                    &contract_id,
+                    &digger_id,
+                ),
+                signature: crate::jtu_hasher::create_placeholder_signature(), // TODO(phase-4): Falcon-1024
+                digger_id: digger_id.clone(),
+                contract_id: contract_id.clone(),
+                token_index,
+                milestone_index: 0, // Simplified for now
+                timestamp: now,
+                joules_consumed: joules_per_jtu,
+                robo_stake_paid: robo_stake_per_jtu,
+            }
+        })
+        .collect();
     
     // Store JTUs in database
     {
