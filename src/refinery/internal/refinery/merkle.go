@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"sync"
 )
 
 // MerkleTree represents a binary hash tree built from leaf hashes
@@ -75,20 +76,42 @@ func BuildMerkleTree(hashes []string) (*MerkleTree, error) {
 
 	// Keep combining pairs until we reach the root
 	for len(currentLevel) > 1 {
-		nextLevel := make([]string, 0, (len(currentLevel)+1)/2)
+		numPairs := (len(currentLevel) + 1) / 2
+		nextLevel := make([]string, numPairs)
 
-		for i := 0; i < len(currentLevel); i += 2 {
-			var combinedHash string
+		// Parallelize hash pair computations for this level
+		// Only worth parallelizing if we have enough pairs (avoid goroutine overhead)
+		if numPairs > 100 {
+			var wg sync.WaitGroup
+			wg.Add(numPairs)
 
-			if i+1 < len(currentLevel) {
-				// Pair exists: hash(left + right)
-				combinedHash = hashPair(currentLevel[i], currentLevel[i+1])
-			} else {
-				// Odd number: duplicate last hash
-				combinedHash = hashPair(currentLevel[i], currentLevel[i])
+			for i := 0; i < len(currentLevel); i += 2 {
+				pairIndex := i / 2
+				left := currentLevel[i]
+				var right string
+				if i+1 < len(currentLevel) {
+					right = currentLevel[i+1]
+				} else {
+					right = currentLevel[i] // Duplicate last
+				}
+
+				go func(idx int, l, r string) {
+					defer wg.Done()
+					nextLevel[idx] = hashPair(l, r)
+				}(pairIndex, left, right)
 			}
 
-			nextLevel = append(nextLevel, combinedHash)
+			wg.Wait()
+		} else {
+			// Sequential for small levels (< 100 pairs)
+			for i := 0; i < len(currentLevel); i += 2 {
+				pairIndex := i / 2
+				if i+1 < len(currentLevel) {
+					nextLevel[pairIndex] = hashPair(currentLevel[i], currentLevel[i+1])
+				} else {
+					nextLevel[pairIndex] = hashPair(currentLevel[i], currentLevel[i])
+				}
+			}
 		}
 
 		currentLevel = nextLevel
