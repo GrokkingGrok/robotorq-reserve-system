@@ -23,6 +23,7 @@ use crate::config::DiggerConfig;
 use crate::contract_state::{ContractStateManager, ApprovalStatus};
 use crate::crypto::DiggerKeypair;
 use crate::jtu_storage::JtuStorageManager;
+use crate::metrics::DiggerMetrics;
 
 // ============================================================================
 // API State (shared across handlers)
@@ -35,6 +36,7 @@ pub struct ApiState {
     pub storage_manager: Arc<Mutex<JtuStorageManager>>,
     pub nats_client: async_nats::Client,  // NATS client for hash transmission
     pub keypair: Arc<DiggerKeypair>,      // Falcon-1024 keypair for signing
+    pub metrics: Arc<DiggerMetrics>,      // Prometheus metrics
 }
 
 impl ApiState {
@@ -44,6 +46,7 @@ impl ApiState {
         storage_manager: JtuStorageManager,
         nats_client: async_nats::Client,
         keypair: DiggerKeypair,
+        metrics: DiggerMetrics,
     ) -> Self {
         Self {
             config: Arc::new(config),
@@ -51,6 +54,7 @@ impl ApiState {
             storage_manager: Arc::new(Mutex::new(storage_manager)),
             nats_client,
             keypair: Arc::new(keypair),
+            metrics: Arc::new(metrics),
         }
     }
 }
@@ -272,6 +276,10 @@ pub async fn create_contract(
         Ok(_) => {
             let ore_target = req.torq * req.robo_stake;
             
+            // Record metrics
+            state.metrics.contracts_created_total.inc();
+            state.metrics.contracts_active.inc();
+            
             info!(
                 "Contract {} created: ore_target = {} RT",
                 req.contract_id, ore_target
@@ -323,6 +331,9 @@ pub async fn pay_stake(
 
     match contract.pay_stake() {
         Ok(_) => {
+            // Record metrics
+            state.metrics.contracts_staked_total.inc();
+            
             info!("Stake paid for contract: {}", req.contract_id);
             
             Ok(Json(PayStakeResponse {
@@ -461,6 +472,12 @@ pub async fn execute_contract(
             ));
         }
     }
+    
+    // Record metrics
+    state.metrics.contracts_executed_total.inc();
+    state.metrics.jtus_generated_total.inc_by(jtus_generated as u64);
+    state.metrics.jtus_stored_total.inc_by(jtus_generated as u64);
+    state.metrics.ore_generated_total.inc_by(ore_generated);
     
     info!("Stored {} JTUs in database for contract {}", jtus_generated, req.contract_id);
 
@@ -636,6 +653,9 @@ pub async fn printer_job_start(
         req.printer_id, req.contract_id, contract.milestones_total
     );
 
+    // Record metrics
+    state.metrics.printer_jobs_started_total.inc();
+
     Ok(Json(PrinterJobStartResponse {
         job_id: format!("job-{}-{}", req.contract_id, chrono::Utc::now().timestamp()),
         contract_id: req.contract_id,
@@ -711,6 +731,9 @@ pub async fn printer_report_milestone(
     let milestones_total = contract.milestones_total;
     let progress = contract.progress();
     let is_complete = contract.is_complete();
+
+    // Record metrics
+    state.metrics.printer_milestones_reported_total.inc();
 
     // Log photo receipt if provided
     if let Some(photo) = &req.photo_base64 {
@@ -792,6 +815,9 @@ pub async fn printer_job_complete(
         req.contract_id, contract.jtu_count, contract.ore_generated
     );
 
+    // Record metrics
+    state.metrics.printer_jobs_completed_total.inc();
+
     Ok(Json(PrinterJobCompleteResponse {
         contract_id: req.contract_id,
         jtu_count: contract.jtu_count,
@@ -812,6 +838,38 @@ pub async fn health_check() -> impl IntoResponse {
     }))
 }
 
+/// GET /metrics - Prometheus metrics endpoint
+pub async fn metrics_handler(State(state): State<ApiState>) -> impl IntoResponse {
+    use prometheus::Encoder;
+    
+    let encoder = prometheus::TextEncoder::new();
+    let metric_families = state.metrics.gather();
+    
+    let mut buffer = Vec::new();
+    if let Err(e) = encoder.encode(&metric_families, &mut buffer) {
+        error!("Failed to encode metrics: {}", e);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to encode metrics".to_string(),
+        ).into_response();
+    }
+    
+    match String::from_utf8(buffer) {
+        Ok(metrics_text) => (
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+            metrics_text,
+        ).into_response(),
+        Err(e) => {
+            error!("Failed to convert metrics to UTF-8: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to encode metrics".to_string(),
+            ).into_response()
+        }
+    }
+}
+
 /// GET / - Root endpoint
 pub async fn root() -> impl IntoResponse {
     "Digger v0.2.0 - Contract Management & Printer API\n\n\
@@ -826,7 +884,8 @@ pub async fn root() -> impl IntoResponse {
      POST   /printer/milestone      - Report milestone progress\n\
      POST   /printer/job/complete   - Report job completion\n\n\
      System:\n\
-     GET    /health                 - Health check\n"
+     GET    /health                 - Health check\n\
+     GET    /metrics                - Prometheus metrics\n"
 }
 
 // ============================================================================
@@ -837,6 +896,7 @@ pub fn create_router(state: ApiState) -> Router {
     Router::new()
         .route("/", get(root))
         .route("/health", get(health_check))
+        .route("/metrics", get(metrics_handler))
         // Contract endpoints (Trust → Digger)
         .route("/contracts/create", post(create_contract))
         .route("/contracts/stake", post(pay_stake))
@@ -881,7 +941,10 @@ mod tests {
         // Generate test keypair for signing
         let keypair = DiggerKeypair::generate();
 
-        Some(ApiState::new(config, contract_manager, storage_manager, nats_client, keypair))
+        // Initialize metrics
+        let metrics = DiggerMetrics::default();
+
+        Some(ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics))
     }
 
     #[tokio::test]

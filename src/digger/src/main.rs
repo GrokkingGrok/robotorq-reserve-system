@@ -10,12 +10,14 @@ mod crypto;
 mod http_api;
 mod jtu_hasher;
 mod jtu_storage;
+mod metrics;
 
 use config::DiggerConfig;
 use contract_state::ContractStateManager;
 use crypto::DiggerKeypair;
 use jtu_storage::JtuStorageManager;
 use http_api::{ApiState, create_router};
+use metrics::DiggerMetrics;
 
 #[tokio::main]
 async fn main() {
@@ -68,8 +70,13 @@ async fn main() {
     let keypair = DiggerKeypair::generate();
     tracing::info!("✅ Keypair generated (public key: {} bytes)", keypair.public_key_bytes().len());
 
+    // Initialize metrics
+    tracing::info!("📊 Initializing Prometheus metrics...");
+    let metrics = DiggerMetrics::new().expect("Failed to initialize metrics");
+    tracing::info!("✅ Metrics initialized");
+
     // Create API state
-    let state = ApiState::new(config.clone(), contract_manager, storage_manager, nats_client, keypair);
+    let state = ApiState::new(config.clone(), contract_manager, storage_manager, nats_client, keypair, metrics);
 
     // Spawn background task for hash transmission
     let hash_sender_state = state.clone();

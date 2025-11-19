@@ -44,6 +44,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 
+# Metrics
+prometheus = "0.13"
+
 # Post-Quantum Cryptography (Phase 4)
 pqcrypto-falcon = "0.4.1"
 pqcrypto-traits = "0.3"

@@ -6,3 +6,4 @@ pub mod crypto;
 pub mod http_api;
 pub mod jtu_hasher;
 pub mod jtu_storage;
+pub mod metrics;

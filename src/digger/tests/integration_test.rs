@@ -21,6 +21,7 @@ use digger::{
     crypto::DiggerKeypair,
     jtu_storage::JtuStorageManager,
     http_api::{ApiState, create_router},
+    metrics::DiggerMetrics,
 };
 
 #[tokio::test]
@@ -51,7 +52,7 @@ async fn test_full_contract_lifecycle() {
     };
 
     let keypair = DiggerKeypair::generate();
-    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair);
+    let metrics = DiggerMetrics::default();`n    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics);
     let app = create_router(state);
 
     // ========================================================================
@@ -282,7 +283,7 @@ async fn test_contract_not_found() {
     };
 
     let keypair = DiggerKeypair::generate();
-    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair);
+    let metrics = DiggerMetrics::default();`n    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics);
     let app = create_router(state);
 
     let response = app
@@ -326,7 +327,7 @@ async fn test_execute_before_stake_payment() {
     };
 
     let keypair = DiggerKeypair::generate();
-    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair);
+    let metrics = DiggerMetrics::default();`n    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics);
     let app = create_router(state);
 
     // Create contract
@@ -407,7 +408,7 @@ async fn test_invalid_torq_values() {
     };
 
     let keypair = DiggerKeypair::generate();
-    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair);
+    let metrics = DiggerMetrics::default();`n    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics);
     let app = create_router(state);
 
     // Test negative torq
@@ -457,3 +458,4 @@ async fn test_invalid_torq_values() {
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
