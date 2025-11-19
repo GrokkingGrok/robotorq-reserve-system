@@ -27,6 +27,12 @@ scrape_configs:
       - targets: ['trust:8080']
     metrics_path: /metrics
 
+  # ─── Scrape Digger ──────────────────────────────
+  - job_name: 'digger'
+    static_configs:
+      - targets: ['digger:3030']
+    metrics_path: /metrics
+
   # ─── Scrape Prometheus itself ───────────────────
   - job_name: 'prometheus'
     static_configs:

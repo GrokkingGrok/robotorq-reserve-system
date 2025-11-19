@@ -1,0 +1,542 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "digger-metrics",
+    "title": "Digger - Contract Execution & Printer Orchestration",
+    "tags": ["digger", "robotorq", "contracts", "printer", "prometheus"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "5s",
+    "panels": [
+      {
+        "type": "row",
+        "title": "Contract Lifecycle",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+      },
+      {
+        "type": "stat",
+        "title": "Active Contracts",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "digger_contracts_active",
+            "legendFormat": "Active"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 1, "color": "green" }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 }
+      },
+      {
+        "type": "stat",
+        "title": "Contracts Created",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "digger_contracts_created_total",
+            "legendFormat": "Created"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": { "h": 6, "w": 6, "x": 6, "y": 1 }
+      },
+      {
+        "type": "stat",
+        "title": "Contracts Staked",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "digger_contracts_staked_total",
+            "legendFormat": "Staked"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": { "h": 6, "w": 6, "x": 12, "y": 1 }
+      },
+      {
+        "type": "stat",
+        "title": "Contracts Executed",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "digger_contracts_executed_total",
+            "legendFormat": "Executed"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": { "h": 6, "w": 6, "x": 18, "y": 1 }
+      },
+      {
+        "type": "graph",
+        "title": "Contract Creation Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(digger_contracts_created_total[1m])",
+            "legendFormat": "Contracts/sec"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Contracts per second"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 }
+      },
+      {
+        "type": "graph",
+        "title": "Contract Execution Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(digger_contracts_executed_total[1m])",
+            "legendFormat": "Executions/sec"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Executions per second"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 }
+      },
+      {
+        "type": "row",
+        "title": "Printer Activity",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 }
+      },
+      {
+        "type": "stat",
+        "title": "Jobs Started",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "digger_printer_jobs_started_total",
+            "legendFormat": "Started"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": { "h": 6, "w": 8, "x": 0, "y": 16 }
+      },
+      {
+        "type": "stat",
+        "title": "Milestones Reported",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "digger_printer_milestones_reported_total",
+            "legendFormat": "Milestones"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": { "h": 6, "w": 8, "x": 8, "y": 16 }
+      },
+      {
+        "type": "stat",
+        "title": "Jobs Completed",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "digger_printer_jobs_completed_total",
+            "legendFormat": "Completed"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "yellow" },
+                { "value": 1, "color": "green" }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 6, "w": 8, "x": 16, "y": 16 }
+      },
+      {
+        "type": "graph",
+        "title": "Milestone Reporting Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(digger_printer_milestones_reported_total[1m])",
+            "legendFormat": "Milestones/sec"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Milestones per second"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 }
+      },
+      {
+        "type": "graph",
+        "title": "Job Completion Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(digger_printer_jobs_completed_total[1m])",
+            "legendFormat": "Jobs/sec"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Jobs per second"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 }
+      },
+      {
+        "type": "row",
+        "title": "JouleTorqUnit (JTU) Generation",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 }
+      },
+      {
+        "type": "stat",
+        "title": "Total JTUs Generated",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "digger_jtus_generated_total",
+            "legendFormat": "JTUs"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": { "h": 6, "w": 12, "x": 0, "y": 31 }
+      },
+      {
+        "type": "stat",
+        "title": "JTUs Stored in Database",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "digger_jtus_stored_total",
+            "legendFormat": "Stored"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": { "h": 6, "w": 12, "x": 12, "y": 31 }
+      },
+      {
+        "type": "graph",
+        "title": "JTU Generation Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(digger_jtus_generated_total[1m])",
+            "legendFormat": "JTUs/sec"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "JTUs per second"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 37 }
+      },
+      {
+        "type": "graph",
+        "title": "JTU Storage Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(digger_jtus_stored_total[1m])",
+            "legendFormat": "Store ops/sec"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Storage ops per second"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 37 }
+      },
+      {
+        "type": "row",
+        "title": "Ore Generation & Batching",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 }
+      },
+      {
+        "type": "stat",
+        "title": "Total Ore Generated (RT)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "digger_ore_generated_total",
+            "legendFormat": "Ore RT"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short",
+            "decimals": 2
+          }
+        },
+        "gridPos": { "h": 6, "w": 8, "x": 0, "y": 46 }
+      },
+      {
+        "type": "stat",
+        "title": "Hash Batches Sent",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "digger_hash_batches_sent_total",
+            "legendFormat": "Batches"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": { "h": 6, "w": 8, "x": 8, "y": 46 }
+      },
+      {
+        "type": "stat",
+        "title": "Total Hashes Sent",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "digger_hashes_sent_total",
+            "legendFormat": "Hashes"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": { "h": 6, "w": 8, "x": 16, "y": 46 }
+      },
+      {
+        "type": "graph",
+        "title": "Ore Generation Rate (RT/sec)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(digger_ore_generated_total[1m])",
+            "legendFormat": "Ore RT/sec"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "RoboTorq per second"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 52 }
+      },
+      {
+        "type": "graph",
+        "title": "Hash Batch Transmission Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(digger_hash_batches_sent_total[1m])",
+            "legendFormat": "Batches/sec"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Batches per second"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 52 }
+      },
+      {
+        "type": "row",
+        "title": "API Performance",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 60 }
+      },
+      {
+        "type": "graph",
+        "title": "API Request Duration (p50, p95, p99)",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(digger_api_request_duration_bucket[1m]))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(digger_api_request_duration_bucket[1m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(digger_api_request_duration_bucket[1m]))",
+            "legendFormat": "p99"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "s",
+            "label": "Duration (seconds)"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 61 }
+      },
+      {
+        "type": "graph",
+        "title": "API Error Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(digger_api_errors_total[1m])",
+            "legendFormat": "Errors/sec"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Errors per second"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 61 }
+      },
+      {
+        "type": "row",
+        "title": "System Health",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 69 }
+      },
+      {
+        "type": "table",
+        "title": "Metric Summary",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "digger_contracts_active",
+            "legendFormat": "Active Contracts",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "digger_contracts_created_total",
+            "legendFormat": "Total Created",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "digger_contracts_executed_total",
+            "legendFormat": "Total Executed",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "digger_printer_jobs_completed_total",
+            "legendFormat": "Jobs Completed",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "digger_jtus_generated_total",
+            "legendFormat": "JTUs Generated",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "digger_ore_generated_total",
+            "legendFormat": "Ore Generated (RT)",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "__name__": true,
+                "instance": true,
+                "job": true
+              }
+            }
+          }
+        ],
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 70 }
+      }
+    ]
+  },
+  "overwrite": true
+}
