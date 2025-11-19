@@ -26,7 +26,7 @@ from typing import Dict, Any
 # Configuration
 # ============================================================================
 
-DIGGER_BASE_URL = "http://localhost:9000"  # Default Digger HTTP port
+DIGGER_BASE_URL = "http://localhost:3030"  # Digger HTTP port (from docker-compose)
 
 # Fake base64 image (1x1 transparent PNG)
 FAKE_PRINTBED_PHOTO = (
@@ -391,16 +391,16 @@ def main():
     
     args = parser.parse_args()
     
-    # Update global URL if provided
-    global DIGGER_BASE_URL
-    DIGGER_BASE_URL = args.digger_url
-    
-    # Create and run mock printer
+    # Create and run mock printer (pass digger_url to constructor)
     printer = MockPrinter(
         contract_id=args.contract_id,
         duration_seconds=args.duration,
         milestones=args.milestones
     )
+    
+    # Override digger_url if provided
+    if args.digger_url != DIGGER_BASE_URL:
+        printer.digger_url = args.digger_url
     
     success = printer.run_full_cycle(
         torq=args.torq,

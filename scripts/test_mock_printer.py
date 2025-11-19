@@ -38,17 +38,17 @@ def main():
     # Step 1: Check if Digger is running
     print(f"\n{Colors.YELLOW}[1] Checking Digger availability...{Colors.RESET}")
     try:
-        response = requests.get("http://localhost:9000/health", timeout=5)
+        response = requests.get("http://localhost:3030/health", timeout=5)
         if response.status_code == 200:
             health = response.json()
             print_success(f"Digger is running: {health['service']} v{health['version']}")
         else:
             print_error("Digger health check failed")
-            print_warning("Start Digger first: cd src/digger && cargo run")
+            print_warning("Start Digger first: docker-compose up digger")
             sys.exit(1)
     except Exception as e:
-        print_error("Digger not running on port 9000")
-        print_warning("Start Digger first: cd src/digger && cargo run")
+        print_error("Digger not running on port 3030")
+        print_warning("Start Digger first: docker-compose up digger")
         sys.exit(1)
     
     # Step 2: Run mock printer
