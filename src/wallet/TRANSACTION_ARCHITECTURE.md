@@ -1666,7 +1666,165 @@ account.Nonce += 1
 - Replaying old signed transactions
 - Double-spending via duplicate requests
 
-### 10.4 Oracle Signature Verification
+### 10.4 Certificate Verification with Mint
+
+**Problem**: Wallet receives Phase3RoboTorqUnit certificates from DistoDam - how to verify they're legitimate?
+
+**Solution**: Query Mint's verification API (POST `/verify/certificate`) with merkle_root
+
+**Architecture**:
+```
+DistoDam distributes certificate to Wallet
+  ↓
+Wallet receives certificate via NATS (wallet.distribution)
+  ↓
+Wallet IMMEDIATELY pings Mint verification API
+  ↓ HTTP POST http://mint:8081/verify/certificate
+  ↓ Body: { "merkle_root": "abc123...", "unit_id": "RT-20251117-001" }
+  ↓
+Mint checks ProofCache (merkle_root exists?)
+  ↓ If found: Return valid=true, unit metadata
+  ↓ If not found: Return valid=false, error
+  ↓
+Wallet accepts certificate ONLY if Mint confirms valid
+  ↓ If valid: Store in wallet.rt_units[]
+  ↓ If invalid: Reject, log fraud alert
+```
+
+**Implementation** (Wallet verification):
+```rust
+// src/wallet/src/main.rs
+async fn verify_certificate_with_mint(
+    merkle_root: &str,
+    unit_id: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let mint_verification_url = std::env::var("MINT_VERIFICATION_URL")
+        .unwrap_or_else(|_| "http://mint:8081/verify/certificate".to_string());
+
+    let client = reqwest::Client::new();
+    let request_body = serde_json::json!({
+        "merkle_root": merkle_root,
+        "unit_id": unit_id,
+    });
+
+    let response = client
+        .post(&mint_verification_url)
+        .json(&request_body)
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await?;
+
+    if response.status().is_success() {
+        let verification_result: serde_json::Value = response.json().await?;
+        if let Some(valid) = verification_result.get("valid").and_then(|v| v.as_bool()) {
+            return Ok(valid);
+        }
+    }
+
+    Ok(false)
+}
+
+// Called immediately when certificate received
+async fn start_distribution_subscriber(...) {
+    while let Some(message) = subscriber.next().await {
+        let dist_msg: WalletDistributionMessage = serde_json::from_slice(&message.payload)?;
+        
+        // FIRST: Verify certificate with Mint before accepting
+        match verify_certificate_with_mint(
+            &dist_msg.rt_unit.merkle_root,
+            &dist_msg.rt_unit.unit_id,
+        ).await {
+            Ok(true) => {
+                info!("✅ Certificate VERIFIED by Mint: {}", dist_msg.rt_unit.unit_id);
+                // Store certificate
+                wallet.rt_units.push(dist_msg.rt_unit);
+            }
+            Ok(false) => {
+                error!("❌ Certificate REJECTED by Mint: {} - potential fraud!", dist_msg.rt_unit.unit_id);
+            }
+            Err(e) => {
+                error!("⚠️  Failed to verify certificate: {} - network error", e);
+            }
+        }
+    }
+}
+```
+
+**Implementation** (Mint verification endpoint):
+```go
+// src/mint/internal/mint/verification_handler.go
+func (h *VerificationHandler) handleCertificateVerification(w http.ResponseWriter, r *http.Request) {
+    var req struct {
+        MerkleRoot string `json:"merkle_root"`
+        UnitID     string `json:"unit_id"`  // Optional
+    }
+    json.NewDecoder(r.Body).Decode(&req)
+    
+    // Look up by merkle_root in ProofCache
+    unitID := h.proofCache.FindByMerkleRoot(req.MerkleRoot)
+    if unitID == "" {
+        h.respondJSON(w, http.StatusOK, map[string]interface{}{
+            "valid":       false,
+            "merkle_root": req.MerkleRoot,
+            "error":       "certificate not found in Mint records",
+        })
+        return
+    }
+    
+    // Certificate is valid (Mint minted it)
+    merkleResult := h.proofCache.Get(unitID)
+    h.respondJSON(w, http.StatusOK, map[string]interface{}{
+        "valid":        true,
+        "merkle_root":  req.MerkleRoot,
+        "unit_id":      unitID,
+        "tree_height":  merkleResult.TreeHeight,
+        "ingot_count":  len(merkleResult.HashEntries),
+        "verified_by":  "RoboTorq Mint",
+    })
+}
+
+// ProofCache method
+func (pc *ProofCache) FindByMerkleRoot(merkleRoot string) string {
+    pc.mu.RLock()
+    defer pc.mu.RUnlock()
+    
+    // Linear search (acceptable - cache bounded, infrequent verification)
+    for unitID, result := range pc.results {
+        if result.MerkleRoot == merkleRoot {
+            return unitID
+        }
+    }
+    
+    return ""
+}
+```
+
+**Why This Matters**:
+1. **Fraud prevention** - Wallet doesn't blindly trust DistoDam (verify with source of truth)
+2. **Double-spend detection** - If merkle_root not in Mint, certificate is fake
+3. **Proof chain validation** - Mint confirms: "Yes, I minted this unit"
+4. **Transparency** - Users can independently query Mint to verify their certificates
+
+**Security Properties**:
+- **Mint is authoritative** - Only Mint can create new RT units (via Phase3 assembly)
+- **ProofCache is tamper-evident** - Mint stores all merkle_roots it has minted
+- **Verification is stateless** - No write access needed, read-only API
+- **Fast lookup** - O(n) linear search acceptable (cache size bounded, verification infrequent)
+
+**Future Enhancement** (Phase 5):
+- Add reverse index: `merkleRootIndex map[string]string` (merkleRoot → unitID)
+- O(1) lookup instead of O(n) linear search
+- Populated when Phase3RoboTorqUnit assembled, stored in ProofCache
+
+**Environment Configuration**:
+```yaml
+# docker-compose.yaml
+wallet:
+  environment:
+    - MINT_VERIFICATION_URL=http://mint:8081/verify/certificate
+```
+
+### 10.5 Oracle Signature Verification
 
 **Problem**: Malicious actor publishes fake `vault.ledger.update`
 

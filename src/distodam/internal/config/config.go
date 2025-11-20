@@ -72,6 +72,12 @@ type Config struct {
 
 	// Admin recovery (Phase 6 - for manual vault corrections)
 	AdminBearerToken string // Required for /admin/vault/credit endpoint
+
+	// Wallet distribution (pull-based)
+	WalletDistributionEnabled bool    // Default: false
+	WalletDistributionRTPerMin float64 // Default: 0.001 RT per minute
+	WalletActivationTopic     string  // Default: "wallet.activate"
+	WalletDistributionTopic   string  // Default: "wallet.distribution"
 }
 
 // Load reads configuration from environment variables with defaults.
@@ -133,6 +139,10 @@ func Load() (*Config, error) {
 		LogLevel:                 getEnv("LOG_LEVEL", "info"),
 		DamID:                    getEnv("DAM_ID", "distodam-001"),
 		AdminBearerToken:         os.Getenv("ADMIN_BEARER_TOKEN"),
+		WalletDistributionEnabled: false,
+		WalletDistributionRTPerMin: 0.001,
+		WalletActivationTopic:     getEnv("WALLET_ACTIVATION_TOPIC", "wallet.activate"),
+		WalletDistributionTopic:   getEnv("WALLET_DISTRIBUTION_TOPIC", "wallet.distribution"),
 	}
 
 	// Parse INITIAL_STAKE_VAULT_RT
@@ -270,6 +280,24 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("invalid NATS_BACKOFF_BASE: %w", err)
 		}
 		cfg.NatsBackoffBase = backoff
+	}
+
+	// Parse WALLET_DISTRIBUTION_ENABLED
+	if val := os.Getenv("WALLET_DISTRIBUTION_ENABLED"); val != "" {
+		enabled, err := strconv.ParseBool(val)
+		if err != nil {
+			return nil, fmt.Errorf("invalid WALLET_DISTRIBUTION_ENABLED: %w", err)
+		}
+		cfg.WalletDistributionEnabled = enabled
+	}
+
+	// Parse WALLET_DISTRIBUTION_RT_PER_MIN
+	if val := os.Getenv("WALLET_DISTRIBUTION_RT_PER_MIN"); val != "" {
+		amount, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid WALLET_DISTRIBUTION_RT_PER_MIN: %w", err)
+		}
+		cfg.WalletDistributionRTPerMin = amount
 	}
 
 	// Validate configuration

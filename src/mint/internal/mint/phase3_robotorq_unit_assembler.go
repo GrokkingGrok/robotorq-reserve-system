@@ -93,6 +93,35 @@ func (pc *ProofCache) LookupByIngotHash(ingotHash string) (unitID string, found 
 	return unitID, found
 }
 
+// FindByMerkleRoot finds a unit ID by merkle root
+//
+// This enables certificate verification: given a merkle_root from a
+// Phase3RoboTorqUnit, find the unit_id to confirm it was minted by Mint.
+//
+// Parameters:
+//   - merkleRoot: Merkle root hash (64-char hex SHA256)
+//
+// Returns:
+//   - unitID: Phase3RoboTorqUnit ID with this merkle root
+//   - empty string if not found
+func (pc *ProofCache) FindByMerkleRoot(merkleRoot string) string {
+	pc.mu.RLock()
+	defer pc.mu.RUnlock()
+
+	// Linear search through all results
+	// This is acceptable because:
+	// 1. Cache size is bounded (LRU in future)
+	// 2. Verification is infrequent compared to minting
+	// 3. Simplicity > premature optimization
+	for unitID, result := range pc.results {
+		if result.MerkleRoot == merkleRoot {
+			return unitID
+		}
+	}
+
+	return ""
+}
+
 // Phase3RoboTorqUnitAssembler assembles Phase 3 RoboTorq units from Level 2 merkle trees.
 //
 // Architecture:

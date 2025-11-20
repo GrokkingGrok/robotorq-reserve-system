@@ -88,7 +88,14 @@ func main() {
 	// DUAL-VAULT ARCHITECTURE
 	// ════════════════════════════════════════════════════════════
 
-	// Create vault client (Phase 6 MVP: MockVaultClient with internal state)
+	// Create certificate-based vault (stores actual Phase3RoboTorqUnit certificates)
+	certificateVault := distodam.NewCertificateVaultClient(
+		cfg.InitialStakeVaultRT,
+		logger,
+		vaultMetrics,
+	)
+
+	// Create legacy vault client for compatibility (used by VaultManager for loans)
 	vaultClient := distodam.NewMockVaultClient(
 		cfg.InitialStakeVaultRT,
 		cfg.InitialDistoVaultRT,
@@ -109,7 +116,7 @@ func main() {
 
 	logger.Info("dual-vault system initialized",
 		"stake_vault_rt", 0.0,
-		"disto_vault_rt", 0.0,
+		"disto_vault_certificates", 0,
 		"outstanding_loans", 0)
 
 	// ════════════════════════════════════════════════════════════
@@ -117,10 +124,12 @@ func main() {
 	// ════════════════════════════════════════════════════════════
 
 	// MintEventReceiver: Receives RoboStake from Mint, deposits to StakeVault
+	// NOW ALSO: Receives Phase3RoboTorqUnit certificates, deposits to DistoVault!
 	mintReceiver := distodam.NewMintEventReceiver(
 		nc,
 		logger,
 		vaultManager,
+		certificateVault, // ← Certificate-based storage
 		receiverMetrics,
 		cfg.MintBatchesTopic, // "mint.batches"
 	)
@@ -141,9 +150,30 @@ func main() {
 	// TODO: Implement when UBD distribution is ready
 	// ubdReceiver := distodam.NewUBDRegistryReceiver(...)
 
+	// WalletRegistry: Tracks active wallets for distribution
+	walletRegistry := distodam.NewWalletRegistry(
+		nc,
+		logger,
+		cfg.WalletActivationTopic, // "wallet.activate"
+	)
+
+	// WalletDistributor: Pulls from DistoVault and distributes to active wallets
+	// NOW USES: CertificateVault to withdraw actual Phase3RoboTorqUnit certificates!
+	walletDistributor := distodam.NewWalletDistributor(
+		nc,
+		logger,
+		cfg,
+		vaultManager,
+		certificateVault, // ← Certificate-based distribution
+		walletRegistry,
+		vaultMetrics,
+	)
+
 	logger.Info("input receivers created",
 		"mint_receiver_topic", cfg.MintBatchesTopic,
-		"contract_funder_topic", cfg.ContractsApprovedTopic)
+		"contract_funder_topic", cfg.ContractsApprovedTopic,
+		"wallet_activation_topic", cfg.WalletActivationTopic,
+		"wallet_distribution_enabled", cfg.WalletDistributionEnabled)
 
 	// ════════════════════════════════════════════════════════════
 	// HTTP SERVER (Health, Status, Metrics)
@@ -218,11 +248,28 @@ func main() {
 		}
 	}()
 
+	// Start WalletRegistry in background (tracks activation messages)
+	go func() {
+		logger.Info("starting wallet registry")
+		if err := walletRegistry.Start(ctx); err != nil {
+			logger.Error("wallet registry failed", "error", err)
+		}
+	}()
+
+	// Start WalletDistributor in background (minute-by-minute distributions)
+	go func() {
+		logger.Info("starting wallet distributor")
+		if err := walletDistributor.Start(ctx); err != nil {
+			logger.Error("wallet distributor failed", "error", err)
+		}
+	}()
+
 	// Give receivers time to subscribe
 	time.Sleep(500 * time.Millisecond)
 
 	logger.Info("distodam service running",
-		"receivers", []string{"mint_events", "contracts"},
+		"receivers", []string{"mint_events", "contracts", "wallet_activations"},
+		"distributors", []string{"wallet_distributor"},
 		"http_port", cfg.HTTPPort)
 
 	// ════════════════════════════════════════════════════════════
@@ -248,6 +295,12 @@ func main() {
 	}
 	if err := contractFunder.Shutdown(); err != nil {
 		logger.Error("contract funder shutdown error", "error", err)
+	}
+	if err := walletRegistry.Shutdown(); err != nil {
+		logger.Error("wallet registry shutdown error", "error", err)
+	}
+	if err := walletDistributor.Shutdown(); err != nil {
+		logger.Error("wallet distributor shutdown error", "error", err)
 	}
 
 	// Flush NATS messages

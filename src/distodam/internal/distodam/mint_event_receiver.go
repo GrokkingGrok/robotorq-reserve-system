@@ -13,15 +13,16 @@ import (
 
 // MintEventReceiver subscribes to distodam.units and processes Phase3RoboTorqUnit
 type MintEventReceiver struct {
-	nc           *nats.Conn
-	logger       *slog.Logger
-	vaultManager *VaultManager
-	metrics      *ReceiverMetrics
-	topic        string
-	subscription *nats.Subscription
-	mu           sync.Mutex
-	ctx          context.Context
-	cancel       context.CancelFunc
+	nc               *nats.Conn
+	logger           *slog.Logger
+	vaultManager     *VaultManager
+	certificateVault *CertificateVaultClient // Certificate-based vault
+	metrics          *ReceiverMetrics
+	topic            string
+	subscription     *nats.Subscription
+	mu               sync.Mutex
+	ctx              context.Context
+	cancel           context.CancelFunc
 }
 
 // NewMintEventReceiver creates a new MintEventReceiver
@@ -29,19 +30,21 @@ func NewMintEventReceiver(
 	nc *nats.Conn,
 	logger *slog.Logger,
 	vaultManager *VaultManager,
+	certificateVault *CertificateVaultClient,
 	metrics *ReceiverMetrics,
 	topic string,
 ) *MintEventReceiver {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &MintEventReceiver{
-		nc:           nc,
-		logger:       logger,
-		vaultManager: vaultManager,
-		metrics:      metrics,
-		topic:        topic,
-		ctx:          ctx,
-		cancel:       cancel,
+		nc:               nc,
+		logger:           logger,
+		vaultManager:     vaultManager,
+		certificateVault: certificateVault,
+		metrics:          metrics,
+		topic:            topic,
+		ctx:              ctx,
+		cancel:           cancel,
 	}
 }
 
@@ -118,9 +121,9 @@ func (mer *MintEventReceiver) handleMintEvent(msg *nats.Msg) {
 		"diggers", len(unit.DiggerIDs),
 		"merkle_root", unit.MerkleRoot)
 
-	// Deposit RoboStake to StakeVault
+	// Deposit RoboStake to StakeVault (economic cost returning)
 	if err := mer.vaultManager.vaultClient.DepositToStakeVault(unit.RoboStakeTotal); err != nil {
-		mer.logger.Error("failed to deposit to StakeVault",
+		mer.logger.Error("failed to deposit RoboStake to StakeVault",
 			"unit_id", unit.UnitID,
 			"robo_stake_rt", unit.RoboStakeTotal,
 			"error", err)
@@ -129,11 +132,32 @@ func (mer *MintEventReceiver) handleMintEvent(msg *nats.Msg) {
 		return
 	}
 
-	balance, _ := mer.vaultManager.vaultClient.GetStakeVaultBalance()
+	stakeBalance, _ := mer.vaultManager.vaultClient.GetStakeVaultBalance()
+	mer.logger.Info("RoboStake deposited to StakeVault",
+		"unit_id", unit.UnitID,
+		"robo_stake_deposited_rt", unit.RoboStakeTotal,
+		"stake_vault_balance_rt", stakeBalance)
+
+	// Deposit the actual Phase3RoboTorqUnit certificate to DistoVault
+	// This is the CORRECT way - store the complete certificate!
+	if err := mer.certificateVault.DepositToDistoVaultCertificate(&unit); err != nil {
+		mer.logger.Error("failed to deposit RT certificate to DistoVault",
+			"unit_id", unit.UnitID,
+			"merkle_root", unit.MerkleRoot,
+			"error", err)
+		mer.metrics.IngotStakeProcessingErrorsTotal.Inc()
+		msg.Nak()
+		return
+	}
+
+	distoBalance, _ := mer.certificateVault.GetDistoVaultBalance()
 	mer.logger.Info("Phase3 unit processed successfully",
 		"unit_id", unit.UnitID,
 		"robo_stake_deposited_rt", unit.RoboStakeTotal,
-		"stake_vault_balance_rt", balance,
+		"certificate_deposited", true,
+		"merkle_root", unit.MerkleRoot,
+		"stake_vault_balance_rt", stakeBalance,
+		"disto_vault_certificates", distoBalance,
 		"contracts", unit.ContractIDs)
 
 	mer.metrics.MintEventsProcessedTotal.Inc()

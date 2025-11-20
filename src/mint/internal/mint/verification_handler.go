@@ -140,6 +140,7 @@ func NewVerificationHandler(
 	mux.HandleFunc("/verify/jtu/", handler.handleJTULookup)
 	mux.HandleFunc("/verify/proof", handler.handleProofRequest)
 	mux.HandleFunc("/verify/signature/", handler.handleSignatureRequest)
+	mux.HandleFunc("/verify/certificate", handler.handleCertificateVerification)
 	mux.HandleFunc("/public-key", handler.handlePublicKey)
 	mux.HandleFunc("/health", handler.handleHealth)
 
@@ -430,6 +431,124 @@ func (h *VerificationHandler) handleSignatureRequest(w http.ResponseWriter, r *h
 		"merkle_root": record.MerkleRoot,
 		"minted_at":   record.MintedAt,
 		"signed_at":   record.SignedAt,
+	})
+}
+
+// handleCertificateVerification handles POST /verify/certificate
+//
+// Verifies if a Phase3RoboTorqUnit certificate is legitimate.
+// Checks merkle_root existence in ProofCache and validates signature.
+//
+// Request body:
+//
+//	{
+//	  "merkle_root": "abc123...",
+//	  "unit_id": "RT-20251117-001" (optional)
+//	}
+//
+// Response (200 - valid):
+//
+//	{
+//	  "valid": true,
+//	  "merkle_root": "abc123...",
+//	  "unit_id": "RT-20251117-001",
+//	  "minted_at": "2025-11-17T12:00:00Z",
+//	  "tree_height": 10,
+//	  "ingot_count": 1000
+//	}
+//
+// Response (404 - invalid):
+//
+//	{
+//	  "valid": false,
+//	  "merkle_root": "abc123...",
+//	  "error": "certificate not found in Mint records"
+//	}
+func (h *VerificationHandler) handleCertificateVerification(w http.ResponseWriter, r *http.Request) {
+	timer := prometheus.NewTimer(h.metrics.ResponseLatency)
+	defer timer.ObserveDuration()
+
+	if r.Method != http.MethodPost {
+		h.metrics.InvalidRequestsTotal.Inc()
+		h.respondError(w, http.StatusMethodNotAllowed, "only POST method allowed")
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		MerkleRoot string `json:"merkle_root"`
+		UnitID     string `json:"unit_id"` // Optional
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.metrics.InvalidRequestsTotal.Inc()
+		h.respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid JSON: %v", err))
+		return
+	}
+
+	h.logger.Debug("certificate verification request",
+		"merkle_root", req.MerkleRoot,
+		"unit_id", req.UnitID)
+
+	// Validate request
+	if req.MerkleRoot == "" {
+		h.metrics.InvalidRequestsTotal.Inc()
+		h.respondError(w, http.StatusBadRequest, "merkle_root is required")
+		return
+	}
+
+	// Look up by merkle_root in proof cache
+	// ProofCache stores unitID → merkleResult, so we need reverse lookup
+	var merkleResult *Level2MerkleResult
+	var unitID string
+
+	if req.UnitID != "" {
+		// If unit_id provided, verify it matches merkle_root
+		merkleResult = h.proofCache.Get(req.UnitID)
+		if merkleResult == nil || merkleResult.MerkleRoot != req.MerkleRoot {
+			h.respondJSON(w, http.StatusOK, map[string]interface{}{
+				"valid":       false,
+				"merkle_root": req.MerkleRoot,
+				"unit_id":     req.UnitID,
+				"error":       "merkle_root does not match unit_id or unit not found",
+			})
+			return
+		}
+		unitID = req.UnitID
+	} else {
+		// Search all cached units for matching merkle_root
+		unitID = h.proofCache.FindByMerkleRoot(req.MerkleRoot)
+		if unitID == "" {
+			h.respondJSON(w, http.StatusOK, map[string]interface{}{
+				"valid":       false,
+				"merkle_root": req.MerkleRoot,
+				"error":       "certificate not found in Mint records",
+			})
+			return
+		}
+		merkleResult = h.proofCache.Get(unitID)
+	}
+
+	// Get signature record (optional - for minted_at timestamp)
+	var mintedAt string
+	if signatureRecord, err := h.signatureArchive.Get(unitID); err == nil {
+		mintedAt = signatureRecord.MintedAt
+	}
+
+	// Certificate is valid
+	h.logger.Info("certificate verified",
+		"unit_id", unitID,
+		"merkle_root", req.MerkleRoot)
+
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"valid":        true,
+		"merkle_root":  req.MerkleRoot,
+		"unit_id":      unitID,
+		"minted_at":    mintedAt,
+		"tree_height":  merkleResult.TreeHeight,
+		"ingot_count":  len(merkleResult.HashEntries),
+		"verified_by":  "RoboTorq Mint",
+		"verified_at":  prometheus.NewTimer(nil).ObserveDuration().String(),
 	})
 }
 

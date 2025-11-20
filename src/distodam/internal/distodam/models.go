@@ -87,6 +87,23 @@ type UBDDistributionEvent struct {
 	Reason       string    `json:"reason"`        // "periodic_distribution", "manual", etc.
 }
 
+// WalletActivationMessage represents a wallet requesting distribution activation
+// Published to: wallet.activate (from Wallet service)
+type WalletActivationMessage struct {
+	WalletID    string    `json:"wallet_id"`    // Unique wallet identifier
+	Activate    bool      `json:"activate"`     // true = activate, false = deactivate
+	RequestedAt time.Time `json:"requested_at"` // When activation was requested
+}
+
+// WalletDistributionMessage represents RT distribution to a wallet
+// Published to: wallet.distribution (from DistoDam to Wallet)
+type WalletDistributionMessage struct {
+	WalletID     string             `json:"wallet_id"`     // Recipient wallet
+	RTUnit       Phase3RoboTorqUnit `json:"rt_unit"`       // The actual RT certificate!
+	Timestamp    time.Time          `json:"timestamp"`     // When distributed
+	DistoBalance float64            `json:"disto_balance"` // DistoVault balance after withdrawal
+}
+
 // ValidateMintEvent checks if a MintEvent is valid for processing
 func ValidateMintEvent(event *MintEvent) error {
 	if event == nil {

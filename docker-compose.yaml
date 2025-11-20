@@ -152,9 +152,12 @@ services:
       - NATS_URL=nats://nats:4222
       - HTTP_PORT=8080
       - RUST_LOG=wallet=info,tower_http=info
+      - MINT_VERIFICATION_URL=http://mint:8081/verify/certificate
     depends_on:
       nats:
         condition: service_healthy
+      mint:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -175,6 +178,10 @@ services:
     environment:
       - NATS_URL=nats://nats:4222
       - PORT=8082
+      - WALLET_DISTRIBUTION_ENABLED=true
+      - WALLET_DISTRIBUTION_RT_PER_MIN=0.001
+      - WALLET_ACTIVATION_TOPIC=wallet.activate
+      - WALLET_DISTRIBUTION_TOPIC=wallet.distribution
     depends_on:
       nats:
         condition: service_healthy
