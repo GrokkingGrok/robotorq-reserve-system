@@ -367,6 +367,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "tokio",
+ "tokio-stream",
  "tokio-test",
  "tower",
  "tower-http",

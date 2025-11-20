@@ -11,6 +11,8 @@ mod http_api;
 mod jtu_hasher;
 mod jtu_storage;
 mod metrics;
+mod printer_registry;
+mod printer_handlers;
 
 use config::DiggerConfig;
 use contract_state::ContractStateManager;
@@ -18,6 +20,8 @@ use crypto::DiggerKeypair;
 use jtu_storage::JtuStorageManager;
 use http_api::{ApiState, create_router};
 use metrics::DiggerMetrics;
+use printer_registry::PrinterRegistry;
+use printer_handlers::start_printer_listeners;
 
 #[tokio::main]
 async fn main() {
@@ -75,8 +79,16 @@ async fn main() {
     let metrics = DiggerMetrics::new().expect("Failed to initialize metrics");
     tracing::info!("✅ Metrics initialized");
 
+    // Initialize printer registry
+    tracing::info!("🖨️  Initializing printer registry...");
+    let printer_registry = PrinterRegistry::new();
+    tracing::info!("✅ Printer registry initialized");
+
     // Create API state
-    let state = ApiState::new(config.clone(), contract_manager, storage_manager, nats_client, keypair, metrics);
+    let state = ApiState::new(config.clone(), contract_manager, storage_manager, nats_client, keypair, metrics, printer_registry);
+
+    // Start printer event listeners
+    start_printer_listeners(state.clone()).await;
 
     // Spawn background task for hash transmission
     let hash_sender_state = state.clone();

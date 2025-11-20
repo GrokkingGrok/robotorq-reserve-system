@@ -37,6 +37,7 @@ pub struct ApiState {
     pub nats_client: async_nats::Client,  // NATS client for hash transmission
     pub keypair: Arc<DiggerKeypair>,      // Falcon-1024 keypair for signing
     pub metrics: Arc<DiggerMetrics>,      // Prometheus metrics
+    pub printer_registry: Arc<crate::printer_registry::PrinterRegistry>, // Printer registry
 }
 
 impl ApiState {
@@ -47,6 +48,7 @@ impl ApiState {
         nats_client: async_nats::Client,
         keypair: DiggerKeypair,
         metrics: DiggerMetrics,
+        printer_registry: crate::printer_registry::PrinterRegistry,
     ) -> Self {
         Self {
             config: Arc::new(config),
@@ -55,6 +57,7 @@ impl ApiState {
             nats_client,
             keypair: Arc::new(keypair),
             metrics: Arc::new(metrics),
+            printer_registry: Arc::new(printer_registry),
         }
     }
 }
