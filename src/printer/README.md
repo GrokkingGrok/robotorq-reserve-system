@@ -2,15 +2,61 @@
 
 **Physical robot agent** for connecting 3D printers to the RoboTorq network.
 
+## Status
+
+✅ **COMPLETE**: End-to-end ore generation working (Nov 20, 2025)
+
+- Mock mode fully operational with contract execution
+- NATS lifecycle events publishing correctly
+- Digger executes contracts and generates JTUs
+- Printer registry persists across restarts
+- Contract assignment and state tracking working
+
 ## Overview
 
 The Printer Service is an edge agent that:
 - Registers with Digger to get a bonded certificate
 - Monitors printer state (idle/printing) via Klipper/Moonraker
-- Reports capacity usage based on certified power rating
-- Generates verifiable work proofs
+- Listens for contract assignments via NATS
+- Publishes lifecycle events (contract_started, contract_completed)
+- Enables Digger to execute contracts and generate ore
 
 ## Architecture
+
+### Current Implementation (Mock Mode)
+
+```
+┌─────────────────────────────────────────┐
+│  Mock API (Port 9092)                   │
+│  - Simulates Klipper is_printing()      │
+│  - Accepts contract assignment          │
+│  - Shared state with PrinterService     │
+└──────────────┬──────────────────────────┘
+               │ Shared Arc<MockKlipperClient>
+┌──────────────▼──────────────────────────┐
+│  PrinterService (Heartbeat: 10s)        │
+│  - Monitors is_printing() state         │
+│  - Detects state changes                │
+│  - Publishes NATS lifecycle events      │
+└──────────────┬──────────────────────────┘
+               │ NATS
+┌──────────────▼──────────────────────────┐
+│     Digger                               │
+│  - Assigns contracts via NATS           │
+│  - Listens for lifecycle events         │
+│  - Executes contracts on completion     │
+│  - Generates JTUs and ore                │
+└──────────────────────────────────────────┘
+```
+
+**Key Implementation Details:**
+- Mock API and PrinterService share `Arc<MockKlipperClient>` to detect state changes
+- Contract assignments stored in `Arc<RwLock<MockContractState>>`
+- NATS listener started **after** mock state is set (critical initialization order)
+- Heartbeat checks printing state every 10 seconds
+- State changes trigger NATS events (contract_started, contract_completed)
+
+### Future: Real Klipper Integration
 
 ```
 ┌─────────────────────┐
@@ -80,6 +126,64 @@ Certificate includes:
 - Certified power rating (watts)
 - Mint signature (proof of bonding)
 - Validity period
+
+## NATS Event Flow
+
+### Registration
+
+1. Printer → `printer.register` → Digger
+   ```json
+   {
+     "printer_id": "test-printer-001",
+     "model": "MockPrinter",
+     "rated_watts": 250
+   }
+   ```
+
+2. Digger saves printer to registry (`printer_registry.json`)
+3. Digger returns bonded certificate
+
+### Contract Assignment
+
+1. User calls Digger API: `POST /printer/assign`
+2. Digger publishes: `digger.contract.assigned.{printer_id}`
+   ```json
+   {
+     "contract_id": "test-contract-001",
+     "printer_id": "test-printer-001"
+   }
+   ```
+3. Printer receives assignment, stores in `mock_contract_state`
+
+### Contract Execution
+
+1. Print starts (user calls mock API: `POST http://localhost:9092/start?contract_id=...`)
+2. PrinterService heartbeat detects `is_printing=true`
+3. Printer publishes: `printer.contract_started`
+   ```json
+   {
+     "contract_id": "test-contract-001",
+     "printer_id": "test-printer-001",
+     "timestamp": "2025-11-20T22:00:00Z"
+   }
+   ```
+
+4. Print completes
+5. PrinterService heartbeat detects `is_printing=false`
+6. Printer publishes: `printer.contract_completed`
+   ```json
+   {
+     "contract_id": "test-contract-001",
+     "printer_id": "test-printer-001",
+     "watt_hours": 0.97
+   }
+   ```
+
+7. Digger receives completion event
+8. Digger executes contract (generates JTUs and ore)
+   ```
+   ✨ Contract executed: 10000 JTUs generated, 100.00 RT ore (20.0% of target)
+   ```
 
 ## Operation
 
@@ -174,13 +278,43 @@ printer_certificate_valid (gauge: 0 or 1)
 
 ## Development
 
-### Mock Mode (No Printer)
+### Mock Mode (Current Implementation)
+
+**Fully working end-to-end flow!**
 
 ```bash
-# Run without Klipper
-MOCK_PRINTER=true cargo run
+# 1. Start services
+docker-compose up -d
 
-# Simulates printing every 60 seconds
+# 2. Run test script
+python scripts/test_printer_flow.py
+```
+
+The test script:
+1. Registers printer with Digger
+2. Creates contract with ore target
+3. Funds contract with RoboStake
+4. Assigns contract to printer (via NATS)
+5. Starts mock print (15 seconds)
+6. Printer detects state change and publishes events
+7. Digger executes contract and generates ore
+
+**Expected output:**
+```
+✅ All 7 steps passed!
+✅ Contract executed: 10000 JTUs generated, 100.00 RT ore (20.0% of target)
+```
+
+**Mock API endpoints:**
+```bash
+# Start print with contract
+curl -X POST "http://localhost:9092/start?contract_id=test-contract-001&duration_secs=15"
+
+# Check if printing
+curl http://localhost:9092/is_printing
+
+# Stop print
+curl -X POST http://localhost:9092/stop
 ```
 
 ### Testing
@@ -275,14 +409,117 @@ curl http://localhost:9091/metrics
 
 ## Roadmap
 
+### Completed ✅
+
 - [x] Basic status reporting
 - [x] Certificate management
-- [x] Capacity tracking
-- [ ] Job queue (accept work from Digger)
-- [ ] Milestone reporting (layer progress)
-- [ ] Multi-printer support (one service, N printers)
-- [ ] OctoPrint integration
-- [ ] Direct Klipper socket (no Moonraker)
+- [x] NATS event publishing (contract_started, contract_completed)
+- [x] Contract assignment listener
+- [x] Shared state between mock API and service
+- [x] End-to-end ore generation in mock mode
+- [x] Printer registry persistence
+- [x] Contract execution integration with Digger
+
+### Next Steps: Real Printer Integration
+
+**Option 1: Direct Integration (No Pi)**
+- Connect PrinterService directly to Klipper/Moonraker on local network
+- Run PrinterService on main Digger machine
+- Simpler setup, but requires Digger to be near printer
+
+**Option 2: Raspberry Pi Edge Agent**
+- Cross-compile PrinterService for ARM
+- Deploy to Raspberry Pi connected to printer
+- Pi runs PrinterService as systemd service
+- More flexible, printer can be anywhere on network
+
+**Implementation Tasks:**
+
+#### 1. Real Klipper Client
+- [ ] Implement `KlipperClient` trait for Moonraker HTTP API
+- [ ] Replace `MockKlipperClient` with conditional compilation
+- [ ] Add `check_if_printing()` using `/printer/objects/query?print_stats`
+- [ ] Handle Moonraker connection errors gracefully
+- [ ] Add retry logic for transient failures
+
+#### 2. Print Job Tracking
+- [ ] Subscribe to Klipper print events (via websocket or polling)
+- [ ] Track print start/stop timestamps accurately
+- [ ] Calculate actual watt-hours consumed
+- [ ] Report layer progress as milestones (future: proof generation)
+
+#### 3. Power Measurement
+- [ ] Integrate with power meter (Shelly Plug, TP-Link Kasa, etc.)
+- [ ] Replace fixed `rated_watts` with actual consumption
+- [ ] Log power usage throughout print
+- [ ] Generate verifiable power consumption proof
+
+#### 4. Configuration Management
+- [ ] Auto-detect Klipper URL (mDNS/Avahi)
+- [ ] Support multiple printers per service instance
+- [ ] Add printer profiles (bed size, nozzle, materials)
+- [ ] Environment-based config (dev/staging/prod)
+
+#### 5. Deployment Automation
+- [ ] Create Pi SD card image with PrinterService pre-installed
+- [ ] Auto-registration on first boot
+- [ ] Web UI for initial setup (WiFi, Digger URL)
+- [ ] OTA updates for PrinterService binary
+
+#### 6. Security Hardening
+- [ ] Certificate rotation (before expiry)
+- [ ] Secure storage for private keys (TPM/keyring)
+- [ ] Encrypted NATS connections (TLS)
+- [ ] Rate limiting for API endpoints
+
+### Decision Points
+
+**Where to run PrinterService?**
+
+| Factor | Direct (No Pi) | Raspberry Pi |
+|--------|----------------|--------------|
+| Hardware cost | $0 | ~$75 (Pi + case + SD) |
+| Network flexibility | Digger must be near printer | Printer anywhere on LAN |
+| Latency | Lower (local) | Slightly higher (network) |
+| Scalability | One printer per Digger | Many printers per network |
+| Recommended for | **Development/testing** | **Production deployment** |
+
+**Power measurement strategy?**
+
+| Option | Accuracy | Cost | Complexity |
+|--------|----------|------|------------|
+| Fixed rating | Low (assumes 100% usage) | $0 | Simple |
+| Smart plug | Medium (whole printer) | ~$25 | Easy (HTTP API) |
+| Inline meter | High (DC rails) | ~$50 | Complex (requires wiring) |
+| Klipper integration | High (MCU reported) | $0 | Moderate (firmware mod) |
+
+### Recommended Next Steps
+
+1. **Implement real KlipperClient** (2-4 hours)
+   - Replace mock with actual Moonraker HTTP calls
+   - Test with local Ender 3 V3 KE
+
+2. **Deploy to Raspberry Pi** (4-6 hours)
+   - Cross-compile for ARM
+   - Create systemd service
+   - Test end-to-end on Pi
+
+3. **Add smart plug integration** (2-3 hours)
+   - Support Shelly Plug S (local HTTP API)
+   - Replace `rated_watts` with actual measurements
+   - Log power consumption timeseries
+
+4. **Test multi-hour prints** (8+ hours wall time)
+   - Run overnight print job
+   - Verify heartbeat reliability
+   - Check JTU calculations against actual power usage
+
+5. **Document deployment guide** (2 hours)
+   - Step-by-step Pi setup
+   - Network configuration
+   - Troubleshooting common issues
+
+**Total estimated work: 18-23 hours + testing time**
 
 ## License
 

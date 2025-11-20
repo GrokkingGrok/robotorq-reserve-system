@@ -75,13 +75,30 @@ async fn async_main() -> Result<()> {
     if service_config.mock_mode {
         info!("🎮 Mock mode enabled - starting mock API server on port 9092");
         
+        // Create shared MockKlipperClient
         let mock_client = std::sync::Arc::new(printer::MockKlipperClient::new());
         
+        // Create shared contract state
+        let mock_contract_state = std::sync::Arc::new(tokio::sync::RwLock::new(
+            printer::MockContractState::default()
+        ));
+        
+        // Share both with the printer service
+        service.set_mock_contract_state(mock_contract_state.clone());
+        service.set_mock_klipper_client(mock_client.clone());
+        
+        // Start mock API with shared clients
         tokio::task::spawn_local(async move {
-            if let Err(e) = printer::mock_api::start_mock_api_server(9092, mock_client).await {
+            if let Err(e) = printer::mock_api::start_mock_api_server(9092, mock_client, mock_contract_state).await {
                 error!("Mock API server error: {}", e);
             }
         });
+    }
+    
+    // Start contract listener AFTER mock state is set
+    if let Err(e) = service.start_listener().await {
+        error!("Failed to start contract listener: {}", e);
+        return Err(e);
     }
 
     // Run main service
