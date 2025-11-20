@@ -202,7 +202,7 @@ async fn activate_handler(State(state): State<AppState>) -> impl IntoResponse {
         "wallet_id": wallet_id,
         "activated": true,
     });
-    (StatusCode::OK, serde_json::to_string(&response).unwrap())
+    (StatusCode::OK, serde_json::to_string(&response).unwrap()).into_response()
 }
 
 async fn deactivate_handler(State(state): State<AppState>) -> impl IntoResponse {
@@ -251,7 +251,7 @@ async fn deactivate_handler(State(state): State<AppState>) -> impl IntoResponse 
         "wallet_id": wallet_id,
         "activated": false,
     });
-    (StatusCode::OK, serde_json::to_string(&response).unwrap())
+    (StatusCode::OK, serde_json::to_string(&response).unwrap()).into_response()
 }
 
 // ============================================================================
@@ -262,7 +262,7 @@ async fn deactivate_handler(State(state): State<AppState>) -> impl IntoResponse 
 async fn verify_certificate_with_mint(
     merkle_root: &str,
     unit_id: &str,
-) -> Result<bool, Box<dyn std::error::Error>> {
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let mint_verification_url = std::env::var("MINT_VERIFICATION_URL")
         .unwrap_or_else(|_| "http://mint:8081/verify/certificate".to_string());
 
