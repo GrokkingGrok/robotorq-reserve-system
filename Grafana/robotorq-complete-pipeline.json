@@ -501,14 +501,14 @@
     },
     {
       "type": "stat",
-      "title": "Phase3 Units Received",
+      "title": "RT Units Received (Distributions)",
       "datasource": {
         "type": "prometheus",
         "uid": "ff4c4su9ayigwe"
       },
       "targets": [
         {
-          "expr": "wallet_units_received_total",
+          "expr": "wallet_rt_units_received_total",
           "legendFormat": "Units"
         }
       ],
@@ -519,19 +519,19 @@
           }
         }
       },
-      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 29 }
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 29 }
     },
     {
       "type": "stat",
-      "title": "RoboTorq Balance",
+      "title": "RT Units Balance",
       "datasource": {
         "type": "prometheus",
         "uid": "ff4c4su9ayigwe"
       },
       "targets": [
         {
-          "expr": "wallet_robo_torq_balance / 1000",
-          "legendFormat": "RT Balance"
+          "expr": "wallet_rt_units_balance",
+          "legendFormat": "RT Units"
         }
       ],
       "fieldConfig": {
@@ -543,39 +543,15 @@
             "mode": "absolute",
             "steps": [
               { "value": 0, "color": "red" },
-              { "value": 0.01, "color": "yellow" },
-              { "value": 1, "color": "green" }
+              { "value": 1, "color": "yellow" },
+              { "value": 100, "color": "green" }
             ]
           },
           "unit": "short",
-          "decimals": 6
+          "decimals": 0
         }
       },
-      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 29 }
-    },
-    {
-      "type": "stat",
-      "title": "JouleTorq Balance",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "ff4c4su9ayigwe"
-      },
-      "targets": [
-        {
-          "expr": "wallet_joule_torq_balance",
-          "legendFormat": "Joules"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "unit": "short",
-          "decimals": 2
-        }
-      },
-      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 29 }
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 29 }
     },
     {
       "type": "row",
@@ -691,20 +667,14 @@
           "instant": true
         },
         {
-          "expr": "wallet_units_received_total",
-          "legendFormat": "Wallet: Units Received",
+          "expr": "wallet_rt_units_received_total",
+          "legendFormat": "Wallet: RT Units Received",
           "format": "table",
           "instant": true
         },
         {
-          "expr": "wallet_robo_torq_balance / 1000",
-          "legendFormat": "Wallet: RT Balance",
-          "format": "table",
-          "instant": true
-        },
-        {
-          "expr": "wallet_joule_torq_balance",
-          "legendFormat": "Wallet: JT Balance",
+          "expr": "wallet_rt_units_balance",
+          "legendFormat": "Wallet: RT Units Balance",
           "format": "table",
           "instant": true
         }
@@ -726,25 +696,25 @@
     },
     {
       "type": "graph",
-      "title": "Wallet Balance Over Time",
+      "title": "Wallet RT Units Over Time",
       "datasource": {
         "type": "prometheus",
         "uid": "ff4c4su9ayigwe"
       },
       "targets": [
         {
-          "expr": "wallet_robo_torq_balance / 1000",
-          "legendFormat": "RoboTorq (RT)"
+          "expr": "wallet_rt_units_balance",
+          "legendFormat": "RT Units Balance"
         },
         {
-          "expr": "wallet_joule_torq_balance / 3600000",
-          "legendFormat": "JouleTorq (kWh)"
+          "expr": "rate(wallet_rt_units_received_total[1m]) * 60",
+          "legendFormat": "RT Units/min Received"
         }
       ],
       "yaxes": [
         {
           "format": "short",
-          "label": "Balance"
+          "label": "RT Units"
         }
       ],
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 53 }

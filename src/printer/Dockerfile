@@ -1,21 +1,19 @@
 # Multi-stage build for RoboTorq Printer Service
 
-# Build stage - use Rust 1.91 for edition2024 support
-FROM rust:1.91-alpine AS builder
+# Build stage - use Debian-based Rust for better libclang support
+FROM rust:1.91-bookworm AS builder
 
 # Install build dependencies and build liboqs from source
-RUN apk add --no-cache \
-    musl-dev \
-    openssl-dev \
-    pkgconfig \
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libssl-dev \
+    pkg-config \
     git \
     cmake \
-    make \
-    gcc \
-    g++ \
-    ninja \
-    clang-dev \
-    llvm-dev
+    ninja-build \
+    clang \
+    libclang-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Build liboqs from source
 RUN git clone --depth 1 --branch 0.12.0 https://github.com/open-quantum-safe/liboqs.git /tmp/liboqs && \
@@ -34,33 +32,32 @@ COPY Cargo.toml ./
 # Copy source code
 COPY src ./src
 
-# Build release binary
+# Build release binary (Debian has proper libclang support)
 RUN cargo build --release
 
-# Runtime stage
-FROM alpine:3.20
+# Runtime stage - use Debian slim for compatibility
+FROM debian:bookworm-slim
 
 # Install runtime dependencies and build liboqs for runtime
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y \
     ca-certificates \
-    openssl \
-    openssl-dev \
-    libgcc \
-    libstdc++ \
+    libssl3 \
+    libssl-dev \
+    wget \
     git \
     cmake \
-    make \
-    gcc \
-    g++ \
-    ninja && \
-    git clone --depth 1 --branch 0.12.0 https://github.com/open-quantum-safe/liboqs.git /tmp/liboqs && \
-    cd /tmp/liboqs && \
-    mkdir build && cd build && \
-    cmake -GNinja -DCMAKE_INSTALL_PREFIX=/usr .. && \
-    ninja && \
-    ninja install && \
-    cd / && rm -rf /tmp/liboqs && \
-    apk del git cmake make gcc g++ ninja openssl-dev
+    ninja-build \
+    build-essential \
+    && git clone --depth 1 --branch 0.12.0 https://github.com/open-quantum-safe/liboqs.git /tmp/liboqs \
+    && cd /tmp/liboqs \
+    && mkdir build && cd build \
+    && cmake -GNinja -DCMAKE_INSTALL_PREFIX=/usr .. \
+    && ninja \
+    && ninja install \
+    && cd / && rm -rf /tmp/liboqs \
+    && apt-get remove -y git cmake ninja-build build-essential libssl-dev \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

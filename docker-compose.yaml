@@ -111,6 +111,39 @@ services:
       - torqnet
 
   # -----------------------------
+  # Printer Service (3D Printer Mock)
+  # -----------------------------
+  printer:
+    build:
+      context: ./src/printer
+      dockerfile: Dockerfile
+    ports:
+      - "9094:9091"  # Metrics port (avoid conflict with Prometheus on 9091)
+      - "9092:9092"  # Mock API port
+    environment:
+      - PRINTER_ID=test-printer-001
+      - NATS_URL=nats://nats:4222
+      - DIGGER_URL=http://digger:3030
+      - MOCK_MODE=true
+      - PRINTER_MODEL=Ender3V3KE
+      - RATED_WATTS=350
+      - LOG_LEVEL=info
+    depends_on:
+      nats:
+        condition: service_healthy
+      digger:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9091/metrics"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - ./src/printer/data:/app/data  # Certificate storage
+    networks:
+      - torqnet
+
+  # -----------------------------
   # Refinery Service
   # -----------------------------
   refinery:
