@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use async_nats::Client;
 use chrono::Utc;
+use futures_util::StreamExt;
 use serde_json::json;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
@@ -52,7 +53,7 @@ impl PrinterService {
                 info!("   Certificate ID: {}", cert.certificate_id);
                 info!("   Valid Until: {}", cert.valid_until);
                 info!("   Certified Capacity: {}W", cert.rated_watts);
-                METRICS.certificate_valid.set(1);
+                METRICS.certificate_valid.set(1.0);
             }
         } else {
             warn!("⚠️  No certificate found - registering with Digger");
@@ -189,7 +190,7 @@ impl PrinterService {
                 info!("   Certificate ID: {}", cert.certificate_id);
                 info!("   Certified Capacity: {}W", cert.rated_watts);
                 
-                METRICS.certificate_valid.set(1);
+                METRICS.certificate_valid.set(1.0);
                 
                 Ok(())
             }

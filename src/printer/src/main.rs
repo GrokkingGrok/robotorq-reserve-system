@@ -13,12 +13,23 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    // Load configuration
+    // Use LocalSet for !Send futures (warp)
+    let local = tokio::task::LocalSet::new();
+    local.run_until(async_main()).await
+}
+
+async fn async_main() -> Result<()> {
+
+    // Load configuration (env vars override file)
     let config = Config::from_file("config.yaml")
+        .map(|mut c| {
+            c.apply_env_overrides();
+            c
+        })
         .unwrap_or_else(|e| {
-            error!("Failed to load config: {}", e);
-            error!("Using default configuration");
-            Config::default()
+            error!("Failed to load config file: {}", e);
+            error!("Using environment variables and defaults");
+            Config::from_env()
         });
 
     // Print startup banner
@@ -49,17 +60,17 @@ async fn main() -> Result<()> {
         return Err(e);
     }
 
-    // Start metrics server
-    tokio::spawn(async {
+    info!("🚀 Starting status reporting loop...");
+    info!("");
+
+    // Start metrics server in LocalSet-compatible spawn
+    tokio::task::spawn_local(async move {
         if let Err(e) = printer::metrics::start_metrics_server(9091).await {
             error!("Metrics server error: {}", e);
         }
     });
 
-    info!("🚀 Starting status reporting loop...");
-    info!("");
-
-    // Run main service loop
+    // Run main service
     service.run().await?;
 
     Ok(())

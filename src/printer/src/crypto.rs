@@ -3,59 +3,50 @@
 // This module provides Falcon-1024 signing and verification
 // Shared crypto implementation with Digger service
 
-use anyhow::Result;
-use oqs::{sig::Sig, sig::Algorithm};
+use pqcrypto_falcon::falcon1024;
+use pqcrypto_traits::sign::{PublicKey, SignedMessage};
 use sha2::{Sha256, Digest};
 
+#[derive(Clone)]
 pub struct PrinterKeypair {
-    secret_key: Vec<u8>,
-    public_key: Vec<u8>,
+    pub public_key: falcon1024::PublicKey,
+    pub secret_key: falcon1024::SecretKey,
 }
 
 impl PrinterKeypair {
     /// Generate a new Falcon-1024 keypair
-    pub fn generate() -> Result<Self> {
-        let sig = Sig::new(Algorithm::Falcon1024)?;
-        let (public_key, secret_key) = sig.keypair()?;
-        
-        Ok(Self {
-            secret_key: secret_key.into_vec(),
-            public_key: public_key.into_vec(),
-        })
-    }
-    
-    /// Load keypair from bytes
-    pub fn from_bytes(public_key: Vec<u8>, secret_key: Vec<u8>) -> Self {
+    pub fn generate() -> Self {
+        let (public_key, secret_key) = falcon1024::keypair();
         Self {
-            secret_key,
             public_key,
+            secret_key,
         }
     }
     
     /// Sign a message with Falcon-1024
-    pub fn sign(&self, message: &[u8]) -> Result<Vec<u8>> {
-        let sig = Sig::new(Algorithm::Falcon1024)?;
-        let signature = sig.sign(message, &self.secret_key)?;
-        Ok(signature.into_vec())
+    pub fn sign(&self, message: &[u8]) -> Vec<u8> {
+        falcon1024::sign(message, &self.secret_key).as_bytes().to_vec()
     }
     
     /// Get public key bytes
-    pub fn public_key(&self) -> &[u8] {
-        &self.public_key
+    pub fn public_key_bytes(&self) -> Vec<u8> {
+        self.public_key.as_bytes().to_vec()
     }
     
     /// Get public key as hex string
     pub fn public_key_hex(&self) -> String {
-        hex::encode(&self.public_key)
+        hex::encode(self.public_key.as_bytes())
     }
 }
 
 /// Verify a Falcon-1024 signature
-pub fn verify_signature(message: &[u8], signature: &[u8], public_key: &[u8]) -> Result<bool> {
-    let sig = Sig::new(Algorithm::Falcon1024)?;
-    match sig.verify(message, signature, public_key) {
-        Ok(_) => Ok(true),
-        Err(_) => Ok(false),
+pub fn verify_signature(_message: &[u8], signed_message: &[u8]) -> bool {
+    match falcon1024::open(
+        &SignedMessage::from_bytes(signed_message).unwrap(),
+        &falcon1024::PublicKey::from_bytes(&[0u8; falcon1024::public_key_bytes()]).unwrap(),
+    ) {
+        Ok(_) => true,
+        Err(_) => false,
     }
 }
 

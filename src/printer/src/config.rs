@@ -42,8 +42,46 @@ fn default_mock_mode() -> bool {
 impl Config {
     pub fn from_file(path: &str) -> Result<Self> {
         let contents = fs::read_to_string(path)?;
-        let config: Config = serde_yaml::from_str(&contents)?;
+        let mut config: Config = serde_yaml::from_str(&contents)?;
+        
+        // Override with environment variables if present
+        config.apply_env_overrides();
+        
         Ok(config)
+    }
+    
+    pub fn from_env() -> Self {
+        let mut config = Config::default();
+        config.apply_env_overrides();
+        config
+    }
+    
+    pub fn apply_env_overrides(&mut self) {
+        if let Ok(val) = std::env::var("PRINTER_ID") {
+            self.printer_id = val;
+        }
+        if let Ok(val) = std::env::var("PRINTER_MODEL") {
+            self.printer_model = val;
+        }
+        if let Ok(val) = std::env::var("RATED_WATTS") {
+            if let Ok(watts) = val.parse() {
+                self.rated_watts = watts;
+            }
+        }
+        if let Ok(val) = std::env::var("NATS_URL") {
+            self.nats_url = val;
+        }
+        if let Ok(val) = std::env::var("KLIPPER_URL") {
+            self.klipper_url = val;
+        }
+        if let Ok(val) = std::env::var("MOCK_MODE") {
+            if let Ok(mode) = val.parse() {
+                self.mock_mode = mode;
+            }
+        }
+        if let Ok(val) = std::env::var("LOG_LEVEL") {
+            self.log_level = val;
+        }
     }
 }
 

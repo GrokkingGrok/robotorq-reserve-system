@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
-use warp::{Filter, reply::Json as WarpJson};
+use warp::Filter;
 
 use crate::mock_klipper::MockKlipperClient;
 
