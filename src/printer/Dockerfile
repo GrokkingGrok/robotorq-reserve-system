@@ -1,7 +1,7 @@
 # Multi-stage build for RoboTorq Printer Service
 
-# Build stage
-FROM rust:1.83-alpine AS builder
+# Build stage - use Rust 1.91 for edition2024 support
+FROM rust:1.91-alpine AS builder
 
 # Install build dependencies and build liboqs from source
 RUN apk add --no-cache \
