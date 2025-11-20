@@ -42,6 +42,7 @@ FROM alpine:3.20
 RUN apk add --no-cache \
     ca-certificates \
     openssl \
+    openssl-dev \
     libgcc \
     libstdc++ \
     git \
@@ -57,7 +58,7 @@ RUN apk add --no-cache \
     ninja && \
     ninja install && \
     cd / && rm -rf /tmp/liboqs && \
-    apk del git cmake make gcc g++ ninja
+    apk del git cmake make gcc g++ ninja openssl-dev
 
 WORKDIR /app
 
