@@ -13,7 +13,9 @@ RUN apk add --no-cache \
     make \
     gcc \
     g++ \
-    ninja
+    ninja \
+    clang-dev \
+    llvm-dev
 
 # Build liboqs from source
 RUN git clone --depth 1 --branch 0.12.0 https://github.com/open-quantum-safe/liboqs.git /tmp/liboqs && \
