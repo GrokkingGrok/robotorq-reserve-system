@@ -221,6 +221,8 @@ async fn hash_sender_task(state: ApiState, batch_interval_sec: u64) {
                         );
                         
                         // Update metrics
+                        state_clone.metrics.hash_batches_sent_total.inc();
+                        state_clone.metrics.hashes_sent_total.inc_by(hashes.len() as u64);
                         state_clone.metrics.robostake_sent_total.inc_by(robo_stake);
                         
                         // Mark hash send in contract state
