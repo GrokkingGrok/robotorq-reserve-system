@@ -87,8 +87,8 @@ async fn main() {
     // Create API state
     let state = ApiState::new(config.clone(), contract_manager, storage_manager, nats_client, keypair, metrics, printer_registry);
 
-    // Start printer event listeners
-    start_printer_listeners(state.clone()).await;
+    // Start printer event listeners with dedicated connections
+    start_printer_listeners(state.clone(), config.nats_url.clone()).await;
 
     // Spawn background task for hash transmission
     let hash_sender_state = state.clone();

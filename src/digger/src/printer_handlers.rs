@@ -7,27 +7,30 @@ use tracing::{error, info, warn};
 use tokio_stream::StreamExt;
 
 /// Start listening for printer-related NATS events
-pub async fn start_printer_listeners(state: ApiState) {
-    // Spawn listener for printer registrations
+pub async fn start_printer_listeners(state: ApiState, nats_url: String) {
+    // Spawn listener for printer registrations with its own NATS connection
     let reg_state = state.clone();
+    let reg_nats_url = nats_url.clone();
     tokio::spawn(async move {
-        if let Err(e) = handle_printer_registrations(reg_state).await {
+        if let Err(e) = handle_printer_registrations(reg_state, reg_nats_url).await {
             error!("Printer registration listener error: {}", e);
         }
     });
 
-    // Spawn listener for contract_started events
+    // Spawn listener for contract_started events with its own NATS connection
     let start_state = state.clone();
+    let start_nats_url = nats_url.clone();
     tokio::spawn(async move {
-        if let Err(e) = handle_contract_started_events(start_state).await {
+        if let Err(e) = handle_contract_started_events(start_state, start_nats_url).await {
             error!("Contract started listener error: {}", e);
         }
     });
 
-    // Spawn listener for contract_completed events
+    // Spawn listener for contract_completed events with its own NATS connection
     let complete_state = state.clone();
+    let complete_nats_url = nats_url.clone();
     tokio::spawn(async move {
-        if let Err(e) = handle_contract_completed_events(complete_state).await {
+        if let Err(e) = handle_contract_completed_events(complete_state, complete_nats_url).await {
             error!("Contract completed listener error: {}", e);
         }
     });
@@ -36,16 +39,20 @@ pub async fn start_printer_listeners(state: ApiState) {
 }
 
 /// Handle printer registration requests
-async fn handle_printer_registrations(state: ApiState) -> Result<(), Box<dyn std::error::Error>> {
-    let mut sub = state
-        .nats_client
+async fn handle_printer_registrations(state: ApiState, nats_url: String) -> Result<(), Box<dyn std::error::Error>> {
+    // Create dedicated NATS connection for this handler
+    info!("🔌 Connecting to NATS for printer registration handler...");
+    let nats_client = async_nats::connect(&nats_url).await?;
+    info!("✅ Registration handler connected to NATS");
+    
+    let mut sub = nats_client
         .subscribe("printer.register")
         .await?;
 
     info!("📝 Listening for printer registrations on 'printer.register'");
     
     // Ensure subscription is fully established
-    state.nats_client.flush().await?;
+    nats_client.flush().await?;
     
     info!("✅ Subscription created, entering handler loop");
     info!("🔍 DEBUG: About to enter while loop");
@@ -110,11 +117,11 @@ async fn handle_printer_registrations(state: ApiState) -> Result<(), Box<dyn std
 
         info!("✅ Printer registered: {}", registration.printer_id);
 
-        // Send certificate back to printer
+        // Send certificate back to printer using dedicated connection
         let cert_json = serde_json::to_vec(&certificate).unwrap();
         if let Some(reply) = msg.reply {
             info!("📤 Sending certificate to reply subject: {}", reply);
-            if let Err(e) = state.nats_client.publish(reply, cert_json.clone().into()).await {
+            if let Err(e) = nats_client.publish(reply, cert_json.clone().into()).await {
                 error!("Failed to send certificate: {}", e);
             }
         }
@@ -122,8 +129,7 @@ async fn handle_printer_registrations(state: ApiState) -> Result<(), Box<dyn std
         // Also publish to printer's response topic
         let response_topic = format!("printer.{}.certificate", registration.printer_id);
         info!("📤 Publishing certificate to: {}", response_topic);
-        if let Err(e) = state
-            .nats_client
+        if let Err(e) = nats_client
             .publish(response_topic, cert_json.into())
             .await
         {
@@ -181,9 +187,12 @@ async fn issue_certificate(
 /// Handle contract_started events from printers
 async fn handle_contract_started_events(
     state: ApiState,
+    nats_url: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut sub = state
-        .nats_client
+    // Create dedicated NATS connection for this handler
+    let nats_client = async_nats::connect(&nats_url).await?;
+    
+    let mut sub = nats_client
         .subscribe("printer.contract_started")
         .await?;
 
@@ -219,9 +228,12 @@ async fn handle_contract_started_events(
 /// Handle contract_completed events from printers
 async fn handle_contract_completed_events(
     state: ApiState,
+    nats_url: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut sub = state
-        .nats_client
+    // Create dedicated NATS connection for this handler
+    let nats_client = async_nats::connect(&nats_url).await?;
+    
+    let mut sub = nats_client
         .subscribe("printer.contract_completed")
         .await?;
 
