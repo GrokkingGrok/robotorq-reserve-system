@@ -33,6 +33,12 @@ scrape_configs:
       - targets: ['digger:3030']
     metrics_path: /metrics
 
+  # ─── Scrape Wallet ──────────────────────────────
+  - job_name: 'wallet'
+    static_configs:
+      - targets: ['wallet:8080']
+    metrics_path: /metrics
+
   # ─── Scrape Prometheus itself ───────────────────
   - job_name: 'prometheus'
     static_configs:
