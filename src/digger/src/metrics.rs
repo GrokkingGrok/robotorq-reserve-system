@@ -7,8 +7,7 @@
 // - Hash batch transmission
 
 use prometheus::{
-    Counter, CounterVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge,
-    IntGaugeVec, Opts, Registry,
+    Counter, HistogramVec, IntCounter, IntCounterVec, IntGauge, Opts, Registry,
 };
 use std::sync::Arc;
 

@@ -70,6 +70,20 @@ async fn async_main() -> Result<()> {
         }
     });
 
+    // Start mock API server if in mock mode
+    let service_config = service.config().clone();
+    if service_config.mock_mode {
+        info!("🎮 Mock mode enabled - starting mock API server on port 9092");
+        
+        let mock_client = std::sync::Arc::new(printer::MockKlipperClient::new());
+        
+        tokio::task::spawn_local(async move {
+            if let Err(e) = printer::mock_api::start_mock_api_server(9092, mock_client).await {
+                error!("Mock API server error: {}", e);
+            }
+        });
+    }
+
     // Run main service
     service.run().await?;
 

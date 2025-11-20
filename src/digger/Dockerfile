@@ -1,10 +1,15 @@
 # Dockerfile for Digger Service
 # Multi-stage build: Build Rust binary, then copy to minimal runtime image
+# DEV BUILD: Uses Debian for 10x faster compilation (glibc vs musl)
+# TODO: Switch back to Alpine for production (smaller image)
 
-FROM rust:1.91-alpine AS builder
+FROM rust:1.91-slim-bookworm AS builder
 
 # Install build dependencies
-RUN apk add --no-cache musl-dev
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -17,11 +22,14 @@ COPY src ./src
 # Build release binary
 RUN cargo build --release --bin digger
 
-# Runtime stage - minimal Alpine image
-FROM alpine:3.20
+# Runtime stage - also use Debian for dev (consistency)
+FROM debian:bookworm-slim
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates curl
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

@@ -46,6 +46,10 @@ impl PrinterService {
         })
     }
     
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+    
     pub async fn initialize(&mut self) -> Result<()> {
         // Try to load existing certificate
         if self.cert_manager.load_certificate().is_ok() {

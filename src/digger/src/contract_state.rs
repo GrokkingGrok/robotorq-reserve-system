@@ -48,6 +48,7 @@ pub struct ContractState {
     // Economics (CORRECT formula: Ore Target = Torq × RoboStake)
     pub torq: f64,                     // Selling price (goes to citizens)
     pub robo_stake: f64,               // Robot payment (goes to DistoDam Reserve)
+    pub robo_stake_received: f64,      // Actual RT received from DistoDam (for funding check)
     pub ore_target: f64,               // Torq × RoboStake (how much to dig)
     pub ore_generated: f64,            // How much dug so far
     
@@ -96,6 +97,7 @@ impl ContractState {
             contract_id,
             torq,
             robo_stake,
+            robo_stake_received: 0.0,  // No funding yet
             ore_target,
             ore_generated: 0.0,
             approval_status: ApprovalStatus::PendingStake,
@@ -108,10 +110,11 @@ impl ContractState {
         }
     }
     
-    /// Pay RoboStake and approve contract
+    /// Add funding from DistoDam (via Trust)
     /// 
+    /// When DistoDam releases RoboStake, it both funds AND approves the contract.
     /// Transitions: PendingStake → StakeApproved
-    pub fn pay_stake(&mut self) -> Result<(), String> {
+    pub fn add_funding(&mut self, amount: f64) -> Result<(), String> {
         if self.approval_status != ApprovalStatus::PendingStake {
             return Err(format!(
                 "Contract {} is not in PendingStake state (current: {:?})",
@@ -119,13 +122,21 @@ impl ContractState {
             ));
         }
         
-        if self.robo_stake <= 0.0 {
-            return Err("RoboStake must be positive".to_string());
+        if amount <= 0.0 {
+            return Err("Funding amount must be positive".to_string());
         }
         
+        self.robo_stake_received += amount;
+        
+        // Funding also approves the contract
         self.approval_status = ApprovalStatus::StakeApproved;
         
         Ok(())
+    }
+    
+    /// Check if contract is fully funded
+    pub fn is_funded(&self) -> bool {
+        self.robo_stake_received >= self.robo_stake
     }
     
     /// Check if we should send hashes now
@@ -305,21 +316,22 @@ mod tests {
     }
 
     #[test]
-    fn test_pay_stake_success() {
+    fn test_add_funding_success() {
         let mut state = ContractState::new("test-001".to_string(), 100.0, 5.0, 5, 2000.0);
         
-        let result = state.pay_stake();
+        let result = state.add_funding(5.0);
         assert!(result.is_ok());
         assert_eq!(state.approval_status, ApprovalStatus::StakeApproved);
+        assert_eq!(state.robo_stake_received, 5.0);
     }
 
     #[test]
-    fn test_pay_stake_already_approved() {
+    fn test_add_funding_already_approved() {
         let mut state = ContractState::new("test-001".to_string(), 100.0, 5.0, 5, 2000.0);
-        state.pay_stake().unwrap();
+        state.add_funding(5.0).unwrap();
         
-        // Try to pay again
-        let result = state.pay_stake();
+        // Try to fund again
+        let result = state.add_funding(5.0);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("not in PendingStake"));
     }
@@ -333,7 +345,7 @@ mod tests {
         assert!(!state.should_send_hashes(60));
         
         // Approve
-        state.pay_stake().unwrap();
+        state.add_funding(5.0).unwrap();
         
         // Now should send
         assert!(state.should_send_hashes(60));
@@ -342,7 +354,7 @@ mod tests {
     #[test]
     fn test_should_send_hashes_time_interval() {
         let mut state = ContractState::new("test-001".to_string(), 100.0, 5.0, 5, 2000.0);
-        state.pay_stake().unwrap();
+        state.add_funding(5.0).unwrap();
         state.add_jtus(100, 50.0);
         
         // First send - should be true
@@ -361,7 +373,7 @@ mod tests {
     #[test]
     fn test_complete_milestone() {
         let mut state = ContractState::new("test-001".to_string(), 100.0, 5.0, 3, 2000.0);
-        state.pay_stake().unwrap();
+        state.add_funding(5.0).unwrap();
         
         // Complete first milestone
         state.complete_milestone().unwrap();
@@ -382,7 +394,7 @@ mod tests {
     #[test]
     fn test_complete_milestone_overflow() {
         let mut state = ContractState::new("test-001".to_string(), 100.0, 5.0, 1, 2000.0);
-        state.pay_stake().unwrap();
+        state.add_funding(5.0).unwrap();
         
         state.complete_milestone().unwrap();
         
@@ -422,7 +434,7 @@ mod tests {
     #[test]
     fn test_ore_generation_tracking() {
         let mut state = ContractState::new("test-001".to_string(), 100.0, 5.0, 10, 2000.0);
-        state.pay_stake().unwrap();
+        state.add_funding(5.0).unwrap();
         
         // Ore target is 500 RT
         assert_eq!(state.ore_target, 500.0);
@@ -472,10 +484,10 @@ mod tests {
         manager.create_contract("test-003".to_string(), 100.0, 5.0, 5, 2000.0).unwrap();
         
         // Approve and add JTUs to first two
-        manager.get_mut("test-001").unwrap().pay_stake().unwrap();
+        manager.get_mut("test-001").unwrap().add_funding(5.0).unwrap();
         manager.get_mut("test-001").unwrap().add_jtus(100, 50.0);
         
-        manager.get_mut("test-002").unwrap().pay_stake().unwrap();
+        manager.get_mut("test-002").unwrap().add_funding(5.0).unwrap();
         manager.get_mut("test-002").unwrap().add_jtus(100, 50.0);
         
         // Third is not approved
@@ -494,7 +506,7 @@ mod tests {
         manager.create_contract("test-002".to_string(), 100.0, 5.0, 2, 2000.0).unwrap();
         
         // Complete first contract
-        manager.get_mut("test-001").unwrap().pay_stake().unwrap();
+        manager.get_mut("test-001").unwrap().add_funding(5.0).unwrap();
         manager.get_mut("test-001").unwrap().complete_milestone().unwrap();
         
         // Second is not complete

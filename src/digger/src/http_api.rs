@@ -100,6 +100,21 @@ pub struct ExecuteContractRequest {
     pub duration_seconds: u64,  // How long to simulate work
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct FundContractRequest {
+    pub contract_id: String,
+    pub amount: f64,  // RT received from DistoDam
+}
+
+#[derive(Debug, Serialize)]
+pub struct FundContractResponse {
+    pub contract_id: String,
+    pub robo_stake_required: f64,
+    pub robo_stake_received: f64,
+    pub is_funded: bool,
+    pub message: String,
+}
+
 // ============================================================================
 // Printer-facing DTOs (Printer → Digger communication)
 // ============================================================================
@@ -148,6 +163,19 @@ pub struct PrinterJobCompleteResponse {
     pub contract_id: String,
     pub jtu_count: i64,
     pub ore_generated: f64,
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PrinterAssignRequest {
+    pub printer_id: String,
+    pub contract_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PrinterAssignResponse {
+    pub printer_id: String,
+    pub contract_id: String,
     pub message: String,
 }
 
@@ -304,18 +332,25 @@ pub async fn create_contract(
     }
 }
 
-/// POST /contracts/stake - Pay RoboStake and approve contract
+/// POST /contracts/fund - Add RoboStake funding to contract
 ///
-/// Transitions contract from PendingStake → StakeApproved.
+/// Mock endpoint for now - Trust will call this when DistoDam releases RT.
+/// Contract must be funded before it can be assigned to a printer.
 ///
 /// Example:
-///   POST /contracts/stake
-///   { "contract_id": "contract-001" }
-pub async fn pay_stake(
+///   POST /contracts/fund
+///   {
+///     "contract_id": "contract-001",
+///     "amount": 5.0
+///   }
+pub async fn fund_contract(
     State(state): State<ApiState>,
-    Json(req): Json<PayStakeRequest>,
-) -> Result<Json<PayStakeResponse>, (StatusCode, Json<ErrorResponse>)> {
-    info!("Paying stake for contract: {}", req.contract_id);
+    Json(req): Json<FundContractRequest>,
+) -> Result<Json<FundContractResponse>, (StatusCode, Json<ErrorResponse>)> {
+    info!(
+        "Funding contract {} with {} RT",
+        req.contract_id, req.amount
+    );
 
     let mut manager = state.contract_manager.lock().unwrap();
     
@@ -332,21 +367,37 @@ pub async fn pay_stake(
         }
     };
 
-    match contract.pay_stake() {
+    match contract.add_funding(req.amount) {
         Ok(_) => {
-            // Record metrics
-            state.metrics.contracts_staked_total.inc();
+            let is_funded = contract.is_funded();
+            let robo_stake_required = contract.robo_stake;
+            let robo_stake_received = contract.robo_stake_received;
             
-            info!("Stake paid for contract: {}", req.contract_id);
+            info!(
+                "Contract {} funded: {}/{} RT ({})",
+                req.contract_id,
+                robo_stake_received,
+                robo_stake_required,
+                if is_funded { "FULLY FUNDED" } else { "partial" }
+            );
             
-            Ok(Json(PayStakeResponse {
+            Ok(Json(FundContractResponse {
                 contract_id: req.contract_id,
-                approval_status: "StakeApproved".to_string(),
-                message: "Stake paid, contract approved for execution".to_string(),
+                robo_stake_required,
+                robo_stake_received,
+                is_funded,
+                message: if is_funded {
+                    "Contract fully funded and ready for printer assignment".to_string()
+                } else {
+                    format!(
+                        "Partial funding: {}/{} RT received",
+                        robo_stake_received, robo_stake_required
+                    )
+                },
             }))
         }
         Err(e) => {
-            error!("Failed to pay stake: {}", e);
+            error!("Failed to fund contract: {}", e);
             Err((
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse { error: e }),
@@ -877,16 +928,137 @@ pub async fn metrics_handler(State(state): State<ApiState>) -> impl IntoResponse
     }
 }
 
+/// GET /printers - List all registered printers
+///
+/// Returns list of all bonded printers in the registry.
+///
+/// Example response:
+///   [
+///     {
+///       "printer_id": "test-printer-001",
+///       "model": "MockPrinter v1.0",
+///       "public_key": "...",
+///       "bonded_at": 1234567890
+///     }
+///   ]
+pub async fn list_printers(
+    State(state): State<ApiState>,
+) -> Result<Json<Vec<serde_json::Value>>, (StatusCode, Json<ErrorResponse>)> {
+    let printers = state.printer_registry.list_all().await;
+    
+    let printer_list: Vec<serde_json::Value> = printers
+        .iter()
+        .map(|p| {
+            serde_json::json!({
+                "printer_id": p.registration.printer_id,
+                "model": p.registration.model,
+                "manufacturer": p.registration.manufacturer,
+                "rated_watts": p.registration.rated_watts,
+                "assigned_contract": p.assigned_contract,
+                "prints_completed": p.prints_completed,
+                "total_capacity_hours": p.total_capacity_hours,
+            })
+        })
+        .collect();
+    
+    Ok(Json(printer_list))
+}
+
+/// POST /printer/assign - Assign contract to printer
+///
+/// Assigns a contract to a specific printer for execution.
+///
+/// Example:
+///   POST /printer/assign
+///   {
+///     "printer_id": "test-printer-001",
+///     "contract_id": "contract-abc123"
+///   }
+pub async fn printer_assign_contract(
+    State(state): State<ApiState>,
+    Json(req): Json<PrinterAssignRequest>,
+) -> Result<Json<PrinterAssignResponse>, (StatusCode, Json<ErrorResponse>)> {
+    info!(
+        "Assigning contract {} to printer {}",
+        req.contract_id, req.printer_id
+    );
+
+    // Verify printer exists
+    let printer = match state.printer_registry.get(&req.printer_id).await {
+        Some(p) => p,
+        None => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("Printer {} not found", req.printer_id),
+                }),
+            ));
+        }
+    };
+
+    // Verify contract exists and is funded (acquire lock in limited scope)
+    {
+        let manager = state.contract_manager.lock().unwrap();
+        let contract = match manager.get(&req.contract_id) {
+            Some(c) => c,
+            None => {
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorResponse {
+                        error: format!("Contract {} not found", req.contract_id),
+                    }),
+                ));
+            }
+        };
+        
+        // Check if contract is fully funded
+        if !contract.is_funded() {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!(
+                        "Contract {} not fully funded ({}/{} RT received). Call POST /contracts/fund first.",
+                        req.contract_id,
+                        contract.robo_stake_received,
+                        contract.robo_stake
+                    ),
+                }),
+            ));
+        }
+    } // manager lock automatically dropped here
+
+    // Assign contract to printer
+    if let Err(e) = state.printer_registry.assign_contract(&req.printer_id, req.contract_id.clone()).await {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse { error: e }),
+        ));
+    }
+
+    info!(
+        "Contract {} assigned to printer {} ({})",
+        req.contract_id, req.printer_id, printer.registration.model
+    );
+
+    Ok(Json(PrinterAssignResponse {
+        printer_id: req.printer_id,
+        contract_id: req.contract_id,
+        message: "Contract assigned successfully".to_string(),
+    }))
+}
+
 /// GET / - Root endpoint
 pub async fn root() -> impl IntoResponse {
     "Digger v0.2.0 - Contract Management & Printer API\n\n\
      Contract Endpoints (Trust → Digger):\n\
      POST   /contracts/create       - Create contract\n\
-     POST   /contracts/stake        - Pay stake\n\
+     POST   /contracts/fund         - Add RoboStake funding (DistoDam → Digger)\n\
      POST   /contracts/execute      - Execute contract (generate JTUs)\n\
      GET    /contracts/:id          - Get contract status\n\
      GET    /jtus/:id               - Get JTU stats\n\n\
      Printer Endpoints (Printer → Digger):\n\
+     GET    /printers               - List all registered printers\n\
+     POST   /printer/assign         - Assign contract to printer (requires funding)\n\
      POST   /printer/job/start      - Acknowledge job start\n\
      POST   /printer/milestone      - Report milestone progress\n\
      POST   /printer/job/complete   - Report job completion\n\n\
@@ -906,11 +1078,13 @@ pub fn create_router(state: ApiState) -> Router {
         .route("/metrics", get(metrics_handler))
         // Contract endpoints (Trust → Digger)
         .route("/contracts/create", post(create_contract))
-        .route("/contracts/stake", post(pay_stake))
+        .route("/contracts/fund", post(fund_contract))
         .route("/contracts/execute", post(execute_contract))
         .route("/contracts/{id}", get(get_contract_status))
         .route("/jtus/{id}", get(get_jtu_stats))
         // Printer endpoints (Printer → Digger)
+        .route("/printers", get(list_printers))
+        .route("/printer/assign", post(printer_assign_contract))
         .route("/printer/job/start", post(printer_job_start))
         .route("/printer/milestone", post(printer_report_milestone))
         .route("/printer/job/complete", post(printer_job_complete))

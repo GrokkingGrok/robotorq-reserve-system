@@ -186,7 +186,7 @@ async fn issue_certificate(
 
 /// Handle contract_started events from printers
 async fn handle_contract_started_events(
-    state: ApiState,
+    _state: ApiState,
     nats_url: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Create dedicated NATS connection for this handler

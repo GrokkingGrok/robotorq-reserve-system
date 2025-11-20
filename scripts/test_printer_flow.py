@@ -70,18 +70,24 @@ def create_test_contract():
     """Create a test contract on Digger"""
     print_step(2, "Creating test contract...")
     
+    import time
+    contract_id = f"test-print-contract-{int(time.time())}"
+    
     contract_data = {
-        "contract_id": "test-print-contract-001",
-        "description": "Test print job for mock printer",
-        "torq": 1800000.0,  # 30 minutes at 1000W = 1.8MJ
-        "robo_stake": 0.05,
+        "contract_id": contract_id,
+        "torq": 100.0,
+        "robo_stake": 5.0,
+        "milestones": 10,
+        "power_watts": 1000.0,
     }
     
     try:
-        response = requests.post(f"{DIGGER_URL}/contracts", json=contract_data)
+        response = requests.post(f"{DIGGER_URL}/contracts/create", json=contract_data)
         if response.status_code in [200, 201]:
             print_success("Contract created")
             print(f"  Contract ID: {contract_data['contract_id']}")
+            print(f"  Torq: {contract_data['torq']} RT")
+            print(f"  RoboStake: {contract_data['robo_stake']} RT")
             return contract_data['contract_id']
         else:
             print_error(f"Failed to create contract: HTTP {response.status_code}")
@@ -91,14 +97,34 @@ def create_test_contract():
         print_error(f"Could not create contract: {e}")
         return None
 
-def assign_contract_to_printer(contract_id, printer_id):
-    """Assign contract to printer"""
-    print_step(3, "Assigning contract to printer...")
+def fund_contract(contract_id, amount):
+    """Fund contract from DistoDam (mock)"""
+    print_step(3, "Funding contract (mock DistoDam payment)...")
     
     try:
         response = requests.post(
-            f"{DIGGER_URL}/printers/{printer_id}/assign",
-            json={"contract_id": contract_id}
+            f"{DIGGER_URL}/contracts/fund",
+            json={"contract_id": contract_id, "amount": amount}
+        )
+        if response.status_code == 200:
+            print_success(f"Contract funded with {amount} RT")
+            return True
+        else:
+            print_error(f"Failed to fund contract: HTTP {response.status_code}")
+            print(response.text)
+            return False
+    except Exception as e:
+        print_error(f"Could not fund contract: {e}")
+        return False
+
+def assign_contract_to_printer(contract_id, printer_id):
+    """Assign contract to printer"""
+    print_step(4, "Assigning contract to printer...")
+    
+    try:
+        response = requests.post(
+            f"{DIGGER_URL}/printer/assign",
+            json={"printer_id": printer_id, "contract_id": contract_id}
         )
         if response.status_code == 200:
             print_success(f"Contract assigned to {printer_id}")
@@ -113,13 +139,10 @@ def assign_contract_to_printer(contract_id, printer_id):
 
 def start_mock_print(contract_id):
     """Trigger mock print start via printer's mock API"""
-    print_step(4, "Starting mock print job...")
+    print_step(5, "Starting mock print job...")
     
     try:
-        response = requests.post(
-            f"{PRINTER_MOCK_URL}/start",
-            json={"contract_id": contract_id}
-        )
+        response = requests.post(f"{PRINTER_MOCK_URL}/start")
         if response.status_code == 200:
             print_success("Mock print started")
             return True
@@ -134,21 +157,12 @@ def start_mock_print(contract_id):
 
 def complete_mock_print(contract_id):
     """Trigger mock print completion"""
-    print_step(5, "Completing mock print job...")
-    
-    completion_data = {
-        "contract_id": contract_id,
-        "capacity_watt_hours": 500.0,  # 0.5 kWh print capacity
-    }
+    print_step(6, "Completing mock print job...")
     
     try:
-        response = requests.post(
-            f"{PRINTER_MOCK_URL}/complete",
-            json=completion_data
-        )
+        response = requests.post(f"{PRINTER_MOCK_URL}/complete")
         if response.status_code == 200:
             print_success("Mock print completed")
-            print(f"  Capacity: {completion_data['capacity_watt_hours']} Wh")
             return True
         else:
             print_error(f"Failed to complete print: HTTP {response.status_code}")
@@ -160,7 +174,7 @@ def complete_mock_print(contract_id):
 
 def watch_for_ore():
     """Watch Digger logs for ore generation"""
-    print_step(6, "Watching for ore generation...")
+    print_step(7, "Watching for ore generation...")
     print_info("Checking Digger logs in 5 seconds...")
     
     time.sleep(5)
@@ -169,10 +183,12 @@ def watch_for_ore():
     result = subprocess.run(
         ["docker", "logs", "robotorq-network-digger-1", "--tail", "50"],
         capture_output=True,
-        text=True
+        text=True,
+        encoding='utf-8',
+        errors='replace'
     )
     
-    if "ore" in result.stdout.lower():
+    if result.stdout and "ore" in result.stdout.lower():
         print_success("Ore generation detected in Digger logs!")
         print("\n--- Recent Digger Logs ---")
         for line in result.stdout.split('\n')[-10:]:
@@ -203,7 +219,11 @@ def main():
     if not contract_id:
         return
     
-    # Step 3: Assign contract
+    # Step 3: Fund contract (mock DistoDam)
+    if not fund_contract(contract_id, 5.0):
+        return
+    
+    # Step 4: Assign contract
     if not assign_contract_to_printer(contract_id, printer_id):
         return
     
