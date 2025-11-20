@@ -3,8 +3,8 @@
 
 FROM rust:1.91-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache musl-dev
+# Install build dependencies (including OpenSSL for reqwest)
+RUN apk add --no-cache musl-dev pkgconfig openssl-dev openssl-libs-static
 
 WORKDIR /app
 

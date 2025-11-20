@@ -43,8 +43,36 @@ async fn handle_printer_registrations(state: ApiState) -> Result<(), Box<dyn std
         .await?;
 
     info!("📝 Listening for printer registrations on 'printer.register'");
+    
+    // Ensure subscription is fully established
+    state.nats_client.flush().await?;
+    
+    info!("✅ Subscription created, entering handler loop");
+    info!("🔍 DEBUG: About to enter while loop");
 
-    while let Some(msg) = sub.next().await {
+    loop {
+        info!("🔍 DEBUG: Calling sub.next().await...");
+        
+        // Try with a timeout to see if .next() is stuck
+        let timeout_duration = tokio::time::Duration::from_secs(5);
+        let result = tokio::time::timeout(timeout_duration, sub.next()).await;
+        
+        let msg = match result {
+            Ok(Some(m)) => {
+                info!("📨 RECEIVED MESSAGE on printer.register");
+                info!("   Payload size: {} bytes", m.payload.len());
+                m
+            }
+            Ok(None) => {
+                warn!("❌ Subscription closed unexpectedly");
+                break;
+            }
+            Err(_) => {
+                info!("⏱️  Timeout waiting for message (5s) - still listening...");
+                continue;
+            }
+        };
+                
         let registration: PrinterRegistration = match serde_json::from_slice(&msg.payload) {
             Ok(reg) => reg,
             Err(e) => {
@@ -85,19 +113,23 @@ async fn handle_printer_registrations(state: ApiState) -> Result<(), Box<dyn std
         // Send certificate back to printer
         let cert_json = serde_json::to_vec(&certificate).unwrap();
         if let Some(reply) = msg.reply {
-            if let Err(e) = state.nats_client.publish(reply, cert_json.into()).await {
+            info!("📤 Sending certificate to reply subject: {}", reply);
+            if let Err(e) = state.nats_client.publish(reply, cert_json.clone().into()).await {
                 error!("Failed to send certificate: {}", e);
             }
         }
 
         // Also publish to printer's response topic
         let response_topic = format!("printer.{}.certificate", registration.printer_id);
+        info!("📤 Publishing certificate to: {}", response_topic);
         if let Err(e) = state
             .nats_client
-            .publish(response_topic, serde_json::to_vec(&certificate).unwrap().into())
+            .publish(response_topic, cert_json.into())
             .await
         {
             error!("Failed to publish certificate: {}", e);
+        } else {
+            info!("✅ Certificate sent successfully");
         }
     }
 

@@ -291,24 +291,33 @@
     },
     {
       "type": "stat",
-      "title": "RoboTorq Aggregated",
+      "title": "Ingot Buffer",
       "datasource": {
         "type": "prometheus",
         "uid": "ff4c4su9ayigwe"
       },
       "targets": [
         {
-          "expr": "mint_robo_aggregated_total",
-          "legendFormat": "RT Aggregated"
+          "expr": "mint_ingots_buffered",
+          "legendFormat": "Ingots Buffered"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 100, "color": "yellow" },
+              { "value": 500, "color": "green" },
+              { "value": 900, "color": "orange" }
+            ]
           },
           "unit": "short",
-          "decimals": 2
+          "decimals": 0
         }
       },
       "gridPos": { "h": 6, "w": 6, "x": 6, "y": 15 }
@@ -486,9 +495,93 @@
     },
     {
       "type": "row",
-      "title": "Pipeline Flow Visualization",
+      "title": "Wallet - Balance Tracking",
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 }
+    },
+    {
+      "type": "stat",
+      "title": "Phase3 Units Received",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "wallet_units_received_total",
+          "legendFormat": "Units"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 29 }
+    },
+    {
+      "type": "stat",
+      "title": "RoboTorq Balance",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "wallet_robo_torq_balance / 1000",
+          "legendFormat": "RT Balance"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 0.01, "color": "yellow" },
+              { "value": 1, "color": "green" }
+            ]
+          },
+          "unit": "short",
+          "decimals": 6
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 29 }
+    },
+    {
+      "type": "stat",
+      "title": "JouleTorq Balance",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff4c4su9ayigwe"
+      },
+      "targets": [
+        {
+          "expr": "wallet_joule_torq_balance",
+          "legendFormat": "Joules"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 29 }
+    },
+    {
+      "type": "row",
+      "title": "Pipeline Flow Visualization",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 }
     },
     {
       "type": "graph",
@@ -521,91 +614,7 @@
           "label": "Rate (per second)"
         }
       ],
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 29 }
-    },
-    {
-      "type": "row",
-      "title": "Wallet - Balance Tracking",
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 37 }
-    },
-    {
-      "type": "stat",
-      "title": "Phase3 Units Received",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "ff4c4su9ayigwe"
-      },
-      "targets": [
-        {
-          "expr": "wallet_units_received_total",
-          "legendFormat": "Units"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          }
-        }
-      },
-      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 38 }
-    },
-    {
-      "type": "stat",
-      "title": "RoboTorq Balance",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "ff4c4su9ayigwe"
-      },
-      "targets": [
-        {
-          "expr": "wallet_robo_torq_balance / 1000",
-          "legendFormat": "RT Balance"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "value": 0, "color": "red" },
-              { "value": 0.01, "color": "yellow" },
-              { "value": 1, "color": "green" }
-            ]
-          },
-          "unit": "short",
-          "decimals": 6
-        }
-      },
-      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 38 }
-    },
-    {
-      "type": "stat",
-      "title": "JouleTorq Balance",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "ff4c4su9ayigwe"
-      },
-      "targets": [
-        {
-          "expr": "wallet_joule_torq_balance",
-          "legendFormat": "Joules"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "unit": "short",
-          "decimals": 2
-        }
-      },
-      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 38 }
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 36 }
     },
     {
       "type": "row",
