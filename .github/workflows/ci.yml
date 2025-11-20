@@ -55,9 +55,9 @@ jobs:
       # ── Test Wallet ─────────────────────────────────────────────
       - name: Test Wallet
         run: |
-          docker compose up -d wallet
+          docker compose up -d nats mint wallet
           sleep 30
-          curl -f http://localhost:3000 || exit 1
+          curl -f http://localhost:8085/health || exit 1
 
       - name: Clean up Wallet
         if: always()
