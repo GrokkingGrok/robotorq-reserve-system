@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use async_nats::Client;
 use chrono::Utc;
 use futures_util::StreamExt;
+use pqcrypto_traits::sign::PublicKey;
 use serde_json::json;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
@@ -50,8 +51,8 @@ impl PrinterService {
         if self.cert_manager.load_certificate().is_ok() {
             info!("✅ Loaded existing bonded certificate");
             if let Some(cert) = self.cert_manager.certificate() {
-                info!("   Certificate ID: {}", cert.certificate_id);
-                info!("   Valid Until: {}", cert.valid_until);
+                info!("   Certificate Hash: {}", cert.certificate_hash);
+                info!("   Issued At: {}", cert.issued_at);
                 info!("   Certified Capacity: {}W", cert.rated_watts);
                 METRICS.certificate_valid.set(1.0);
             }
@@ -161,17 +162,26 @@ impl PrinterService {
     }
     
     async fn register_with_digger(&mut self) -> Result<()> {
+        // Generate Falcon-1024 keypair for this printer
+        let (public_key, _secret_key) = pqcrypto_falcon::falcon1024::keypair();
+        let public_key_hex = hex::encode(public_key.as_bytes());
+        
         let registration = json!({
             "printer_id": self.config.printer_id,
-            "printer_model": self.config.printer_model,
+            "model": self.config.printer_model,
+            "manufacturer": "RoboTorq",
+            "serial_number": format!("{}-001", self.config.printer_id), // Mock serial
             "rated_watts": self.config.rated_watts,
-            "timestamp": Utc::now().to_rfc3339(),
+            "public_key": public_key_hex,
         });
         
         info!("📤 Requesting bonded certificate from Digger");
         
+        // Properly encode as JSON bytes
+        let registration_bytes = serde_json::to_vec(&registration)?;
+        
         self.nats_client
-            .publish("printer.register", registration.to_string().into())
+            .publish("printer.register", registration_bytes.into())
             .await?;
         
         // Subscribe to certificate response
@@ -187,7 +197,7 @@ impl PrinterService {
                 self.cert_manager.save_certificate(&cert)?;
                 
                 info!("✅ Received and saved bonded certificate");
-                info!("   Certificate ID: {}", cert.certificate_id);
+                info!("   Certificate Hash: {}", cert.certificate_hash);
                 info!("   Certified Capacity: {}W", cert.rated_watts);
                 
                 METRICS.certificate_valid.set(1.0);

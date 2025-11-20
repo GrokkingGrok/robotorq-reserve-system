@@ -5,14 +5,14 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Certificate {
-    pub certificate_id: String,
     pub printer_id: String,
-    pub printer_model: String,
+    pub model: String,
     pub rated_watts: u32,
+    pub issued_at: String,
+    pub expires_at: Option<String>,
     pub public_key: String,
-    pub valid_until: String,
+    pub certificate_hash: String,
     pub signature: String,
-    pub issuer: String,
 }
 
 pub struct CertificateManager {

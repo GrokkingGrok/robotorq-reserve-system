@@ -1,19 +1,15 @@
 # Multi-stage build for RoboTorq Printer Service
+# DEV BUILD: Uses Debian for 10x faster compilation (glibc vs musl)
+# TODO: Switch back to Alpine for production (smaller image)
 
-# Build stage - use Rust 1.91 Alpine
-FROM rust:1.91-alpine AS builder
+# Build stage - use Debian slim for FAST compilation
+FROM rust:1.91-slim-bookworm AS builder
 
-# Install build dependencies including static OpenSSL
-RUN apk add --no-cache \
-    musl-dev \
-    openssl-dev \
-    openssl-libs-static \
-    pkgconfig
-
-# Force static linking for OpenSSL
-ENV OPENSSL_STATIC=1
-ENV OPENSSL_LIB_DIR=/usr/lib
-ENV OPENSSL_INCLUDE_DIR=/usr/include
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -26,14 +22,15 @@ COPY src ./src
 # Build release binary
 RUN cargo build --release
 
-# Runtime stage
-FROM alpine:3.20
+# Runtime stage - also use Debian for dev (consistency)
+FROM debian:bookworm-slim
 
 # Install runtime dependencies
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y \
     ca-certificates \
-    libgcc \
-    wget
+    libssl3 \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
