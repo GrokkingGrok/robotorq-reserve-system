@@ -160,15 +160,15 @@ impl PrinterService {
     async fn handle_state_change(&mut self, now_printing: bool) -> Result<()> {
         if now_printing && !self.is_printing {
             // Print started - check mock contract state first
-            let contract_id = if let Some(ref mock_state) = self.mock_contract_state {
+            let contract_id: Option<String> = if let Some(ref mock_state) = self.mock_contract_state {
                 mock_state.read().await.assigned_contract_id.clone()
             } else {
                 self.assigned_contract_id.clone()
             };
             
             // Store contract_id in service for this print session
-            if let Some(ref cid) = contract_id {
-                self.assigned_contract_id = Some(cid.clone());
+            if let Some(cid) = contract_id.clone() {
+                self.assigned_contract_id = Some(cid);
             }
             
             self.print_start_time = Some(Utc::now());
@@ -205,7 +205,8 @@ impl PrinterService {
                 
                 // Clear assignment after completion (both service and mock state)
                 if let Some(ref mock_state) = self.mock_contract_state {
-                    mock_state.write().await.assigned_contract_id = None;
+                    let mut s: tokio::sync::RwLockWriteGuard<MockContractState> = mock_state.write().await;
+                    s.assigned_contract_id = None;
                 }
                 self.assigned_contract_id = None;
                 

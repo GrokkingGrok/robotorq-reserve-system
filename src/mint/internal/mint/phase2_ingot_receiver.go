@@ -170,20 +170,24 @@ func (pir *Phase2IngotReceiver) handleIngot(msg *nats.Msg) {
 			ingot.Signature,
 			ingot.PublicKey,
 		); err != nil {
-			pir.logger.Error("signature verification failed - REJECTING INGOT",
+			pir.logger.Error("Falcon-1024 signature verification FAILED - REJECTING INGOT",
 				"error", err,
 				"ingot_id", ingot.ID,
-				"branch_hash", truncateHash(ingot.BranchHash))
+				"branch_hash", truncateHash(ingot.BranchHash),
+				"signature_len", len(ingot.Signature),
+				"pubkey_len", len(ingot.PublicKey))
 			pir.metrics.SignatureVerifyErrors.Inc()
 			pir.metrics.ValidationErrors.WithLabelValues("signature").Inc()
 			failCount++
 			continue
 		}
-		pir.metrics.SignatureVerifyTime.Observe(time.Since(verifyStart).Seconds())
+		verifyTime := time.Since(verifyStart)
+		pir.metrics.SignatureVerifyTime.Observe(verifyTime.Seconds())
 
-		pir.logger.Debug("signature verified",
+		pir.logger.Info("Falcon-1024 signature VERIFIED ✓",
 			"ingot_id", ingot.ID,
-			"verify_time_ms", time.Since(verifyStart).Milliseconds())
+			"verify_time_ms", verifyTime.Milliseconds(),
+			"refinery_pubkey", truncateHash(ingot.PublicKey))
 
 		// Record hash count distribution
 		pir.metrics.IngotHashCountHist.Observe(float64(ingot.HashCount))
