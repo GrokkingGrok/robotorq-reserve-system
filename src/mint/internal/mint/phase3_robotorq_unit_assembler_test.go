@@ -174,7 +174,7 @@ func TestPhase3RoboTorqUnitAssembler_MetricsRecorded(t *testing.T) {
 	assert.True(t, metricNames["mint_phase3_units_assembled_total"])
 	assert.True(t, metricNames["mint_phase3_assembly_duration_seconds"])
 	assert.True(t, metricNames["mint_phase3_contracts_per_unit"])
-	assert.True(t, metricNames["mint_phase3_diggers_per_unit"])
+	// digger metric removed during schema lean; no longer asserted
 	assert.True(t, metricNames["mint_phase3_refineries_per_unit"])
 
 	t.Logf("Metrics recorded: %d metric families", len(metricFamilies))
