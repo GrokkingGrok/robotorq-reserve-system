@@ -63,9 +63,6 @@ type Phase3RoboTorqUnit struct {
 	// ContractIDs lists all unique contracts that contributed to this RT unit
 	ContractIDs []string `json:"contract_ids"`
 
-	// DiggerIDs lists all unique diggers that contributed to this RT unit
-	DiggerIDs []string `json:"digger_ids"`
-
 	// MerkleProofAPI is the URL endpoint for retrieving merkle proofs
 	// Format: /verify/proof/{unit_id}
 	// Allows anyone to request proof that a specific ingot exists in this RT unit
@@ -91,12 +88,11 @@ type Phase3RoboTorqUnit struct {
 //   - treeHeight: Number of levels in the merkle tree (should be 10 for 1000 ingots)
 //   - roboStakeTotal: Total RoboStake for this RT unit (sum from 1000 ingots)
 //   - contractIDs: All unique contracts that contributed to this unit
-//   - diggerIDs: All unique diggers that contributed to this unit
 //
 // Returns:
 //   - Phase3RoboTorqUnit ready for DistoDam publishing
 //   - Error if validation fails
-func NewPhase3RoboTorqUnit(merkleRoot string, treeHeight int, roboStakeTotal float64, contractIDs []string, diggerIDs []string) (*Phase3RoboTorqUnit, error) {
+func NewPhase3RoboTorqUnit(merkleRoot string, treeHeight int, roboStakeTotal float64, contractIDs []string) (*Phase3RoboTorqUnit, error) {
 	// Validate merkle root format (64-char hex SHA256)
 	if len(merkleRoot) != 64 {
 		return nil, fmt.Errorf("invalid merkle_root length: got %d, expected 64", len(merkleRoot))
@@ -122,7 +118,6 @@ func NewPhase3RoboTorqUnit(merkleRoot string, treeHeight int, roboStakeTotal flo
 		TreeHeight:     treeHeight,
 		RoboStakeTotal: roboStakeTotal,
 		ContractIDs:    contractIDs,
-		DiggerIDs:      diggerIDs,
 		MerkleProofAPI: fmt.Sprintf("/verify/proof/%s", unitID),
 		MintedAt:       time.Now().UTC(),
 	}

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"b2b/mint/internal/mint"
 	"b2b/mint/internal/models"
 
 	"github.com/stretchr/testify/assert"
@@ -264,7 +265,7 @@ func TestProofStore_WriteProof_Success(t *testing.T) {
 		MintedAt:       time.Now(),
 	}
 
-	merkleResult := map[string]interface{}{"tree": "data"}
+	merkleResult := &mint.Level2MerkleResult{MerkleRoot: unit.MerkleRoot}
 
 	err := store.WriteProof(unit.UnitID, unit, merkleResult)
 
@@ -286,7 +287,7 @@ func TestProofStore_WriteProof_AtomicWrite(t *testing.T) {
 		MintedAt:   time.Now(),
 	}
 
-	store.WriteProof(unit.UnitID, unit, map[string]interface{}{})
+	store.WriteProof(unit.UnitID, unit, &mint.Level2MerkleResult{MerkleRoot: unit.MerkleRoot})
 
 	// Verify no temp files left
 	files, _ := os.ReadDir(dir)
@@ -307,16 +308,17 @@ func TestProofStore_ReadProof_Success(t *testing.T) {
 		MintedAt:       time.Now(),
 	}
 
-	merkleData := map[string]interface{}{"level": 2}
+	merkleData := &mint.Level2MerkleResult{MerkleRoot: originalUnit.MerkleRoot}
 	store.WriteProof(originalUnit.UnitID, originalUnit, merkleData)
 
-	readUnit, merkleJSON, err := store.ReadProof("read-001")
+	readUnit, merkleResult, err := store.ReadProof("read-001")
 
 	assert.NoError(t, err)
 	assert.Equal(t, originalUnit.UnitID, readUnit.UnitID)
 	assert.Equal(t, originalUnit.MerkleRoot, readUnit.MerkleRoot)
 	assert.Equal(t, originalUnit.RoboStakeTotal, readUnit.RoboStakeTotal)
-	assert.NotNil(t, merkleJSON)
+	assert.NotNil(t, merkleResult)
+	assert.Equal(t, originalUnit.MerkleRoot, merkleResult.MerkleRoot)
 }
 
 func TestProofStore_ReadProof_NotFound(t *testing.T) {
@@ -350,7 +352,7 @@ func TestProofStore_ListProofs_Multiple(t *testing.T) {
 			MerkleRoot: "root" + string(rune(i+48)),
 			MintedAt:   time.Now(),
 		}
-		store.WriteProof(unit.UnitID, unit, map[string]interface{}{})
+		store.WriteProof(unit.UnitID, unit, &mint.Level2MerkleResult{MerkleRoot: unit.MerkleRoot})
 	}
 
 	proofs, err := store.ListProofs()
@@ -365,14 +367,14 @@ func TestProofStore_FindByIngotHash_Success(t *testing.T) {
 
 	unit := &models.Phase3RoboTorqUnit{
 		UnitID:     "lookup-001",
-		MerkleRoot: "root-for-lookup",
+		MerkleRoot: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		MintedAt:   time.Now(),
 	}
 
-	store.WriteProof(unit.UnitID, unit, map[string]interface{}{})
+	store.WriteProof(unit.UnitID, unit, &mint.Level2MerkleResult{MerkleRoot: unit.MerkleRoot, HashEntries: []*models.IngotHashEntry{{BranchHash: unit.MerkleRoot}}})
 
 	// FindByIngotHash uses MerkleRoot as index key
-	unitID, err := store.FindByIngotHash("root-for-lookup")
+	unitID, err := store.FindByIngotHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "lookup-001", unitID)
@@ -382,7 +384,7 @@ func TestProofStore_FindByIngotHash_NotFound(t *testing.T) {
 	dir := createTestDir(t)
 	store, _ := NewProofStore(dir, createTestLogger())
 
-	_, err := store.FindByIngotHash("nonexistent-root")
+	_, err := store.FindByIngotHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "ingot hash not found")
@@ -392,11 +394,11 @@ func TestProofStore_Count_Success(t *testing.T) {
 	dir := createTestDir(t)
 	store, _ := NewProofStore(dir, createTestLogger())
 
-	unit1 := &models.Phase3RoboTorqUnit{UnitID: "u1", MerkleRoot: "r1", MintedAt: time.Now()}
-	unit2 := &models.Phase3RoboTorqUnit{UnitID: "u2", MerkleRoot: "r2", MintedAt: time.Now()}
+	unit1 := &models.Phase3RoboTorqUnit{UnitID: "u1", MerkleRoot: "1111111111111111111111111111111111111111111111111111111111111111", MintedAt: time.Now()}
+	unit2 := &models.Phase3RoboTorqUnit{UnitID: "u2", MerkleRoot: "2222222222222222222222222222222222222222222222222222222222222222", MintedAt: time.Now()}
 
-	store.WriteProof("u1", unit1, map[string]interface{}{})
-	store.WriteProof("u2", unit2, map[string]interface{}{})
+	store.WriteProof("u1", unit1, &mint.Level2MerkleResult{MerkleRoot: unit1.MerkleRoot})
+	store.WriteProof("u2", unit2, &mint.Level2MerkleResult{MerkleRoot: unit2.MerkleRoot})
 
 	count, err := store.Count()
 
@@ -411,11 +413,11 @@ func TestProofStore_DeleteOlderThan_Success(t *testing.T) {
 	// Create proof from past (MintedAt in past, but PersistedAtTime will be now)
 	unit := &models.Phase3RoboTorqUnit{
 		UnitID:     "old-proof",
-		MerkleRoot: "old-root",
+		MerkleRoot: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
 		MintedAt:   time.Now().Add(-48 * time.Hour),
 	}
 
-	store.WriteProof(unit.UnitID, unit, map[string]interface{}{})
+	store.WriteProof(unit.UnitID, unit, &mint.Level2MerkleResult{MerkleRoot: unit.MerkleRoot})
 
 	// Sleep to ensure time passes
 	time.Sleep(100 * time.Millisecond)
@@ -442,7 +444,7 @@ func TestProofStore_DeleteOlderThan_KeepsRecent(t *testing.T) {
 		MintedAt:   time.Now(),
 	}
 
-	store.WriteProof(unit.UnitID, unit, map[string]interface{}{})
+	store.WriteProof(unit.UnitID, unit, &mint.Level2MerkleResult{MerkleRoot: unit.MerkleRoot})
 
 	// Try to delete proofs older than 24 hours
 	deleted, err := store.DeleteOlderThan(time.Now().Add(-24 * time.Hour))
@@ -468,7 +470,7 @@ func TestProofStore_ExportCSV_Success(t *testing.T) {
 		MintedAt:       now,
 	}
 
-	store.WriteProof(unit.UnitID, unit, map[string]interface{}{})
+	store.WriteProof(unit.UnitID, unit, &mint.Level2MerkleResult{MerkleRoot: unit.MerkleRoot})
 
 	csvPath := filepath.Join(os.TempDir(), "export-test.csv")
 	defer os.Remove(csvPath)
@@ -497,7 +499,7 @@ func TestProofStore_ConcurrentWrites(t *testing.T) {
 				MerkleRoot: "root-" + string(rune(id+48)),
 				MintedAt:   time.Now(),
 			}
-			done <- store.WriteProof(unit.UnitID, unit, map[string]interface{}{})
+			done <- store.WriteProof(unit.UnitID, unit, &mint.Level2MerkleResult{MerkleRoot: unit.MerkleRoot})
 		}(i)
 	}
 
@@ -608,7 +610,7 @@ func TestPersistenceManager_SavePhase3Proof(t *testing.T) {
 		MintedAt:   time.Now(),
 	}
 
-	err := pm.SavePhase3Proof(unit, map[string]interface{}{})
+	err := pm.SavePhase3Proof(unit, &mint.Level2MerkleResult{})
 
 	assert.NoError(t, err)
 	assert.Greater(t, pm.metrics.ProofsWritten, int64(0))
@@ -620,11 +622,11 @@ func TestPersistenceManager_LookupPhase3Proof(t *testing.T) {
 
 	originalUnit := &models.Phase3RoboTorqUnit{
 		UnitID:     "lookup-pm",
-		MerkleRoot: "root-lookup",
+		MerkleRoot: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		MintedAt:   time.Now(),
 	}
 
-	pm.SavePhase3Proof(originalUnit, map[string]interface{}{})
+	pm.SavePhase3Proof(originalUnit, &mint.Level2MerkleResult{})
 
 	unit, merkle, err := pm.LookupPhase3Proof("lookup-pm")
 
@@ -639,13 +641,13 @@ func TestPersistenceManager_LookupPhase3ProofByIngotHash(t *testing.T) {
 
 	unit := &models.Phase3RoboTorqUnit{
 		UnitID:     "ingot-lookup",
-		MerkleRoot: "special-root-hash",
+		MerkleRoot: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		MintedAt:   time.Now(),
 	}
 
-	pm.SavePhase3Proof(unit, map[string]interface{}{})
+	pm.SavePhase3Proof(unit, &mint.Level2MerkleResult{})
 
-	unitID, err := pm.LookupPhase3ProofByIngotHash("special-root-hash")
+	unitID, err := pm.LookupPhase3ProofByIngotHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "ingot-lookup", unitID)
@@ -655,14 +657,11 @@ func TestPersistenceManager_ListPhase3Proofs(t *testing.T) {
 	dir := createTestDir(t)
 	pm, _ := NewPersistenceManager(dir, createTestLogger())
 
-	for i := 0; i < 2; i++ {
-		unit := &models.Phase3RoboTorqUnit{
-			UnitID:     "list-" + string(rune(i+48)),
-			MerkleRoot: "root-" + string(rune(i+48)),
-			MintedAt:   time.Now(),
-		}
-		pm.SavePhase3Proof(unit, map[string]interface{}{})
-	}
+	// two distinct proofs
+	unitA := &models.Phase3RoboTorqUnit{UnitID: "list-0", MerkleRoot: "1111111111111111111111111111111111111111111111111111111111111111", MintedAt: time.Now()}
+	unitB := &models.Phase3RoboTorqUnit{UnitID: "list-1", MerkleRoot: "2222222222222222222222222222222222222222222222222222222222222222", MintedAt: time.Now()}
+	pm.SavePhase3Proof(unitA, &mint.Level2MerkleResult{})
+	pm.SavePhase3Proof(unitB, &mint.Level2MerkleResult{})
 
 	proofs, err := pm.ListPhase3Proofs()
 
@@ -675,17 +674,17 @@ func TestPersistenceManager_Stats(t *testing.T) {
 	pm, _ := NewPersistenceManager(dir, createTestLogger())
 
 	entries := []*models.IngotHashEntry{
-		{BranchHash: "test", RoboStakeTotal: 1.0},
+		{BranchHash: "3333333333333333333333333333333333333333333333333333333333333333", RoboStakeTotal: 1.0},
 	}
 
 	pm.SaveIngotBatch("batch", entries)
 
 	unit := &models.Phase3RoboTorqUnit{
 		UnitID:     "stat-test",
-		MerkleRoot: "root",
+		MerkleRoot: "4444444444444444444444444444444444444444444444444444444444444444",
 		MintedAt:   time.Now(),
 	}
-	pm.SavePhase3Proof(unit, map[string]interface{}{})
+	pm.SavePhase3Proof(unit, &mint.Level2MerkleResult{})
 
 	stats := pm.Stats()
 
@@ -720,7 +719,7 @@ func TestPersistenceManager_ExportProofCSV(t *testing.T) {
 		MerkleRoot: "export-root",
 		MintedAt:   time.Now(),
 	}
-	pm.SavePhase3Proof(unit, map[string]interface{}{})
+	pm.SavePhase3Proof(unit, &mint.Level2MerkleResult{})
 
 	csvPath := filepath.Join(os.TempDir(), "pm-export.csv")
 	defer os.Remove(csvPath)
@@ -742,7 +741,7 @@ func TestPersistenceManager_CleanupOldProofs(t *testing.T) {
 		MerkleRoot: "cleanup-root",
 		MintedAt:   time.Now(),
 	}
-	pm.SavePhase3Proof(unit, map[string]interface{}{})
+	pm.SavePhase3Proof(unit, &mint.Level2MerkleResult{})
 
 	// Verify proof exists
 	count1, _ := pm.proofStore.Count()
@@ -780,7 +779,7 @@ func TestPersistenceManager_FullWorkflow(t *testing.T) {
 		RoboStakeTotal: 10.0,
 		MintedAt:       time.Now(),
 	}
-	pm.SavePhase3Proof(unit, map[string]interface{}{})
+	pm.SavePhase3Proof(unit, &mint.Level2MerkleResult{})
 
 	// 3. Remove in-flight batch (after successful publish)
 	pm.RemoveIngotBatch("batch-workflow")
