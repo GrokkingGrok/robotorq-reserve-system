@@ -174,11 +174,11 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 		phase3Assembler.GetProofCache(),
 		phase3Assembler.GetSignatureArchive(),
 		phase3Assembler.GetPublicKey(),
-		":8081", // Verification API port
+		":8080", // Verification + Main HTTP API unified port
 		logger,
 		verificationMetrics,
 	)
-	logger.Info("VerificationHandler initialized", "port", ":8081")
+	logger.Info("VerificationHandler initialized", "port", ":8080")
 
 	return &Components{
 		Client:              client,
