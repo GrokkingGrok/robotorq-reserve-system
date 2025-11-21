@@ -36,11 +36,11 @@ type HealthResponse struct {
 	IngotAssembly IngotAssemblyHealth `json:"ingot_assembly"`
 }
 
-// QueueHealth represents queue status
+// QueueHealth represents queue status (Phase 2: hash-based)
 type QueueHealth struct {
-	UnitQueueSize     int     `json:"unit_queue_size"`
-	UnitQueueCapacity int     `json:"unit_queue_capacity"`
-	UnitQueueUsage    float64 `json:"unit_queue_usage_percent"`
+	HashQueueSize     int     `json:"hash_queue_size"`     // Phase 2: Number of hashes in queue
+	HashQueueCapacity int     `json:"hash_queue_capacity"` // Phase 2: Max hash queue size
+	HashQueueUsage    float64 `json:"hash_queue_usage_percent"`
 }
 
 // NATSHealth represents NATS connection status
@@ -49,11 +49,11 @@ type NATSHealth struct {
 	Status    string `json:"status"`
 }
 
-// IngotAssemblyHealth represents ingot assembly status
+// IngotAssemblyHealth represents ingot assembly status (Phase 2: hash-based)
 type IngotAssemblyHealth struct {
-	AccumulatedUnits int     `json:"accumulated_units"`
-	CompletedIngots  int     `json:"completed_ingots_pending"`
-	ProgressPercent  float64 `json:"progress_to_next_ingot_percent"`
+	AccumulatedHashes int     `json:"accumulated_hashes"` // Phase 2: Hashes toward next 3600-hash ingot
+	CompletedIngots   int     `json:"completed_ingots_pending"`
+	ProgressPercent   float64 `json:"progress_to_next_ingot_percent"` // Toward 3600 hashes
 }
 
 // HealthHandler provides health check functionality
@@ -83,24 +83,24 @@ func (hh *HealthHandler) HTTPHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Gather health metrics
-	unitSize := hh.queueMgr.GetQueueSize()
-	unitCapacity := hh.queueMgr.GetCapacity()
+	// Gather health metrics (Phase 2: hash-based)
+	hashSize := hh.queueMgr.GetQueueSize()
+	hashCapacity := hh.queueMgr.GetCapacity()
 
 	// Calculate queue usage percentage
-	unitUsage := 0.0
-	if unitCapacity > 0 {
-		unitUsage = (float64(unitSize) / float64(unitCapacity)) * 100
+	hashUsage := 0.0
+	if hashCapacity > 0 {
+		hashUsage = (float64(hashSize) / float64(hashCapacity)) * 100
 	}
 
 	// Get assembler metrics
-	accumulatedUnits := hh.assembler.GetAccumulatedUnits()
+	accumulatedHashes := hh.assembler.GetAccumulatedUnits() // Phase 2: Returns 0 (hashes, not units)
 	completedIngots := hh.assembler.GetCompletedIngotsCount()
 
-	// Calculate progress toward next ingot (3600 units threshold)
+	// Calculate progress toward next ingot (3600 hashes threshold)
 	progressPercent := 0.0
-	if accumulatedUnits > 0 {
-		progressPercent = (float64(accumulatedUnits) / 3600.0) * 100
+	if accumulatedHashes > 0 {
+		progressPercent = (float64(accumulatedHashes) / 3600.0) * 100
 		if progressPercent > 100 {
 			progressPercent = 100 // Cap at 100%
 		}
@@ -110,26 +110,26 @@ func (hh *HealthHandler) HTTPHandler(w http.ResponseWriter, req *http.Request) {
 	status := "healthy"
 	if !hh.mintClient.IsConnected() {
 		status = "degraded" // NATS disconnected
-	} else if unitUsage > 90 {
-		status = "warning" // Queue near capacity
+	} else if hashUsage > 90 {
+		status = "warning" // Hash queue near capacity
 	}
 
 	health := HealthResponse{
 		Status:    status,
 		Timestamp: time.Now().UTC(),
 		Queue: QueueHealth{
-			UnitQueueSize:     unitSize,
-			UnitQueueCapacity: unitCapacity,
-			UnitQueueUsage:    unitUsage,
+			HashQueueSize:     hashSize,
+			HashQueueCapacity: hashCapacity,
+			HashQueueUsage:    hashUsage,
 		},
 		NATS: NATSHealth{
 			Connected: hh.mintClient.IsConnected(),
 			Status:    hh.mintClient.GetStatus(),
 		},
 		IngotAssembly: IngotAssemblyHealth{
-			AccumulatedUnits: accumulatedUnits,
-			CompletedIngots:  completedIngots,
-			ProgressPercent:  progressPercent,
+			AccumulatedHashes: accumulatedHashes,
+			CompletedIngots:   completedIngots,
+			ProgressPercent:   progressPercent,
 		},
 	}
 
