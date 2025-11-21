@@ -118,7 +118,6 @@ func (mer *MintEventReceiver) handleMintEvent(msg *nats.Msg) {
 		"unit_id", unit.UnitID,
 		"robo_stake_rt", unit.RoboStakeTotal,
 		"contracts", len(unit.ContractIDs),
-		"diggers", len(unit.DiggerIDs),
 		"merkle_root", unit.MerkleRoot)
 
 	// Deposit RoboStake to StakeVault (economic cost returning)
