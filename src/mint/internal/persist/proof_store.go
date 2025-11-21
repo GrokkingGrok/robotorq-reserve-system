@@ -7,9 +7,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 
+	"b2b/mint/internal/mint"
 	"b2b/mint/internal/models"
 )
 
@@ -33,19 +35,20 @@ import (
 // - Index: Reverse lookup by ingot hash (memory-based for speed)
 // - Cleanup: Delete proofs older than retention period
 type ProofStore struct {
-	dir         string // Directory storing proof files
-	logger      *slog.Logger
-	mu          sync.RWMutex
-	ingotIndex  map[string]string // ingotHash -> unitID (reverse lookup)
-	rebuildOnce sync.Once
+	dir            string // Directory storing proof files
+	logger         *slog.Logger
+	mu             sync.RWMutex
+	ingotIndex     map[string]string   // ingot branch_hash -> unitID
+	unitIngotIndex map[string][]string // unitID -> []branch_hash (for cleanup)
+	rebuildOnce    sync.Once
 }
 
 // ProofFile represents the JSON structure of a persisted proof
 type ProofFile struct {
+	SchemaVersion   int                        `json:"schema_version"`
 	Unit            *models.Phase3RoboTorqUnit `json:"unit"`
-	MerkleTreeJSON  json.RawMessage            `json:"merkle_tree"` // Store as raw JSON
-	PersistedAt     int64                      `json:"persisted_at_unix"`
-	PersistedAtTime time.Time                  `json:"persisted_at_time"`
+	MerkleTreeJSON  json.RawMessage            `json:"merkle_tree"`
+	PersistedAtNano int64                      `json:"persisted_at_unix_ns"`
 }
 
 // NewProofStore creates a new ProofStore
@@ -55,9 +58,10 @@ func NewProofStore(dir string, logger *slog.Logger) (*ProofStore, error) {
 	}
 
 	ps := &ProofStore{
-		dir:        dir,
-		logger:     logger,
-		ingotIndex: make(map[string]string),
+		dir:            dir,
+		logger:         logger,
+		ingotIndex:     make(map[string]string),
+		unitIngotIndex: make(map[string][]string),
 	}
 
 	// Index is rebuilt lazily on first lookup
@@ -73,9 +77,13 @@ func NewProofStore(dir string, logger *slog.Logger) (*ProofStore, error) {
 //   - unitID: Phase3RoboTorqUnit ID (cache key)
 //   - unit: Complete Phase3RoboTorqUnit with all fields
 //   - merkleResult: Level2MerkleResult with tree for proof generation (stored as JSON)
-func (ps *ProofStore) WriteProof(unitID string, unit *models.Phase3RoboTorqUnit, merkleResult interface{}) error {
+func (ps *ProofStore) WriteProof(unitID string, unit *models.Phase3RoboTorqUnit, merkleResult *mint.Level2MerkleResult) error {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
+
+	if !validID(unitID) {
+		return fmt.Errorf("invalid unitID: %s", unitID)
+	}
 
 	// Serialize merkle tree as JSON
 	merkleJSON, err := json.Marshal(merkleResult)
@@ -84,10 +92,10 @@ func (ps *ProofStore) WriteProof(unitID string, unit *models.Phase3RoboTorqUnit,
 	}
 
 	proof := ProofFile{
+		SchemaVersion:   1,
 		Unit:            unit,
 		MerkleTreeJSON:  merkleJSON,
-		PersistedAt:     time.Now().UnixNano(),
-		PersistedAtTime: time.Now(),
+		PersistedAtNano: time.Now().UnixNano(),
 	}
 
 	data, err := json.MarshalIndent(&proof, "", "  ")
@@ -109,8 +117,19 @@ func (ps *ProofStore) WriteProof(unitID string, unit *models.Phase3RoboTorqUnit,
 		return fmt.Errorf("failed to rename proof file: %w", err)
 	}
 
-	// Update in-memory reverse index
-	ps.ingotIndex[unit.MerkleRoot] = unitID
+	// Update in-memory reverse index with each leaf (branch hash)
+	if merkleResult != nil && len(merkleResult.HashEntries) > 0 {
+		leafHashes := make([]string, 0, len(merkleResult.HashEntries))
+		for _, e := range merkleResult.HashEntries {
+			leafHashes = append(leafHashes, e.BranchHash)
+			ps.ingotIndex[e.BranchHash] = unitID
+		}
+		ps.unitIngotIndex[unitID] = leafHashes
+	} else {
+		// Fallback: index merkle root only if no leaves provided
+		ps.ingotIndex[unit.MerkleRoot] = unitID
+		ps.unitIngotIndex[unitID] = []string{unit.MerkleRoot}
+	}
 
 	ps.logger.Debug("proof persisted",
 		"unit_id", unitID,
@@ -129,9 +148,13 @@ func (ps *ProofStore) WriteProof(unitID string, unit *models.Phase3RoboTorqUnit,
 //   - Phase3RoboTorqUnit if found
 //   - Level2MerkleResult (as raw JSON) if stored
 //   - error if not found or read fails
-func (ps *ProofStore) ReadProof(unitID string) (*models.Phase3RoboTorqUnit, interface{}, error) {
+func (ps *ProofStore) ReadProof(unitID string) (*models.Phase3RoboTorqUnit, *mint.Level2MerkleResult, error) {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
+
+	if !validID(unitID) {
+		return nil, nil, fmt.Errorf("invalid unitID: %s", unitID)
+	}
 
 	path := filepath.Join(ps.dir, fmt.Sprintf("%s.json", unitID))
 
@@ -145,7 +168,13 @@ func (ps *ProofStore) ReadProof(unitID string) (*models.Phase3RoboTorqUnit, inte
 		return nil, nil, fmt.Errorf("failed to unmarshal proof file: %w", err)
 	}
 
-	return proof.Unit, proof.MerkleTreeJSON, nil
+	// Deserialize merkle tree into Level2MerkleResult
+	var merkleResult mint.Level2MerkleResult
+	if err := json.Unmarshal(proof.MerkleTreeJSON, &merkleResult); err != nil {
+		return proof.Unit, nil, fmt.Errorf("failed to unmarshal merkle tree: %w", err)
+	}
+
+	return proof.Unit, &merkleResult, nil
 }
 
 // FindByIngotHash finds unit ID containing specific ingot hash
@@ -162,6 +191,10 @@ func (ps *ProofStore) ReadProof(unitID string) (*models.Phase3RoboTorqUnit, inte
 func (ps *ProofStore) FindByIngotHash(ingotHash string) (string, error) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
+
+	if !hashLike(ingotHash) {
+		return "", fmt.Errorf("invalid ingot hash format: %s", ingotHash)
+	}
 
 	// First-time: rebuild index from all proof files
 	ps.rebuildOnce.Do(func() {
@@ -207,9 +240,26 @@ func (ps *ProofStore) rebuildIngotIndex() {
 			continue
 		}
 
-		// Add to index: merkle_root -> unitID
-		if proof.Unit != nil {
+		if proof.Unit == nil {
+			continue
+		}
+		// Reconstruct leaves from merkle tree JSON
+		var merkleResult mint.Level2MerkleResult
+		if err := json.Unmarshal(proof.MerkleTreeJSON, &merkleResult); err != nil {
+			ps.logger.Warn("failed to unmarshal merkle tree during index rebuild", "path", path, "error", err)
+			continue
+		}
+		if len(merkleResult.HashEntries) > 0 {
+			leafHashes := make([]string, 0, len(merkleResult.HashEntries))
+			for _, e := range merkleResult.HashEntries {
+				leafHashes = append(leafHashes, e.BranchHash)
+				ps.ingotIndex[e.BranchHash] = proof.Unit.UnitID
+				count++
+			}
+			ps.unitIngotIndex[proof.Unit.UnitID] = leafHashes
+		} else {
 			ps.ingotIndex[proof.Unit.MerkleRoot] = proof.Unit.UnitID
+			ps.unitIngotIndex[proof.Unit.UnitID] = []string{proof.Unit.MerkleRoot}
 			count++
 		}
 	}
@@ -286,11 +336,20 @@ func (ps *ProofStore) DeleteOlderThan(cutoff time.Time) (int, error) {
 			continue
 		}
 
-		// Delete if persisted before cutoff
-		if proof.PersistedAtTime.Before(cutoff) {
+		persistTime := time.Unix(0, proof.PersistedAtNano)
+		if persistTime.Before(cutoff) {
 			if err := os.Remove(path); err != nil {
 				ps.logger.Warn("failed to delete old proof file", "path", path, "error", err)
 				continue
+			}
+			// Clean reverse index entries
+			if proof.Unit != nil {
+				if hashes, ok := ps.unitIngotIndex[proof.Unit.UnitID]; ok {
+					for _, h := range hashes {
+						delete(ps.ingotIndex, h)
+					}
+					delete(ps.unitIngotIndex, proof.Unit.UnitID)
+				}
 			}
 			deleted++
 		}
@@ -352,13 +411,14 @@ func (ps *ProofStore) ExportCSV(outputPath string) error {
 		}
 
 		if proof.Unit != nil {
+			persistTime := time.Unix(0, proof.PersistedAtNano)
 			w.Write([]string{
 				proof.Unit.UnitID,
 				proof.Unit.MerkleRoot,
 				fmt.Sprintf("%.6f", proof.Unit.RoboStakeTotal),
 				fmt.Sprintf("%v", proof.Unit.TreeHeight),
 				proof.Unit.MintedAt.Format(time.RFC3339Nano),
-				proof.PersistedAtTime.Format(time.RFC3339Nano),
+				persistTime.Format(time.RFC3339Nano),
 			})
 		}
 	}
@@ -379,3 +439,10 @@ func (ps *ProofStore) Count() (int, error) {
 
 	return len(proofs), nil
 }
+
+// ID validation & hash format helpers
+var idRegex = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+var hashRegex = regexp.MustCompile(`^[a-f0-9]{64}$`)
+
+func validID(id string) bool { return idRegex.MatchString(id) }
+func hashLike(h string) bool { return hashRegex.MatchString(h) }

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"b2b/mint/internal/mint"
 	"b2b/mint/internal/models"
 )
 
@@ -182,7 +183,7 @@ func (pm *PersistenceManager) RecoverInFlightIngots(ctx context.Context) (map[st
 // Parameters:
 //   - unit: Assembled Phase3RoboTorqUnit with proof data
 //   - merkleResult: Level2MerkleResult with full tree for proof generation
-func (pm *PersistenceManager) SavePhase3Proof(unit *models.Phase3RoboTorqUnit, merkleResult interface{}) error {
+func (pm *PersistenceManager) SavePhase3Proof(unit *models.Phase3RoboTorqUnit, merkleResult *mint.Level2MerkleResult) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -213,7 +214,7 @@ func (pm *PersistenceManager) SavePhase3Proof(unit *models.Phase3RoboTorqUnit, m
 //   - Phase3RoboTorqUnit if found
 //   - merkle tree data if stored
 //   - error if not found or read fails
-func (pm *PersistenceManager) LookupPhase3Proof(unitID string) (*models.Phase3RoboTorqUnit, interface{}, error) {
+func (pm *PersistenceManager) LookupPhase3Proof(unitID string) (*models.Phase3RoboTorqUnit, *mint.Level2MerkleResult, error) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 

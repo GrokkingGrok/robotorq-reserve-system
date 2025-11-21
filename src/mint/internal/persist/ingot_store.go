@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
+	"time"
 
 	"b2b/mint/internal/models"
 )
@@ -25,16 +27,17 @@ import (
 // - Recovery on startup finds and re-queues orphans
 // - No duplicate processing (same batchID won't be processed twice)
 type IngotStore struct {
-	dir    string        // Directory storing batch files
+	dir    string // Directory storing batch files
 	logger *slog.Logger
 	mu     sync.RWMutex
 }
 
 // BatchFile represents the JSON structure of a persisted batch
 type BatchFile struct {
-	BatchID   string                    `json:"batch_id"`
-	Entries   []*models.IngotHashEntry  `json:"entries"`
-	CreatedAt int64                     `json:"created_at_unix_ns"`
+	BatchID       string                   `json:"batch_id"`
+	Entries       []*models.IngotHashEntry `json:"entries"`
+	SchemaVersion int                      `json:"schema_version"`
+	CreatedAt     int64                    `json:"created_at_unix_ns"`
 }
 
 // NewIngotStore creates a new IngotStore
@@ -61,10 +64,15 @@ func (is *IngotStore) WriteBatch(batchID string, entries []*models.IngotHashEntr
 	is.mu.Lock()
 	defer is.mu.Unlock()
 
+	if !is.validID(batchID) {
+		return fmt.Errorf("invalid batchID: %s", batchID)
+	}
+
 	batch := BatchFile{
-		BatchID:   batchID,
-		Entries:   entries,
-		CreatedAt: int64(len(entries)), // Use count as simple timestamp
+		BatchID:       batchID,
+		Entries:       entries,
+		SchemaVersion: 1,
+		CreatedAt:     time.Now().UnixNano(),
 	}
 
 	data, err := json.MarshalIndent(&batch, "", "  ")
@@ -105,6 +113,10 @@ func (is *IngotStore) DeleteBatch(batchID string) error {
 	is.mu.Lock()
 	defer is.mu.Unlock()
 
+	if !is.validID(batchID) {
+		return fmt.Errorf("invalid batchID: %s", batchID)
+	}
+
 	path := filepath.Join(is.dir, fmt.Sprintf("%s.json", batchID))
 
 	// Check if file exists before deleting
@@ -132,6 +144,10 @@ func (is *IngotStore) DeleteBatch(batchID string) error {
 func (is *IngotStore) ReadBatch(batchID string) ([]*models.IngotHashEntry, error) {
 	is.mu.RLock()
 	defer is.mu.RUnlock()
+
+	if !is.validID(batchID) {
+		return nil, fmt.Errorf("invalid batchID: %s", batchID)
+	}
 
 	path := filepath.Join(is.dir, fmt.Sprintf("%s.json", batchID))
 
@@ -169,8 +185,15 @@ func (is *IngotStore) ReadAllBatches() (map[string][]*models.IngotHashEntry, err
 	batches := make(map[string][]*models.IngotHashEntry)
 
 	for _, entry := range entries {
-		// Skip directories and temp files
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+		// Skip directories
+		if entry.IsDir() {
+			continue
+		}
+		// Skip temp files
+		if filepath.Ext(entry.Name()) == ".tmp" {
+			continue
+		}
+		if filepath.Ext(entry.Name()) != ".json" {
 			continue
 		}
 
@@ -194,6 +217,13 @@ func (is *IngotStore) ReadAllBatches() (map[string][]*models.IngotHashEntry, err
 	}
 
 	return batches, nil
+}
+
+// validID ensures IDs are filename safe (alnum, dash, underscore, dot)
+var idPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+func (is *IngotStore) validID(id string) bool {
+	return idPattern.MatchString(id)
 }
 
 // Count returns number of persisted batches
