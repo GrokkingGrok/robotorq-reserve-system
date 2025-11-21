@@ -58,7 +58,7 @@ services:
     build: ./src/mint
     ports:
       - "50051:50051"
-      - "8084:8081"  # Phase 5: Verification API (host:8084 -> container:8081)
+      - "8080:8080"  # Unified Mint HTTP + Verification API
       - "9090:9090"  # Prometheus metrics
     environment:
       - NATS_URL=nats://nats:4222
@@ -72,7 +72,7 @@ services:
       nats:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8081/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -183,7 +183,7 @@ services:
       - NATS_URL=nats://nats:4222
       - HTTP_PORT=8080
       - RUST_LOG=wallet=info,tower_http=info
-      - MINT_VERIFICATION_URL=http://mint:8081/verify/certificate
+      - MINT_VERIFICATION_URL=http://mint:8080/verify/certificate
     depends_on:
       nats:
         condition: service_healthy
