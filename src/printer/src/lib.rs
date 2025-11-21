@@ -11,4 +11,5 @@ pub use config::Config;
 pub use printer_service::PrinterService;
 pub use klipper_client::KlipperClient;
 pub use mock_klipper::MockKlipperClient;
+pub use mock_api::MockContractState;
 pub use certificate::{Certificate, CertificateManager};

@@ -35,7 +35,7 @@ func createTestUnits(contractID string, count int, joulesPerUnit, roboPerUnit fl
 // Phase 2 uses AddHash() with hash-only batches from Digger
 func TestIngotAssembler_ExactThreshold(t *testing.T) {
 	t.Skip("TODO: Update for Phase 2 hash-based API (AddHash instead of AddUnit)")
-	
+
 	tests := []struct {
 		name              string
 		unitCount         int
@@ -175,7 +175,7 @@ func TestIngotAssembler_ExactThreshold(t *testing.T) {
 // TODO(phase-2-update): Update for Phase 2 hash-based QueueManager API
 func TestIngotAssembler_MultipleContracts(t *testing.T) {
 	t.Skip("TODO: Update for Phase 2 hash-based API (AddHash instead of AddUnit)")
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -282,7 +282,7 @@ func TestIngotAssembler_MultipleContracts(t *testing.T) {
 // TODO(phase-2-update): Update for Phase 2 hash-based QueueManager API
 func TestIngotAssembler_HashGeneration(t *testing.T) {
 	t.Skip("TODO: Update for Phase 2 hash-based API (AddHash instead of AddUnit)")
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -335,7 +335,7 @@ func TestIngotAssembler_HashGeneration(t *testing.T) {
 // TODO(phase-2-update): Update for Phase 2 hash-based QueueManager API
 func TestIngotAssembler_IngotIDUniqueness(t *testing.T) {
 	t.Skip("TODO: Update for Phase 2 hash-based API (AddHash instead of AddUnit)")
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -387,7 +387,7 @@ func TestIngotAssembler_IngotIDUniqueness(t *testing.T) {
 // TODO(phase-2-update): Update for Phase 2 hash-based QueueManager API
 func TestIngotAssembler_ExcessCarryover(t *testing.T) {
 	t.Skip("TODO: Update for Phase 2 hash-based API (AddHash instead of AddUnit)")
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -464,7 +464,7 @@ func TestIngotAssembler_PriceAveraging(t *testing.T) {
 // TODO(phase-2-update): Update for Phase 2 hash-based QueueManager API
 func TestIngotAssembler_GetCompletedIngotsClears(t *testing.T) {
 	t.Skip("TODO: Update for Phase 2 hash-based API (AddHash instead of AddUnit)")
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -517,7 +517,7 @@ func TestIngotAssembler_GetCompletedIngotsClears(t *testing.T) {
 // TODO(phase-2-update): Update for Phase 2 hash-based QueueManager API
 func TestIngotAssembler_ContractIDDeduplication(t *testing.T) {
 	t.Skip("TODO: Update for Phase 2 hash-based API (AddHash instead of AddUnit)")
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -562,7 +562,7 @@ func TestIngotAssembler_ContractIDDeduplication(t *testing.T) {
 // TODO(phase-2-update): Update for Phase 2 hash-based QueueManager API
 func TestIngotAssembler_ZeroRoboStake(t *testing.T) {
 	t.Skip("TODO: Update for Phase 2 hash-based API (AddHash instead of AddUnit)")
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

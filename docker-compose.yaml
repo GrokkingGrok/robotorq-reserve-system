@@ -212,7 +212,7 @@ services:
       - NATS_URL=nats://nats:4222
       - PORT=8082
       - WALLET_DISTRIBUTION_ENABLED=true
-      - WALLET_DISTRIBUTION_RT_PER_MIN=0.001
+      - WALLET_DISTRIBUTION_RT_PER_MIN=100.0
       - WALLET_ACTIVATION_TOPIC=wallet.activate
       - WALLET_DISTRIBUTION_TOPIC=wallet.distribution
     depends_on:

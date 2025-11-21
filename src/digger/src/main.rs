@@ -82,6 +82,12 @@ async fn main() {
     // Initialize printer registry
     tracing::info!("🖨️  Initializing printer registry...");
     let printer_registry = PrinterRegistry::new();
+    
+    // Load existing printers from disk
+    if let Err(e) = printer_registry.load().await {
+        tracing::warn!("Failed to load printer registry: {}", e);
+    }
+    
     tracing::info!("✅ Printer registry initialized");
 
     // Create API state

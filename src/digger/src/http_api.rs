@@ -997,7 +997,7 @@ pub async fn printer_assign_contract(
     };
 
     // Verify contract exists and is funded (acquire lock in limited scope)
-    {
+    let contract_status = {
         let manager = state.contract_manager.lock().unwrap();
         let contract = match manager.get(&req.contract_id) {
             Some(c) => c,
@@ -1010,6 +1010,16 @@ pub async fn printer_assign_contract(
                 ));
             }
         };
+        
+        // Check if contract is already completed - reject if so
+        if contract.approval_status == crate::contract_state::ApprovalStatus::ExecutionComplete {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!("Contract {} is already completed", req.contract_id),
+                }),
+            ));
+        }
         
         // Check if contract is fully funded
         if !contract.is_funded() {
@@ -1025,9 +1035,11 @@ pub async fn printer_assign_contract(
                 }),
             ));
         }
-    } // manager lock automatically dropped here
+        
+        contract.approval_status.clone()
+    }; // manager lock automatically dropped here
 
-    // Assign contract to printer
+    // Assign contract to printer (allow overwrite if new contract or incomplete contract)
     if let Err(e) = state.printer_registry.assign_contract(&req.printer_id, req.contract_id.clone()).await {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -1039,6 +1051,22 @@ pub async fn printer_assign_contract(
         "Contract {} assigned to printer {} ({})",
         req.contract_id, req.printer_id, printer.registration.model
     );
+    
+    // Publish NATS message to notify printer
+    let assignment_topic = format!("digger.contract.assigned.{}", req.printer_id);
+    let assignment_payload = serde_json::json!({
+        "contract_id": req.contract_id,
+        "printer_id": req.printer_id,
+    });
+    
+    if let Err(e) = state.nats_client
+        .publish(assignment_topic.clone(), assignment_payload.to_string().into())
+        .await
+    {
+        error!("Failed to publish contract assignment to NATS: {}", e);
+    } else {
+        info!("📤 Published contract assignment to {}", assignment_topic);
+    }
 
     Ok(Json(PrinterAssignResponse {
         printer_id: req.printer_id,

@@ -271,13 +271,153 @@ async fn handle_contract_completed_events(
             error!("Failed to update printer stats: {}", e);
         }
 
-        // TODO: Generate JouleTorqOre with capacity value
-        // For now just log
+        // Execute contract to generate JTUs and ore
         info!(
-            "📦 Would generate ore: {} watt-hours for contract {}",
-            event.capacity_watt_hours, event.contract_id
+            "🏭 Executing contract {} - duration: {:.1}s",
+            event.contract_id, event.duration_secs
         );
+        
+        // Call the execute_contract logic
+        use crate::http_api::ExecuteContractRequest;
+        let execute_req = ExecuteContractRequest {
+            contract_id: event.contract_id.clone(),
+            duration_seconds: event.duration_secs.ceil() as u64,
+        };
+        
+        // We need to call the execute logic directly
+        match execute_contract_internal(&state, execute_req).await {
+            Ok(response) => {
+                info!(
+                    "✨ Contract {} executed: {} JTUs generated, {:.2} RT ore ({:.1}% of target)",
+                    event.contract_id,
+                    response.jtus_generated,
+                    response.ore_generated,
+                    (response.ore_generated / response.ore_target) * 100.0
+                );
+                
+                if response.target_reached {
+                    info!("🎯 Ore target reached for contract {}!", event.contract_id);
+                }
+            }
+            Err(e) => {
+                error!("Failed to execute contract {}: {}", event.contract_id, e);
+            }
+        }
     }
 
     Ok(())
+}
+
+/// Internal helper to execute contract (shared by HTTP API and NATS handlers)
+async fn execute_contract_internal(
+    state: &crate::http_api::ApiState,
+    req: crate::http_api::ExecuteContractRequest,
+) -> Result<crate::http_api::ExecuteContractResponse, String> {
+    use crate::contract_state::ApprovalStatus;
+    
+    info!(
+        "Executing contract: {} for {} seconds",
+        req.contract_id, req.duration_seconds
+    );
+
+    let mut manager = state.contract_manager.lock().unwrap();
+    
+    let contract = match manager.get_mut(&req.contract_id) {
+        Some(c) => c,
+        None => {
+            return Err(format!("Contract {} not found", req.contract_id));
+        }
+    };
+
+    // Must be approved
+    if contract.approval_status != ApprovalStatus::StakeApproved
+        && contract.approval_status != ApprovalStatus::ExecutionComplete
+    {
+        return Err(format!(
+            "Contract {} not approved (status: {:?})",
+            req.contract_id, contract.approval_status
+        ));
+    }
+
+    // Generate JTUs
+    let tokens_per_sec = 1.0;
+    let jtus_per_sec = (tokens_per_sec * contract.power_watts) as i64;
+    let jtus_generated = jtus_per_sec * req.duration_seconds as i64;
+    
+    let ore_value_per_jtu = contract.robo_stake / contract.ore_target;
+    let ore_generated = jtus_generated as f64 * ore_value_per_jtu;
+    
+    let total_joules = contract.power_watts * req.duration_seconds as f64;
+    let joules_per_jtu = total_joules / jtus_generated as f64;
+    let robo_stake_per_jtu = ore_value_per_jtu;
+    
+    let starting_index = contract.jtu_count;
+    let now = chrono::Utc::now().timestamp();
+    let contract_id = req.contract_id.clone();
+    let digger_id = state.config.digger_id.clone();
+    
+    // Generate JTUs in parallel
+    use rayon::prelude::*;
+    let jtus: Vec<crate::jtu_storage::JouleTorqUnit> = (0..jtus_generated)
+        .into_par_iter()
+        .map(|i| {
+            let token_index = starting_index + i;
+            let token_id = format!("{}-t{}", contract_id, token_index);
+            
+            crate::jtu_storage::JouleTorqUnit {
+                hash: crate::jtu_hasher::calculate_jtu_hash(
+                    &token_id,
+                    joules_per_jtu,
+                    robo_stake_per_jtu,
+                    now,
+                    &contract_id,
+                    &digger_id,
+                ),
+                signature: crate::jtu_hasher::create_placeholder_signature(),
+                digger_id: digger_id.clone(),
+                contract_id: contract_id.clone(),
+                token_index,
+                milestone_index: 0,
+                timestamp: now,
+                joules_consumed: joules_per_jtu,
+                robo_stake_paid: robo_stake_per_jtu,
+            }
+        })
+        .collect();
+    
+    // Store JTUs
+    {
+        let storage = state.storage_manager.lock().unwrap();
+        if let Err(e) = storage.insert_batch(&jtus) {
+            return Err(format!("Failed to store JTUs: {}", e));
+        }
+    }
+    
+    // Record metrics
+    state.metrics.contracts_executed_total.inc();
+    state.metrics.jtus_generated_total.inc_by(jtus_generated as u64);
+    state.metrics.jtus_stored_total.inc_by(jtus_generated as u64);
+    state.metrics.ore_generated_total.inc_by(ore_generated);
+    
+    info!("Stored {} JTUs in database for contract {}", jtus_generated, req.contract_id);
+
+    // Update contract state
+    contract.add_jtus(jtus_generated, ore_generated);
+
+    let ore_target = contract.ore_target;
+    let total_ore = contract.ore_generated;
+    let target_reached = contract.is_ore_target_reached();
+
+    Ok(crate::http_api::ExecuteContractResponse {
+        contract_id: req.contract_id,
+        jtus_generated,
+        ore_generated: total_ore,
+        ore_target,
+        target_reached,
+        message: if target_reached {
+            "Ore target reached! Contract ready for minting.".to_string()
+        } else {
+            format!("{:.1}% of ore target reached", (total_ore / ore_target) * 100.0)
+        },
+    })
 }

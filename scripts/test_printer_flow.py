@@ -40,9 +40,51 @@ def print_step(num, msg):
 DIGGER_URL = "http://localhost:3030"
 PRINTER_MOCK_URL = "http://localhost:9092"
 
+def register_printer():
+    """Trigger printer registration with Digger"""
+    print_step(1, "Registering printer with Digger...")
+    
+    try:
+        # First check if already registered
+        response = requests.get(f"{DIGGER_URL}/printers")
+        if response.status_code == 200:
+            printers = response.json()
+            if printers and len(printers) > 0:
+                print_success(f"Printer already registered: {printers[0].get('printer_id')}")
+                return printers[0].get('printer_id')
+        
+        # Not registered - delete cert file to force fresh registration
+        print_info("Printer not in Digger registry - forcing fresh registration...")
+        import subprocess
+        import time
+        
+        # Delete certificate and restart printer
+        subprocess.run(["powershell", "-Command", 
+                       "Remove-Item src\\printer\\data\\*.json -Force; docker-compose restart printer"],
+                      shell=True, check=False)
+        
+        print_info("Waiting 10 seconds for printer to register...")
+        time.sleep(10)
+        
+        # Check again
+        response = requests.get(f"{DIGGER_URL}/printers")
+        if response.status_code == 200:
+            printers = response.json()
+            if printers and len(printers) > 0:
+                print_success(f"Printer registered: {printers[0].get('printer_id')}")
+                return printers[0].get('printer_id')
+        
+        print_error("Printer failed to register")
+        print_info("Check printer logs: docker logs robotorq-network-printer-1")
+        return None
+        
+    except Exception as e:
+        print_error(f"Failed to register printer: {e}")
+        return None
+
 def check_printer_registered():
     """Check if printer is registered with Digger"""
-    print_step(1, "Checking if printer is registered...")
+    print_step(2, "Verifying printer registration...")
     
     try:
         response = requests.get(f"{DIGGER_URL}/printers")
@@ -55,8 +97,6 @@ def check_printer_registered():
                 return printers[0].get('printer_id')
             else:
                 print_error("No printers registered yet")
-                print_info("Wait a few seconds and check printer logs:")
-                print_info("  docker logs robotorq-network-printer-1")
                 return None
         else:
             print_error(f"Failed to get printers: HTTP {response.status_code}")
@@ -142,7 +182,10 @@ def start_mock_print(contract_id):
     print_step(5, "Starting mock print job...")
     
     try:
-        response = requests.post(f"{PRINTER_MOCK_URL}/start")
+        response = requests.post(
+            f"{PRINTER_MOCK_URL}/start",
+            json={"contract_id": contract_id}
+        )
         if response.status_code == 200:
             print_success("Mock print started")
             return True
@@ -206,12 +249,12 @@ def main():
     print(f"{BLUE}🖨️  Test Printer → Contract → Ore Flow{RESET}")
     print("="*60)
     
-    # Step 1: Check printer registration
-    printer_id = check_printer_registered()
+    # Step 1: Register printer (or verify it's registered)
+    printer_id = register_printer()
     if not printer_id:
         print()
         print_error("Cannot continue without registered printer")
-        print_info("Wait for printer to register, then try again")
+        print_info("Check printer logs: docker logs robotorq-network-printer-1")
         return
     
     # Step 2: Create contract
@@ -230,18 +273,18 @@ def main():
     print_info("Waiting 2 seconds for NATS propagation...")
     time.sleep(2)
     
-    # Step 4: Start mock print
+    # Step 5: Start mock print
     if not start_mock_print(contract_id):
         return
     
-    print_info("Waiting 3 seconds for print 'execution'...")
-    time.sleep(3)
+    print_info("Waiting 15 seconds for print 'execution' (heartbeat is 10s)...")
+    time.sleep(15)
     
-    # Step 5: Complete mock print
+    # Step 6: Complete mock print
     if not complete_mock_print(contract_id):
         return
     
-    # Step 6: Watch for ore
+    # Step 7: Watch for ore
     watch_for_ore()
     
     print()
