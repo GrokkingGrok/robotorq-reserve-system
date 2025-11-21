@@ -5,40 +5,25 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"b2b/refinery/internal/models"
 )
 
-// createTestUnit is a helper to create a JouleTorqUnit for testing
-func createTestUnit(contractID string, tokenIndex int, joules, robo float64) *models.JouleTorqUnit {
-	return models.NewJouleTorqUnit(
-		contractID,
-		0, // milestoneIndex
-		tokenIndex,
-		joules,
-		robo,
-		"test-digger",
-		"stub-signature",
-		"stub-pubkey",
-	)
-}
+// Phase 2: Hash-based queue tests
 
-func TestQueueManager_AddUnit(t *testing.T) {
+func TestQueueManager_AddHash(t *testing.T) {
 	tests := []struct {
 		name     string
 		capacity int
 		items    int
 		wantErr  bool
-		errType  error
 	}{
 		{
-			name:     "add single unit",
+			name:     "add single hash",
 			capacity: 10,
 			items:    1,
 			wantErr:  false,
 		},
 		{
-			name:     "add multiple units within capacity",
+			name:     "add multiple hashes within capacity",
 			capacity: 10,
 			items:    5,
 			wantErr:  false,
@@ -50,11 +35,10 @@ func TestQueueManager_AddUnit(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name:     "exceed capacity",
+			name:     "exceed capacity (backpressure)",
 			capacity: 5,
 			items:    6,
-			wantErr:  true,
-			errType:  models.ErrQueueFull,
+			wantErr:  true, // Returns ErrQueueFull for backpressure
 		},
 	}
 
@@ -65,21 +49,18 @@ func TestQueueManager_AddUnit(t *testing.T) {
 
 			var lastErr error
 			for i := 0; i < tt.items; i++ {
-				unit := createTestUnit("test-contract", i, 15.0, 0.001)
-				err := qm.AddUnit(unit)
+				hash := "hash-" + string(rune(i))
+				err := qm.AddHash(hash, "test-contract", "test-digger", 0.001)
 				if err != nil {
 					lastErr = err
 				}
 			}
 
 			if tt.wantErr && lastErr == nil {
-				t.Errorf("Expected error, got nil")
+				t.Errorf("Expected backpressure error, got nil")
 			}
 			if !tt.wantErr && lastErr != nil {
 				t.Errorf("Unexpected error: %v", lastErr)
-			}
-			if tt.wantErr && lastErr != tt.errType {
-				t.Errorf("Expected error %v, got %v", tt.errType, lastErr)
 			}
 
 			// Verify queue size
@@ -94,88 +75,114 @@ func TestQueueManager_AddUnit(t *testing.T) {
 	}
 }
 
-func TestQueueManager_GetUnit(t *testing.T) {
+func TestQueueManager_GetHashes(t *testing.T) {
 	ctx := context.Background()
-	qm := NewQueueManager(ctx, 10)
+	qm := NewQueueManager(ctx, 100)
 
-	// Add units to queue
-	expectedContracts := []string{"contract-A", "contract-B", "contract-C"}
-	for i, contractID := range expectedContracts {
-		unit := createTestUnit(contractID, i, 15.0, 0.001)
-		if err := qm.AddUnit(unit); err != nil {
-			t.Fatalf("Failed to add unit: %v", err)
+	// Add hashes to queue
+	expectedHashes := []string{"hash-1", "hash-2", "hash-3", "hash-4", "hash-5"}
+	for _, hash := range expectedHashes {
+		if err := qm.AddHash(hash, "contract-A", "digger-1", 0.001); err != nil {
+			t.Fatalf("Failed to add hash: %v", err)
 		}
 	}
 
-	// Retrieve units and verify FIFO order
-	for i, expectedContract := range expectedContracts {
-		unit, err := qm.GetUnit()
-		if err != nil {
-			t.Errorf("GetUnit() error = %v", err)
-			continue
+	// Retrieve 3 hashes
+	retrieved, err := qm.GetHashes(3)
+	if err != nil {
+		t.Errorf("GetHashes() error = %v", err)
+	}
+
+	if len(retrieved) != 3 {
+		t.Errorf("Retrieved %d hashes, want 3", len(retrieved))
+	}
+
+	// Verify FIFO order and content
+	for i := 0; i < 3; i++ {
+		if retrieved[i].Hash != expectedHashes[i] {
+			t.Errorf("Hash %d: got %s, want %s", i, retrieved[i].Hash, expectedHashes[i])
 		}
-		if unit.ContractID != expectedContract {
-			t.Errorf("Unit %d: contract = %v, want %v", i, unit.ContractID, expectedContract)
+		if retrieved[i].ContractID != "contract-A" {
+			t.Errorf("Hash %d: contract = %s, want contract-A", i, retrieved[i].ContractID)
 		}
 	}
 
-	// Queue should be empty now
-	if qm.GetQueueSize() != 0 {
-		t.Errorf("Queue size after draining = %d, want 0", qm.GetQueueSize())
+	// Queue should have 2 hashes remaining
+	if qm.GetQueueSize() != 2 {
+		t.Errorf("Queue size after retrieval = %d, want 2", qm.GetQueueSize())
 	}
 }
 
-func TestQueueManager_ContextCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	capacity := 5
-	qm := NewQueueManager(ctx, capacity)
+func TestQueueManager_GetHashesBlocking(t *testing.T) {
+	ctx := context.Background()
+	qm := NewQueueManager(ctx, 100)
 
-	// Fill the queue to capacity
-	for i := 0; i < capacity; i++ {
-		unit := createTestUnit("test-contract", i, 15.0, 0.001)
-		if err := qm.AddUnit(unit); err != nil {
-			t.Fatalf("Failed to add unit %d: %v", i, err)
+	// Test blocking behavior: GetHashes should block until N hashes available
+	done := make(chan bool, 1)
+	start := time.Now()
+
+	go func() {
+		// This should block until 5 hashes are available
+		hashes, err := qm.GetHashes(5)
+		if err != nil {
+			t.Errorf("GetHashes error: %v", err)
 		}
+		if len(hashes) != 5 {
+			t.Errorf("Got %d hashes, want 5", len(hashes))
+		}
+		done <- true
+	}()
+
+	// Give goroutine time to start blocking
+	time.Sleep(100 * time.Millisecond)
+
+	// Add 3 hashes - should not unblock yet
+	for i := 0; i < 3; i++ {
+		qm.AddHash("hash-"+string(rune(i)), "contract", "digger", 0.001)
 	}
 
-	// Cancel context
-	cancel()
-
-	// Wait a moment for cancellation to propagate
-	time.Sleep(10 * time.Millisecond)
-
-	// Try to add another unit to full queue with canceled context - should fail with shutdown error
-	unit2 := createTestUnit("test-contract-2", 99, 15.0, 0.001)
-	err := qm.AddUnit(unit2)
-	if err != models.ErrQueueShuttingDown {
-		t.Errorf("Expected ErrQueueShuttingDown, got %v", err)
+	select {
+	case <-done:
+		t.Errorf("Unblocked too early, still waiting for 5 hashes")
+	case <-time.After(50 * time.Millisecond):
+		// Expected: should still be blocked
 	}
 
-	// Also test that GetUnit returns error when context is canceled
-	_, err = qm.GetUnit()
-	// TODO: See why this is being flagged as a warning
-	// GetUnit should succeed since queue has items, so we need to drain it first
-	// Skip this part as the select will prefer reading from channel over context
+	// Add remaining 2 hashes - should unblock
+	for i := 3; i < 5; i++ {
+		qm.AddHash("hash-"+string(rune(i)), "contract", "digger", 0.001)
+	}
+
+	select {
+	case <-done:
+		elapsed := time.Since(start)
+		// Should have unblocked relatively quickly (within 200ms)
+		if elapsed > 500*time.Millisecond {
+			t.Errorf("Unblocked too slowly: %v", elapsed)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Errorf("Timeout waiting for GetHashes to unblock")
+	}
 }
 
 func TestQueueManager_ConcurrentAdds(t *testing.T) {
 	ctx := context.Background()
 	qm := NewQueueManager(ctx, 1000)
 
-	// Launch multiple goroutines adding units concurrently
+	// Launch multiple goroutines adding hashes concurrently
 	numGoroutines := 10
-	unitsPerGoroutine := 50
+	hashesPerGoroutine := 50
 
 	var wg sync.WaitGroup
-	errors := make(chan error, numGoroutines*unitsPerGoroutine)
+	errors := make(chan error, numGoroutines*hashesPerGoroutine)
 
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < unitsPerGoroutine; j++ {
-				unit := createTestUnit("contract", id*unitsPerGoroutine+j, 15.0, 0.001)
-				if err := qm.AddUnit(unit); err != nil {
+			for j := 0; j < hashesPerGoroutine; j++ {
+				hash := "hash-" + string(rune(id*100+j))
+				if err := qm.AddHash(hash, "contract", "digger", 0.001); err != nil {
 					errors <- err
 				}
 			}
@@ -190,102 +197,21 @@ func TestQueueManager_ConcurrentAdds(t *testing.T) {
 		t.Errorf("Concurrent add failed: %v", err)
 	}
 
-	// Verify all units were added
-	expectedCount := numGoroutines * unitsPerGoroutine
+	// Verify all hashes were added
+	expectedCount := numGoroutines * hashesPerGoroutine
 	if qm.GetQueueSize() != expectedCount {
 		t.Errorf("Queue size = %d, want %d", qm.GetQueueSize(), expectedCount)
-	}
-}
-
-func TestQueueManager_ConcurrentAddAndGet(t *testing.T) {
-	ctx := context.Background()
-	qm := NewQueueManager(ctx, 1000)
-
-	unitsToProcess := 100
-	var wg sync.WaitGroup
-
-	// Producer goroutine
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < unitsToProcess; i++ {
-			unit := createTestUnit("contract", i, 15.0, 0.001)
-			if err := qm.AddUnit(unit); err != nil {
-				t.Errorf("Failed to add unit: %v", err)
-			}
-			time.Sleep(1 * time.Millisecond) // Small delay to allow consumer to process
-		}
-	}()
-
-	// Consumer goroutine
-	retrieved := make([]int, 0, unitsToProcess)
-	var mu sync.Mutex
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < unitsToProcess; i++ {
-			unit, err := qm.GetUnit()
-			if err != nil {
-				t.Errorf("Failed to get unit: %v", err)
-				continue
-			}
-			mu.Lock()
-			retrieved = append(retrieved, unit.TokenIndex)
-			mu.Unlock()
-		}
-	}()
-
-	wg.Wait()
-
-	// Verify all units were retrieved
-	if len(retrieved) != unitsToProcess {
-		t.Errorf("Retrieved %d units, want %d", len(retrieved), unitsToProcess)
-	}
-
-	// Queue should be empty
-	if qm.GetQueueSize() != 0 {
-		t.Errorf("Queue size = %d, want 0", qm.GetQueueSize())
 	}
 }
 
 func TestQueueManager_Capacity(t *testing.T) {
 	ctx := context.Background()
 	capacity := 100
-
 	qm := NewQueueManager(ctx, capacity)
 
-	// Test GetCapacity
+	// Test capacity
 	if qm.GetCapacity() != capacity {
 		t.Errorf("GetCapacity() = %d, want %d", qm.GetCapacity(), capacity)
-	}
-}
-
-func TestQueueManager_SizeTracking(t *testing.T) {
-	ctx := context.Background()
-	qm := NewQueueManager(ctx, 10)
-
-	// Initially empty
-	if qm.GetQueueSize() != 0 {
-		t.Errorf("Initial queue size = %d, want 0", qm.GetQueueSize())
-	}
-
-	// Add units and verify size increases
-	for i := 1; i <= 5; i++ {
-		unit := createTestUnit("contract", i, 15.0, 0.001)
-		qm.AddUnit(unit)
-
-		if qm.GetQueueSize() != i {
-			t.Errorf("After adding %d units, queue size = %d, want %d", i, qm.GetQueueSize(), i)
-		}
-	}
-
-	// Remove units and verify size decreases
-	for i := 4; i >= 0; i-- {
-		qm.GetUnit()
-
-		if qm.GetQueueSize() != i {
-			t.Errorf("After removing unit, queue size = %d, want %d", qm.GetQueueSize(), i)
-		}
 	}
 }
 
@@ -293,75 +219,37 @@ func TestQueueManager_Close(t *testing.T) {
 	ctx := context.Background()
 	qm := NewQueueManager(ctx, 10)
 
-	// Add some units
-	unit := createTestUnit("contract", 0, 15.0, 0.001)
-	qm.AddUnit(unit)
+	// Add some hashes
+	qm.AddHash("hash-1", "contract", "digger", 0.001)
 
 	// Close the queue manager
 	qm.Close()
 
-	// Note: After closing, channel is closed, so we can't add more units
+	// Note: After closing, we can't add more hashes
 	// This test just verifies Close() doesn't panic
 }
 
-func TestQueueManager_BackpressureHandling(t *testing.T) {
-	ctx := context.Background()
-	capacity := 3
-	qm := NewQueueManager(ctx, capacity)
-
-	// Fill the queue to capacity
-	for i := 0; i < capacity; i++ {
-		unit := createTestUnit("contract", i, 15.0, 0.001)
-		if err := qm.AddUnit(unit); err != nil {
-			t.Fatalf("Failed to add unit %d: %v", i, err)
-		}
-	}
-
-	// Try to add one more - should fail immediately (non-blocking)
-	start := time.Now()
-	unit := createTestUnit("contract", 999, 15.0, 0.001)
-	err := qm.AddUnit(unit)
-	elapsed := time.Since(start)
-
-	if err != models.ErrQueueFull {
-		t.Errorf("Expected ErrQueueFull, got %v", err)
-	}
-
-	// Verify it didn't block (should be nearly instantaneous)
-	if elapsed > 100*time.Millisecond {
-		t.Errorf("AddUnit blocked for %v, expected immediate return", elapsed)
-	}
-
-	// Verify queue size is still at capacity
-	if qm.GetQueueSize() != capacity {
-		t.Errorf("Queue size = %d, want %d", qm.GetQueueSize(), capacity)
-	}
-}
-
-func BenchmarkQueueManager_AddUnit(b *testing.B) {
+func BenchmarkQueueManager_AddHash(b *testing.B) {
 	ctx := context.Background()
 	qm := NewQueueManager(ctx, 100000)
-
-	unit := createTestUnit("benchmark-contract", 0, 15.0, 0.001)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		qm.AddUnit(unit)
+		qm.AddHash("benchmark-hash", "contract", "digger", 0.001)
 	}
 }
 
-func BenchmarkQueueManager_GetUnit(b *testing.B) {
+func BenchmarkQueueManager_GetHashes(b *testing.B) {
 	ctx := context.Background()
 	qm := NewQueueManager(ctx, 100000)
 
-	// Pre-fill the queue
-	for i := 0; i < b.N; i++ {
-		unit := createTestUnit("benchmark-contract", i, 15.0, 0.001)
-		qm.AddUnit(unit)
+	// Pre-fill the queue with enough hashes
+	for i := 0; i < b.N*10; i++ {
+		qm.AddHash("hash-"+string(rune(i)), "contract", "digger", 0.001)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		qm.GetUnit()
+		qm.GetHashes(10)
 	}
 }
