@@ -2,6 +2,7 @@
 package refinery
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"testing"
@@ -340,10 +341,26 @@ func createTestIngot(ingotID string, numUnits int) *models.TokenTorqIngot {
 		totalRobo += 0.01
 	}
 
-	ingot, _ := models.NewTokenTorqIngot(units)
+	// If less than 3600 units, create ingot struct manually (for testing)
+	// NewTokenTorqIngot requires exactly 3600 units
+	if numUnits != 3600 {
+		ingot := &models.TokenTorqIngot{
+			IngotID:        ingotID,
+			Units:          units,
+			JouleTorqTotal: totalJoules,
+			RoboStakeTotal: totalRobo,
+			ContractIDs:    []string{"test-contract"},
+			MintedAt:       time.Now().UTC(),
+		}
+		return ingot
+	}
+
+	// For 3600 units, use proper constructor
+	ingot, err := models.NewTokenTorqIngot(units)
+	if err != nil {
+		panic(fmt.Sprintf("createTestIngot failed: %v", err))
+	}
 	ingot.IngotID = ingotID
-	ingot.JouleTorqTotal = totalJoules
-	ingot.RoboStakeTotal = totalRobo
 
 	return ingot
 }

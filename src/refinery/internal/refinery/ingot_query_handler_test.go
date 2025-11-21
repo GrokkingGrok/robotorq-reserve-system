@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"b2b/refinery/internal/models"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -183,7 +181,8 @@ func TestIngotQueryHandler_HandleIngot_NotFound(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, response["found"].(bool))
-	assert.Contains(t, response["reason"], "expired or not found")
+	assert.Contains(t, response["reason"], "expired")
+	assert.Contains(t, response["reason"], "not found")
 }
 
 func TestIngotQueryHandler_HandleStats(t *testing.T) {

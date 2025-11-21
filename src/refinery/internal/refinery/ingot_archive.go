@@ -175,7 +175,7 @@ func (ia *IngotArchive) GetIngot(ingotID string) (*models.TokenTorqIngot, bool) 
 
 // CleanupExpired removes expired full ingot data (keeps hashes)
 //
-// Should be called periodically (e.g., daily) to reclaim memory
+// # Should be called periodically (e.g., daily) to reclaim memory
 //
 // Returns:
 //   - count: Number of expired ingots cleaned up
