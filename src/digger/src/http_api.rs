@@ -997,7 +997,7 @@ pub async fn printer_assign_contract(
     };
 
     // Verify contract exists and is funded (acquire lock in limited scope)
-    let contract_status = {
+    let _contract_status = {
         let manager = state.contract_manager.lock().unwrap();
         let contract = match manager.get(&req.contract_id) {
             Some(c) => c,
@@ -1153,7 +1153,10 @@ mod tests {
         // Initialize metrics
         let metrics = DiggerMetrics::default();
 
-        Some(ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics))
+        // Initialize printer registry
+        let printer_registry = crate::printer_registry::PrinterRegistry::new();
+
+        Some(ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics, printer_registry))
     }
 
     #[tokio::test]

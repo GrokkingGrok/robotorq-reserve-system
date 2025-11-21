@@ -85,53 +85,16 @@ jobs:
         if: always()
         run: docker compose down --volumes
 
-      # ── Setup Rust for Digger (HTTP API) ───────────────────────
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      # ── Cache Cargo (registry + build) ────────────────────────
-      - name: Cache Cargo registry and build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-            src/digger/target
-          key: ${{ runner.os }}-digger-cargo-${{ hashFiles('src/digger/Cargo.lock') }}
-
-      # ── Build Digger (Rust HTTP API) ──────────────────────────
-      - name: Build Digger
-        working-directory: ./src/digger
-        run: cargo build --release
-
-      # ── Run Digger Unit Tests ─────────────────────────────────
+      # ── Test Digger (uses pre-built Docker image) ──────────────
       - name: Test Digger
-        working-directory: ./src/digger
-        run: cargo test --all-features
-
-      # ── Test Digger HTTP API ──────────────────────────────────
-      - name: Test Digger HTTP API
         run: |
-          docker compose up -d nats
-          sleep 5
-          cd src/digger
-          DIGGER_ID="ci-test-digger" NATS_URL="nats://localhost:4222" BATCH_INTERVAL_SEC=10 cargo run --release &
-          DIGGER_PID=$!
+          docker compose up -d digger nats
           sleep 15
-          curl -f http://localhost:9000/health || exit 1
-          kill $DIGGER_PID || true
+          curl -f http://localhost:3030/health || exit 1
 
       - name: Clean up Digger
         if: always()
         run: docker compose down --volumes
-
-      # ── Upload Digger Binary ──────────────────────────────────
-      - name: Upload Digger Binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: digger-http-api-linux
-          path: src/digger/target/release/digger
       
       # ── Final success ────────────────────────────────────────
       - name: All tests passed

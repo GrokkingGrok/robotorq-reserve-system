@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::path::Path;
-use tracing::{info, warn, error};
+use tracing::info;
 
 /// Printer registration request from printer service
 #[derive(Debug, Clone, Serialize, Deserialize)]

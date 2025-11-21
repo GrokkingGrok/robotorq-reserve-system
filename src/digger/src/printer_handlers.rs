@@ -203,6 +203,7 @@ async fn handle_contract_started_events(
         struct ContractStarted {
             printer_id: String,
             contract_id: String,
+            #[allow(dead_code)]
             started_at: String,
         }
 
@@ -244,6 +245,7 @@ async fn handle_contract_completed_events(
         struct ContractCompleted {
             printer_id: String,
             contract_id: String,
+            #[allow(dead_code)]
             completed_at: String,
             duration_secs: f64,
             capacity_watt_hours: f64,
