@@ -58,11 +58,9 @@ services:
     build: ./src/mint
     ports:
       - "50051:50051"
-      - "8080:8080"
       - "8084:8081"  # Phase 5: Verification API (host:8084 -> container:8081)
-      - "9090:9090"
+      - "9090:9090"  # Prometheus metrics
     environment:
-      - HTTP_PORT=8080
       - NATS_URL=nats://nats:4222
       - BATCH_SIZE=1000  # Phase3 units require exactly 1000 Phase2Ingots
       - FLUSH_INTERVAL=60s
@@ -74,7 +72,7 @@ services:
       nats:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/health"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -150,7 +148,7 @@ services:
     build: ./src/refinery
     ports:
       - "50052:50052"
-      - "8081:8080"
+      - "8086:8080"
     environment:
       - NATS_URL=nats://nats:4222
       - REFINERY_INGOT_BATCH_INTERVAL=5  # Send ingot batches every 5s (match Digger interval)
