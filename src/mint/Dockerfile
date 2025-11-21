@@ -61,8 +61,8 @@ RUN apk add --no-cache ca-certificates wget libstdc++ libgcc openssl
 COPY --from=builder /mint /mint
 COPY --from=builder /usr/lib/liboqs.so* /usr/lib/
 
-EXPOSE 50051 8080 9090
+EXPOSE 50051 8080 8081 9090
 
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost:8080/health || exit 1
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost:8081/health || exit 1
 
 CMD ["/mint"]
