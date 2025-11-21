@@ -1,3 +1,5 @@
+//go:build cgo
+
 package mint
 
 import (
@@ -20,7 +22,7 @@ func TestVerificationHandler_PublicKey_Success(t *testing.T) {
 	signatureArchive := NewSignatureArchive()
 	testPublicKey := "abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab" // 64 hex chars = 32 bytes
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, testPublicKey, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, testPublicKey, ":8080", logger, metrics)
 
 	// Create request
 	req := httptest.NewRequest(http.MethodGet, "/public-key", nil)
@@ -52,7 +54,7 @@ func TestVerificationHandler_PublicKey_CORS(t *testing.T) {
 	signatureArchive := NewSignatureArchive()
 	testPublicKey := "test-public-key-64-chars-hexadecimal-string-for-sphincs-plus-ok"
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, testPublicKey, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, testPublicKey, ":8080", logger, metrics)
 
 	req := httptest.NewRequest(http.MethodGet, "/public-key", nil)
 	w := httptest.NewRecorder()
@@ -72,7 +74,7 @@ func TestVerificationHandler_PublicKey_EmptyKey(t *testing.T) {
 	signatureArchive := NewSignatureArchive()
 	emptyPublicKey := ""
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, emptyPublicKey, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, emptyPublicKey, ":8080", logger, metrics)
 
 	req := httptest.NewRequest(http.MethodGet, "/public-key", nil)
 	w := httptest.NewRecorder()
@@ -108,7 +110,7 @@ func TestVerificationHandler_PublicKey_Integration(t *testing.T) {
 	realPublicKey := assembler.GetPublicKey()
 	require.NotEmpty(t, realPublicKey, "Phase3Assembler should generate a public key")
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, realPublicKey, ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, realPublicKey, ":8080", logger, metrics)
 
 	req := httptest.NewRequest(http.MethodGet, "/public-key", nil)
 	w := httptest.NewRecorder()
