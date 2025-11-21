@@ -1,15 +1,19 @@
 // Package main provides the entry point for the Mint service.
 //
-// The Mint service receives TokenTorqIngots from Refinery, aggregates them into batches,
-// computes batch hashes, and publishes MintEvents to DistoDam via NATS.
+// The Mint service receives Phase2Ingots from Refinery via NATS, extracts hashes,
+// builds merkle trees, assembles RoboTorqUnits, and publishes them to DistoDam.
 //
-// Architecture:
+// Phase 2/3 Architecture:
 //
-//	Refinery → IngotReceiver (HTTP) → IngotBuffer → BatchAggregator → MintEngine → DistoDamClient → NATS
+//	Refinery (NATS) → Phase2IngotReceiver → IngotHashQueue → Level2MerkleBuilder
+//	                                                           ↓
+//	                                   Phase3RoboTorqUnitAssembler → Phase3DistoDamPublisher (NATS)
+//	                                   ↓
+//	                                   VerificationHandler (HTTP API for proof queries)
 //
 // Graceful Shutdown:
 //
-//	SIGINT/SIGTERM → Cancel context → Flush remaining batch → Drain buffer → Close NATS → Stop HTTP
+//	SIGINT/SIGTERM → Cancel context → Drain hash queue → Finalize pending units → Close NATS connections
 package main
 
 import (
@@ -95,64 +99,29 @@ func main() {
 	logger.Info("Mint service stopped successfully")
 }
 
-// Components holds all initialized service components
+// Components holds all initialized service components (Phase 2/3 only)
 type Components struct {
-	Buffer              mint.IngotBuffer
-	Aggregator          mint.BatchAggregator
-	Engine              mint.MintEngine
-	Client              mint.DistoDamClient
-	Receiver            mint.IngotReceiver
-	Hasher              mint.BatchHasher
-	Phase2Receiver      *mint.Phase2IngotReceiver         // Phase 3: Hash-only ingot receiver
-	IngotHashQueue      *mint.IngotHashQueue              // Phase 3 Milestone 2: 1000 ingot hash queue
-	Level2MerkleBuilder *mint.Level2MerkleBuilder         // Phase 3 Milestone 3: Merkle tree builder
-	Phase3Assembler     *mint.Phase3RoboTorqUnitAssembler // Phase 3 Milestone 4: RT unit assembler
-	Phase3Publisher     *mint.Phase3DistoDamPublisher     // Phase 3 Milestone 5: DistoDam publisher
+	Client              mint.DistoDamClient               // NATS connection to DistoDam
+	Phase2Receiver      *mint.Phase2IngotReceiver         // Phase 2: Hash-only ingot receiver
+	IngotHashQueue      *mint.IngotHashQueue              // Phase 2 Milestone 2: 1000 ingot hash queue
+	Level2MerkleBuilder *mint.Level2MerkleBuilder         // Phase 2 Milestone 3: Merkle tree builder
+	Phase3Assembler     *mint.Phase3RoboTorqUnitAssembler // Phase 2 Milestone 4: RT unit assembler
+	Phase3Publisher     *mint.Phase3DistoDamPublisher     // Phase 2 Milestone 5: DistoDam publisher
 	VerificationHandler *mint.VerificationHandler         // Phase 5: Merkle proof verification API
 }
 
-// initializeComponents creates and initializes all service components
+// initializeComponents creates and initializes all service components (Phase 2/3 only)
 func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Components, error) {
-	logger.Info("Initializing components...")
+	logger.Info("Initializing components (Phase 2/3 architecture)...")
 
-	// Create IngotBuffer
-	buffer := mint.NewIngotBuffer(cfg.BufferCapacity, logger)
-	logger.Info("IngotBuffer initialized", "capacity", cfg.BufferCapacity)
-
-	// Create DistoDamClient
+	// Create DistoDamClient (NATS connection)
 	client := mint.NewDistoDamClient(cfg.NatsURL, logger)
 	if err := client.Connect(); err != nil {
 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 	logger.Info("DistoDamClient connected", "nats_url", cfg.NatsURL)
 
-	// Create BatchHasher
-	hasher := mint.NewSimpleBatchHasher()
-	logger.Info("SimpleBatchHasher initialized")
-
-	// Create MintEngine
-	engine := mint.NewMintEngine(hasher, client, logger)
-	logger.Info("MintEngine initialized")
-
-	// Create BatchAggregator
-	aggregator := mint.NewBatchAggregator(
-		buffer,
-		engine,
-		cfg.BatchSize,
-		cfg.FlushInterval,
-		logger,
-	)
-	logger.Info("BatchAggregator initialized",
-		"batch_size", cfg.BatchSize,
-		"flush_interval", cfg.FlushInterval,
-	)
-
-	// Create IngotReceiver (pass NATS connection for subscription)
-	// The receiver will accept ingots from both HTTP and NATS
-	receiver := mint.NewIngotReceiver(buffer, client.GetConnection(), cfg.HTTPPort, logger)
-	logger.Info("IngotReceiver initialized", "http_port", cfg.HTTPPort, "nats_topic", "mint.ingots")
-
-	// Create IngotHashQueue (Phase 3 Milestone 2: stores 1000 ingot hashes)
+	// Create IngotHashQueue (Phase 2 Milestone 2: stores 1000 ingot hashes)
 	ingotHashQueue, err := mint.NewIngotHashQueue(2000, 1000, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create IngotHashQueue: %w", err)
@@ -161,22 +130,22 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 		"capacity", 2000,
 		"batch_size", 1000)
 
-	// Create Phase2IngotReceiver (Phase 3: hash-only ingot receiver)
+	// Create Phase2IngotReceiver (Phase 2: hash-only ingot receiver)
 	phase2Receiver, err := mint.NewPhase2IngotReceiver(client.GetConnection(), ingotHashQueue, ctx, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Phase2IngotReceiver: %w", err)
 	}
 	logger.Info("Phase2IngotReceiver initialized", "nats_topic", "mint.phase2.ingots")
 
-	// Create Level2MerkleBuilder (Phase 3 Milestone 3: builds merkle tree from 1000 ingot hashes)
+	// Create Level2MerkleBuilder (Phase 2 Milestone 3: builds merkle tree from 1000 ingot hashes)
 	level2MerkleBuilder := mint.NewLevel2MerkleBuilder(ingotHashQueue, logger)
 	logger.Info("Level2MerkleBuilder initialized", "batch_size", 1000)
 
-	// Create Phase3AssemblerMetrics (Phase 3 Milestone 4b: Prometheus metrics)
+	// Create Phase3AssemblerMetrics (Phase 2 Milestone 4b: Prometheus metrics)
 	phase3Metrics := mint.NewPhase3AssemblerMetrics(prometheus.DefaultRegisterer)
 	logger.Info("Phase3AssemblerMetrics initialized")
 
-	// Create Phase3RoboTorqUnitAssembler (Phase 3 Milestone 4b: RT unit assembler)
+	// Create Phase3RoboTorqUnitAssembler (Phase 2 Milestone 4b: RT unit assembler)
 	phase3Assembler, err := mint.NewPhase3RoboTorqUnitAssembler(
 		logger,
 		phase3Metrics,
@@ -185,11 +154,11 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 	)
 	if err != nil {
 		logger.Error("Failed to initialize Phase3RoboTorqUnitAssembler", "error", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("failed to create Phase3RoboTorqUnitAssembler: %w", err)
 	}
 	logger.Info("Phase3RoboTorqUnitAssembler initialized", "channel_capacity", 10)
 
-	// Create Phase3DistoDamPublisher (Phase 3 Milestone 5a: DistoDam publisher)
+	// Create Phase3DistoDamPublisher (Phase 2 Milestone 5a: DistoDam publisher)
 	phase3PublisherMetrics := mint.NewPhase3DistoDamPublisherMetrics(prometheus.DefaultRegisterer)
 	phase3Publisher := mint.NewPhase3DistoDamPublisher(
 		client.GetConnection(),
@@ -212,12 +181,7 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 	logger.Info("VerificationHandler initialized", "port", ":8081")
 
 	return &Components{
-		Buffer:              buffer,
-		Aggregator:          aggregator,
-		Engine:              engine,
 		Client:              client,
-		Receiver:            receiver,
-		Hasher:              hasher,
 		Phase2Receiver:      phase2Receiver,
 		IngotHashQueue:      ingotHashQueue,
 		Level2MerkleBuilder: level2MerkleBuilder,
@@ -227,15 +191,8 @@ func initializeComponents(ctx context.Context, cfg *config.Config, logger *slog.
 	}, nil
 }
 
-// startComponents starts all service components in the correct order
+// startComponents starts all service components in the correct order (Phase 2/3 only)
 func startComponents(ctx context.Context, components *Components, errChan chan error) error {
-	// Start BatchAggregator (consumes from buffer, produces to engine)
-	go func() {
-		if err := components.Aggregator.Start(ctx); err != nil && err != context.Canceled {
-			errChan <- fmt.Errorf("BatchAggregator error: %w", err)
-		}
-	}()
-
 	// Start Prometheus metrics endpoint
 	go func() {
 		mux := http.NewServeMux()
@@ -249,24 +206,17 @@ func startComponents(ctx context.Context, components *Components, errChan chan e
 		}
 	}()
 
-	// Start IngotReceiver (HTTP server)
-	go func() {
-		if err := components.Receiver.Start(ctx); err != nil && err != http.ErrServerClosed {
-			errChan <- fmt.Errorf("IngotReceiver error: %w", err)
-		}
-	}()
-
-	// Start Phase2IngotReceiver (NATS subscriber for hash-only ingots)
+	// Start Phase2IngotReceiver (NATS subscriber for hash-only ingots from Refinery)
 	if err := components.Phase2Receiver.Start(); err != nil {
 		return fmt.Errorf("failed to start Phase2IngotReceiver: %w", err)
 	}
 
-	// Start Phase3RoboTorqUnitAssembler (Phase 3 Milestone 4b: RT unit assembler)
+	// Start Phase3RoboTorqUnitAssembler (Phase 2 Milestone 4b: RT unit assembler)
 	go func() {
 		components.Phase3Assembler.Start(ctx)
 	}()
 
-	// Start Phase3DistoDamPublisher (Phase 3 Milestone 5a: DistoDam publisher)
+	// Start Phase3DistoDamPublisher (Phase 2 Milestone 5a: DistoDam publisher)
 	go func() {
 		components.Phase3Publisher.Start(ctx)
 	}()
@@ -284,20 +234,11 @@ func startComponents(ctx context.Context, components *Components, errChan chan e
 	return nil
 }
 
-// gracefulShutdown performs coordinated shutdown of all components
+// gracefulShutdown performs coordinated shutdown of all components (Phase 2/3 only)
 func gracefulShutdown(ctx context.Context, components *Components, logger *slog.Logger) error {
 	var shutdownErr error
 
-	// Step 1: Stop accepting new ingots (shutdown HTTP server)
-	logger.Info("Stopping IngotReceiver...")
-	if err := components.Receiver.Shutdown(ctx); err != nil {
-		logger.Error("Error shutting down IngotReceiver", "error", err)
-		shutdownErr = err
-	} else {
-		logger.Info("IngotReceiver stopped")
-	}
-
-	// Step 1b: Stop Phase2IngotReceiver (NATS subscriber)
+	// Step 1: Stop Phase2IngotReceiver (NATS subscriber)
 	logger.Info("Stopping Phase2IngotReceiver...")
 	if err := components.Phase2Receiver.Stop(); err != nil {
 		logger.Error("Error stopping Phase2IngotReceiver", "error", err)
@@ -306,7 +247,7 @@ func gracefulShutdown(ctx context.Context, components *Components, logger *slog.
 		logger.Info("Phase2IngotReceiver stopped")
 	}
 
-	// Step 1c: Stop VerificationHandler (HTTP server)
+	// Step 1b: Stop VerificationHandler (HTTP server)
 	logger.Info("Stopping VerificationHandler...")
 	if err := components.VerificationHandler.Shutdown(ctx); err != nil {
 		logger.Error("Error shutting down VerificationHandler", "error", err)
@@ -315,27 +256,12 @@ func gracefulShutdown(ctx context.Context, components *Components, logger *slog.
 		logger.Info("VerificationHandler stopped")
 	}
 
-	// Step 2: Flush remaining batch (triggers MintEngine)
-	logger.Info("Flushing remaining batch...")
-	if err := components.Aggregator.Flush(); err != nil {
-		logger.Error("Error flushing batch", "error", err)
-		shutdownErr = err
-	} else {
-		accumulated := components.Aggregator.GetAccumulatedCount()
-		logger.Info("Batch flushed", "ingots", accumulated)
-	}
+	// Step 2: Drain Phase3RoboTorqUnitAssembler via context cancellation
+	// Phase3Assembler.Start() and Phase3Publisher.Start() both respect context.Done()
+	logger.Info("Draining Phase3RoboTorqUnitAssembler and Phase3DistoDamPublisher...")
+	logger.Info("(Graceful shutdown via context cancellation)")
 
-	// Step 3: Drain buffer of any remaining ingots
-	logger.Info("Draining buffer...")
-	remaining := components.Buffer.Drain()
-	if len(remaining) > 0 {
-		logger.Warn("Buffer had unprocessed ingots", "count", len(remaining))
-		// Note: In production, might want to process these or save to disk
-	} else {
-		logger.Info("Buffer drained", "remaining", 0)
-	}
-
-	// Step 4: Close NATS connection (drain pending publishes)
+	// Step 3: Close NATS connection (drain pending publishes)
 	logger.Info("Closing NATS connection...")
 	if err := components.Client.Close(); err != nil {
 		logger.Error("Error closing NATS connection", "error", err)
@@ -347,15 +273,9 @@ func gracefulShutdown(ctx context.Context, components *Components, logger *slog.
 	return shutdownErr
 }
 
-// shutdownComponents performs emergency shutdown (no graceful handling)
+// shutdownComponents performs emergency shutdown (no graceful handling) - Phase 2/3 only
 func shutdownComponents(components *Components, logger *slog.Logger) {
 	logger.Warn("Performing emergency shutdown...")
-
-	if components.Receiver != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		components.Receiver.Shutdown(ctx)
-		cancel()
-	}
 
 	if components.Phase2Receiver != nil {
 		components.Phase2Receiver.Stop()
