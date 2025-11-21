@@ -72,16 +72,9 @@ func main() {
 	phase2Assembler := refinery.NewPhase2IngotAssembler(ctx, queueMgr, slog.Default())
 	slog.Info("Phase 2 ingot assembler initialized (merkle tree builder)")
 
-	// Phase 1 Ingot Assembler: DEPRECATED - kept for reference
-	// Phase 1 used full JTU data transfer, Phase 2 uses hash-only merkle trees
-	assembler := refinery.NewIngotAssembler(ctx, queueMgr)
-
 	// Phase 2 Batch Sender: Time-based batch publishing for Phase2 ingots
 	phase2BatchSender := refinery.NewPhase2BatchSender(ctx, phase2Assembler, mintClient, cfg.IngotBatchInterval)
 	slog.Info("Phase 2 batch sender initialized", "interval", cfg.IngotBatchInterval)
-
-	// Phase 1 Batch Sender: DEPRECATED - removed (not used in Phase 2)
-	// Phase 1 used full JTU data, Phase 2 uses hash-only merkle trees
 
 	// Hash Batch Receiver: Phase 5 - Falcon-1024 signature verification
 	// SKIP_FALCON_VERIFICATION=true disables verification for testing
@@ -92,11 +85,6 @@ func main() {
 	}
 	slog.Info("✅ Phase 5: Hash batch receiver initialized with Falcon-1024 verification")
 
-	// Ore Receiver: HTTP handler for Digger submissions (DEPRECATED for Phase 5)
-	// Kept for backward compatibility with Phase 1-3 contracts
-	oreReceiver := refinery.NewOreReceiver(queueMgr)
-	slog.Info("ore receiver initialized (Phase 1-3 backward compatibility)")
-
 	// NATS Subscriber: Listens for hash batches from Diggers (Phase 2+)
 	// Phase 5: Now includes Falcon verification via hashBatchReceiver
 	natsSubscriber, err := refinery.NewNATSSubscriber(ctx, mintClient.Connection(), queueMgr, hashBatchReceiver)
@@ -106,8 +94,12 @@ func main() {
 	}
 	slog.Info("NATS subscriber initialized with Falcon verification", "subject", "ore.batch")
 
+	// Ingot Archive: Stores completed ingots for querying
+	// ingotArchive := refinery.NewIngotArchive(slog.Default())
+	// slog.Info("ingot archive initialized")
+
 	// Health Handler: Comprehensive status endpoint
-	healthHandler := refinery.NewHealthHandler(queueMgr, mintClient, assembler)
+	healthHandler := refinery.NewHealthHandler(queueMgr, mintClient, phase2Assembler)
 	slog.Info("health handler initialized")
 
 	// ─────────────────────────────────────────────────────────────
@@ -126,20 +118,6 @@ func main() {
 		phase2BatchSender.Start()
 	}()
 
-	// Phase 1 assembler and batch sender are DISABLED for Phase 2 migration
-	// Phase 1 uses deprecated GetUnit() API which is no longer populated
-	/*
-		go func() {
-			slog.Info("starting ingot assembler...")
-			assembler.Start()
-		}()
-
-		go func() {
-			slog.Info("starting batch sender...")
-			batchSender.Start()
-		}()
-	*/
-
 	go func() {
 		slog.Info("starting NATS subscriber...")
 		natsSubscriber.Start()
@@ -151,10 +129,9 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health", healthHandler.HTTPHandler)
-	mux.HandleFunc("/receive-ore", oreReceiver.HTTPHandler)
 
 	slog.Info("http routes registered",
-		"endpoints", []string{"/metrics", "/health", "/receive-ore"},
+		"endpoints", []string{"/metrics", "/health"},
 	)
 
 	// ─────────────────────────────────────────────────────────────

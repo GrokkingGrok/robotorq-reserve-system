@@ -273,3 +273,10 @@ func (ia *Phase2IngotAssembler) GetCompletedIngotsCount() int {
 	defer ia.mu.Unlock()
 	return len(ia.completedIngots)
 }
+
+// GetAccumulatedUnits returns 0 for Phase 2 (hash-only, not unit-based)
+// Implements AssemblerHealthChecker interface
+func (ia *Phase2IngotAssembler) GetAccumulatedUnits() int {
+	// Phase 2 uses hashes, not units, so accumulated units = 0
+	return 0
+}

@@ -10,12 +10,12 @@ import (
 // Refinery is the main service struct
 type Refinery struct {
 	queueManager   *QueueManager
-	ingotAssembler *IngotAssembler
+	ingotAssembler *Phase2IngotAssembler
 	mintClient     *MintClient
 }
 
 // NewRefinery creates a new Refinery instance
-func NewRefinery(qm *QueueManager, ia *IngotAssembler, mc *MintClient) *Refinery {
+func NewRefinery(qm *QueueManager, ia *Phase2IngotAssembler, mc *MintClient) *Refinery {
 	return &Refinery{
 		queueManager:   qm,
 		ingotAssembler: ia,

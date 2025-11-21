@@ -1,57 +1,26 @@
 // internal/refinery/integration_test.go
-// End-to-end integration test for Refinery pipeline:
-// HTTP ore reception → Queue → Ingot Assembly → NATS publishing
+// End-to-end integration test for Refinery pipeline (Phase 2):
+// Hash Queue → Merkle Tree Assembly → NATS publishing
 
 package refinery
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
+	"log/slog"
 	"testing"
 	"time"
 
 	"b2b/refinery/internal/config"
-	"b2b/refinery/internal/models"
 
 	"github.com/nats-io/nats.go"
 )
 
-// createStubIngot creates a test ingot with stub JouleTorqUnits
-// This is a helper for testing during the currency refactor
-func createStubIngot(contractID string, totalJoules, totalRobo float64) (*models.TokenTorqIngot, error) {
-	stubUnits := make([]*models.JouleTorqUnit, 3600)
-	joulesPerUnit := totalJoules / 3600.0
-	roboPerUnit := totalRobo / 3600.0
-
-	for i := 0; i < 3600; i++ {
-		stubUnits[i] = &models.JouleTorqUnit{
-			TokenID:        fmt.Sprintf("%s-0-%d", contractID, i),
-			ContractID:     contractID,
-			MilestoneIndex: 0,
-			TokenIndex:     i,
-			JoulesConsumed: joulesPerUnit,
-			RoboStakePaid:  roboPerUnit,
-			DiggerID:       "test-digger",
-			Timestamp:      time.Now().UTC(),
-			Signature:      "",
-			DiggerPubKey:   "",
-			Hash:           fmt.Sprintf("test-hash-%d", i),
-		}
-	}
-
-	return models.NewTokenTorqIngot(stubUnits)
-}
-
-// TestRefineryIntegration_EndToEnd tests the complete pipeline:
-// 1. Send JouleTorqOre via HTTP
-// 2. Verify queuing
-// 3. Verify ingot assembly at threshold
-// 4. Verify NATS publishing with batch envelope
+// TestRefineryIntegration_EndToEnd tests the complete Phase 2 pipeline:
+// 1. Add hashes to queue directly (simulating ore extraction)
+// 2. Verify ingot assembly at 3600 hash threshold
+// 3. Verify NATS publishing of Phase2Ingot
 func TestRefineryIntegration_EndToEnd(t *testing.T) {
 	// 1. Start embedded NATS server
 	ns, natsURL := startTestNATSServer(t)
@@ -67,176 +36,138 @@ func TestRefineryIntegration_EndToEnd(t *testing.T) {
 		IngotBatchInterval: 60 * time.Second,
 		MintMaxRetries:     3,
 		MintBaseDelay:      1 * time.Second,
-		JouleQueueSize:     1000,
+		JouleQueueSize:     4000, // Large enough for 3600+ hashes
 		RoboQueueSize:      1000,
 	}
 
 	// 4. Initialize components
+	logger := slog.Default()
 	queueManager := NewQueueManager(ctx, cfg.JouleQueueSize)
-	ingotAssembler := NewIngotAssembler(ctx, queueManager)
+	ingotAssembler := NewPhase2IngotAssembler(ctx, queueManager, logger)
 	mintClient, err := NewMintClient(ctx, cfg)
 	if err != nil {
 		t.Fatalf("failed to create mint client: %v", err)
 	}
 	defer mintClient.Close()
 
-	oreReceiver := NewOreReceiver(queueManager)
-
 	// 5. Start ingot assembler in background
 	go ingotAssembler.Start()
 
-	// 6. Subscribe to NATS topic to capture published batches
+	// 6. Subscribe to NATS topic to capture published ingots
 	nc, err := nats.Connect(natsURL)
 	if err != nil {
 		t.Fatalf("failed to connect to NATS: %v", err)
 	}
 	defer nc.Close()
 
-	publishedBatches := make(chan *BatchEnvelope, 10)
-	sub, err := nc.Subscribe("mint.ingots", func(msg *nats.Msg) {
-		var envelope BatchEnvelope
-		if err := json.Unmarshal(msg.Data, &envelope); err != nil {
-			t.Errorf("failed to unmarshal batch envelope: %v", err)
+	publishedIngots := make(chan *Phase2Ingot, 10)
+	sub, err := nc.Subscribe("mint.phase2.ingots", func(msg *nats.Msg) {
+		var batch map[string]interface{}
+		if err := json.Unmarshal(msg.Data, &batch); err != nil {
+			t.Errorf("failed to unmarshal batch: %v", err)
 			return
 		}
-		publishedBatches <- &envelope
+
+		// Extract ingots from batch envelope
+		ingotsRaw := batch["ingots"]
+		ingotsJSON, _ := json.Marshal(ingotsRaw)
+
+		var ingots []*Phase2Ingot
+		if err := json.Unmarshal(ingotsJSON, &ingots); err != nil {
+			t.Errorf("failed to unmarshal ingots: %v", err)
+			return
+		}
+
+		for _, ingot := range ingots {
+			publishedIngots <- ingot
+		}
 	})
 	if err != nil {
 		t.Fatalf("failed to subscribe to NATS: %v", err)
 	}
 	defer sub.Unsubscribe()
 
-	// 6. Create HTTP test server for ore receiver
-	handler := http.HandlerFunc(oreReceiver.HTTPHandler)
-	server := httptest.NewServer(handler)
-	defer server.Close()
+	// 7. Add exactly 3600 hashes to the queue
+	// This should trigger assembly of exactly 1 ingot
+	const hashesNeeded = 3600
+	const contractID = "integration-test-contract"
 
-	// 7. Send enough ores to trigger ingot assembly
-	// Threshold is 3600 units (1 unit per token) = 1 ingot
-	// We'll send 60 ores of 60 tokens each = 3600 total units
-	const tokensPerOre = 60
-	const oresNeeded = 60 // 60 ores × 60 tokens = 3600 units
+	t.Logf("Adding %d hashes to queue...", hashesNeeded)
 
-	for i := 0; i < oresNeeded; i++ {
-		ore := &models.JouleTorqOre{
-			DiggerID:        fmt.Sprintf("digger-test-%d", i),
-			ContractID:      "integration-test-contract",
-			TokensGenerated: tokensPerOre,
-			Joules:          900, // Energy per ore
-			MilestoneIndex:  uint32(i),
-			Timestamp:       uint64(time.Now().Unix()),
-			RoboStakeAmount: 0.00416,
-		}
+	for i := 0; i < hashesNeeded; i++ {
+		hash := fmt.Sprintf("test-hash-%d", i)
+		roboStake := 0.00416 // RoboStake per unit
 
-		// Send ore via HTTP POST
-		oreJSON, _ := json.Marshal(ore)
-		resp, err := http.Post(server.URL, "application/json", bytes.NewBuffer(oreJSON))
+		err := queueManager.AddHash(hash, contractID, "test-digger", roboStake)
 		if err != nil {
-			t.Fatalf("failed to POST ore %d: %v", i, err)
+			t.Fatalf("failed to add hash %d: %v", i, err)
 		}
 
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("ore %d rejected: %d - %s", i, resp.StatusCode, string(body))
+		if (i + 1) % 1000 == 0 {
+			t.Logf("Added %d hashes", i+1)
 		}
-
-		var response map[string]interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-			t.Fatalf("failed to decode response for ore %d: %v", i, err)
-		}
-		resp.Body.Close()
-
-		// Verify response
-		if response["status"] != "accepted" {
-			t.Errorf("ore %d: expected status 'accepted', got '%v'", i, response["status"])
-		}
-		if response["contract_id"] != ore.ContractID {
-			t.Errorf("ore %d: expected contract_id '%s', got '%v'", i, ore.ContractID, response["contract_id"])
-		}
-
-		t.Logf("Ore %d sent successfully: %d joules", i, ore.Joules)
 	}
 
-	// 8. Wait for ingot to be assembled
-	t.Log("Waiting for ingot assembly...")
+	t.Log("All hashes added, waiting for ingot assembly...")
 	time.Sleep(2 * time.Second)
 
-	// 9. Manually trigger batch publishing (since we don't have BatchSender running)
-	ingotAssembler.mu.Lock()
-	ingotsToPublish := make([]*models.TokenTorqIngot, len(ingotAssembler.completedIngots))
-	copy(ingotsToPublish, ingotAssembler.completedIngots)
-	ingotAssembler.mu.Unlock()
+	// 8. Get completed ingots from assembler
+	completedIngots := ingotAssembler.GetCompletedIngots()
 
-	if len(ingotsToPublish) == 0 {
-		t.Fatal("No ingots were assembled from the ores")
+	if len(completedIngots) == 0 {
+		t.Fatal("No ingots were assembled from the hashes")
 	}
 
-	t.Logf("Found %d assembled ingot(s), publishing to NATS...", len(ingotsToPublish))
+	t.Logf("Found %d assembled ingot(s), publishing to NATS...", len(completedIngots))
 
-	// Publish batch to NATS
-	if err := mintClient.PublishBatch(ingotsToPublish); err != nil {
-		t.Fatalf("failed to publish batch: %v", err)
+	// 9. Publish ingots to NATS using Phase2 method
+	if err := mintClient.PublishPhase2Batch(completedIngots); err != nil {
+		t.Fatalf("failed to publish Phase2 batch: %v", err)
 	}
 
 	// 10. Wait for NATS message
 	select {
-	case envelope := <-publishedBatches:
-		t.Log("Received batch envelope from NATS")
+	case ingot := <-publishedIngots:
+		t.Log("Received Phase2Ingot from NATS")
 
-		// Validate batch envelope
-		if envelope.BatchID == "" {
-			t.Error("batch_id is empty")
+		// Validate ingot
+		if ingot.ID == "" {
+			t.Error("ingot ID is empty")
 		}
-		if envelope.Timestamp.IsZero() {
-			t.Error("timestamp is zero")
+		if ingot.BranchHash == "" {
+			t.Error("branch hash is empty")
 		}
-		if envelope.Count != len(ingotsToPublish) {
-			t.Errorf("expected count %d, got %d", len(ingotsToPublish), envelope.Count)
+		if ingot.HashCount != 3600 {
+			t.Errorf("expected 3600 hashes, got %d", ingot.HashCount)
 		}
-		if len(envelope.Ingots) != len(ingotsToPublish) {
-			t.Errorf("expected %d ingots in envelope, got %d", len(ingotsToPublish), len(envelope.Ingots))
+		if len(ingot.ContractIDs) == 0 {
+			t.Error("ingot has no contract IDs")
 		}
-
-		// Validate first ingot
-		if len(envelope.Ingots) > 0 {
-			ingot := envelope.Ingots[0]
-
-			// Validate joule total (60 ores × 900J = 54,000J)
-			expectedJoules := 54000.0
-			if ingot.JouleTorqTotal < expectedJoules-100 || ingot.JouleTorqTotal > expectedJoules+100 {
-				t.Errorf("expected ingot JouleTorqTotal ~%.0f, got %.2f", expectedJoules, ingot.JouleTorqTotal)
-			}
-			if ingot.IngotID == "" {
-				t.Error("ingot ID is empty")
-			}
-			if len(ingot.ContractIDs) == 0 {
-				t.Error("ingot has no contract IDs")
-			} else if ingot.ContractIDs[0] != "integration-test-contract" {
-				t.Errorf("expected contract ID 'integration-test-contract', got '%s'", ingot.ContractIDs[0])
-			}
-			if ingot.RoboStakeTotal == 0 {
-				t.Error("robo stake total is zero")
-			}
-			// NOTE: PricePerRT removed from TokenTorqIngot
-			// Price now calculated as RoboStakeTotal / (JouleTorqTotal / 3600)
-
-			t.Logf("Ingot validated: joules=%.2f, contracts=%d, robo_stake=%.5f, units=%d, id=%s",
-				ingot.JouleTorqTotal,
-				len(ingot.ContractIDs),
-				ingot.RoboStakeTotal,
-				len(ingot.Units),
-				ingot.IngotID,
-			)
+		if ingot.RoboStakeTotal == 0 {
+			t.Error("robo stake total is zero")
 		}
 
-		t.Log("✅ Integration test PASSED: Full pipeline working correctly")
+		expectedRoboStake := 0.00416 * 3600 // 3600 hashes × 0.00416 per hash
+		if ingot.RoboStakeTotal < expectedRoboStake-0.1 || ingot.RoboStakeTotal > expectedRoboStake+0.1 {
+			t.Errorf("expected robo stake ~%.2f, got %.2f", expectedRoboStake, ingot.RoboStakeTotal)
+		}
+
+		t.Logf("Ingot validated: id=%s, branch_hash=%s, hash_count=%d, contracts=%d, robo_stake=%.2f",
+			ingot.ID,
+			ingot.BranchHash,
+			ingot.HashCount,
+			len(ingot.ContractIDs),
+			ingot.RoboStakeTotal,
+		)
+
+		t.Log("✅ Integration test PASSED: Full Phase 2 pipeline working correctly")
 
 	case <-time.After(5 * time.Second):
-		t.Fatal("timeout waiting for NATS batch publication")
+		t.Fatal("timeout waiting for NATS Phase2Ingot publication")
 	}
 }
 
-// TestRefineryIntegration_MultipleIngots tests assembling multiple ingots
+// TestRefineryIntegration_MultipleIngots tests assembling multiple ingots from multiple hash batches
 func TestRefineryIntegration_MultipleIngots(t *testing.T) {
 	// Start embedded NATS server
 	ns, natsURL := startTestNATSServer(t)
@@ -252,13 +183,14 @@ func TestRefineryIntegration_MultipleIngots(t *testing.T) {
 		IngotBatchInterval: 60 * time.Second,
 		MintMaxRetries:     3,
 		MintBaseDelay:      1 * time.Second,
-		JouleQueueSize:     1000,
+		JouleQueueSize:     8000, // Need space for 2 batches
 		RoboQueueSize:      1000,
 	}
 
 	// Initialize components
+	logger := slog.Default()
 	queueManager := NewQueueManager(ctx, cfg.JouleQueueSize)
-	ingotAssembler := NewIngotAssembler(ctx, queueManager)
+	ingotAssembler := NewPhase2IngotAssembler(ctx, queueManager, logger)
 	mintClient, err := NewMintClient(ctx, cfg)
 	if err != nil {
 		t.Fatalf("failed to create mint client: %v", err)
@@ -275,162 +207,74 @@ func TestRefineryIntegration_MultipleIngots(t *testing.T) {
 	}
 	defer nc.Close()
 
-	publishedBatches := make(chan *BatchEnvelope, 10)
-	sub, err := nc.Subscribe("mint.ingots", func(msg *nats.Msg) {
-		var envelope BatchEnvelope
-		if err := json.Unmarshal(msg.Data, &envelope); err != nil {
-			t.Errorf("failed to unmarshal batch envelope: %v", err)
+	publishedBatches := make(chan map[string]interface{}, 10)
+	sub, err := nc.Subscribe("mint.phase2.ingots", func(msg *nats.Msg) {
+		var batch map[string]interface{}
+		if err := json.Unmarshal(msg.Data, &batch); err != nil {
+			t.Errorf("failed to unmarshal batch: %v", err)
 			return
 		}
-		publishedBatches <- &envelope
+		publishedBatches <- batch
 	})
 	if err != nil {
 		t.Fatalf("failed to subscribe to NATS: %v", err)
 	}
 	defer sub.Unsubscribe()
 
-	// Send enough ores for 2 complete ingots (7200 joules total)
-	// Plus a partial ingot (1800 joules)
-	// TODO: This test directly manipulates old queue APIs - needs refactoring
-	t.Skip("Test needs refactoring for unit-based queue - uses AddJoule/AddRobo directly")
-}
+	// Send 2 complete batches (7200 hashes total = 2 ingots)
+	t.Log("Adding 7200 hashes for 2 ingots...")
 
-// TestRefineryIntegration_HTTPValidation tests error handling in ore reception
-func TestRefineryIntegration_HTTPValidation(t *testing.T) {
-	ctx := context.Background()
-	queueManager := NewQueueManager(ctx, 100)
-	oreReceiver := NewOreReceiver(queueManager)
+	for i := 0; i < 7200; i++ {
+		hash := fmt.Sprintf("test-hash-batch-%d", i)
+		roboStake := 0.00416
+		contract := fmt.Sprintf("contract-%d", i/3600) // 0 for first 3600, 1 for next 3600
 
-	handler := http.HandlerFunc(oreReceiver.HTTPHandler)
-	server := httptest.NewServer(handler)
-	defer server.Close()
-
-	tests := []struct {
-		name           string
-		ore            *models.JouleTorqOre
-		expectedStatus int
-	}{
-		{
-			name: "valid ore",
-			ore: &models.JouleTorqOre{
-				DiggerID:        "digger-001",
-				ContractID:      "contract-001",
-				TokensGenerated: 60,
-				Joules:          1250,
-				MilestoneIndex:  0,
-				Timestamp:       uint64(time.Now().Unix()),
-				RoboStakeAmount: 0.00416,
-			},
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name: "missing digger ID",
-			ore: &models.JouleTorqOre{
-				DiggerID:        "", // Invalid
-				ContractID:      "contract-001",
-				TokensGenerated: 60,
-				Joules:          1250,
-				MilestoneIndex:  0,
-				Timestamp:       uint64(time.Now().Unix()),
-				RoboStakeAmount: 0.00416,
-			},
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name: "zero joules",
-			ore: &models.JouleTorqOre{
-				DiggerID:        "digger-001",
-				ContractID:      "contract-001",
-				TokensGenerated: 60,
-				Joules:          0, // Invalid
-				MilestoneIndex:  0,
-				Timestamp:       uint64(time.Now().Unix()),
-				RoboStakeAmount: 0.00416,
-			},
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name: "zero timestamp",
-			ore: &models.JouleTorqOre{
-				DiggerID:        "digger-001",
-				ContractID:      "contract-001",
-				TokensGenerated: 60,
-				Joules:          1250,
-				MilestoneIndex:  0,
-				Timestamp:       0, // Invalid
-				RoboStakeAmount: 0.00416,
-			},
-			expectedStatus: http.StatusBadRequest,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			oreJSON, _ := json.Marshal(tt.ore)
-			resp, err := http.Post(server.URL, "application/json", bytes.NewBuffer(oreJSON))
-			if err != nil {
-				t.Fatalf("failed to POST ore: %v", err)
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != tt.expectedStatus {
-				body, _ := io.ReadAll(resp.Body)
-				t.Errorf("expected status %d, got %d - %s", tt.expectedStatus, resp.StatusCode, string(body))
-			}
-		})
-	}
-}
-
-// TestRefineryIntegration_QueueBackpressure tests queue full handling
-func TestRefineryIntegration_QueueBackpressure(t *testing.T) {
-	ctx := context.Background()
-	// Create small queue (capacity 2 units)
-	queueManager := NewQueueManager(ctx, 2)
-	oreReceiver := NewOreReceiver(queueManager)
-
-	handler := http.HandlerFunc(oreReceiver.HTTPHandler)
-	server := httptest.NewServer(handler)
-	defer server.Close()
-
-	// Send 3 ores with 1 token each (should fill queue and reject 3rd)
-	for i := 0; i < 3; i++ {
-		ore := &models.JouleTorqOre{
-			DiggerID:        fmt.Sprintf("digger-%d", i),
-			ContractID:      "contract-001",
-			TokensGenerated: 1,  // Only 1 token = 1 unit
-			Joules:          21, // 21J per token (typical AI workload)
-			MilestoneIndex:  uint32(i),
-			Timestamp:       uint64(time.Now().Unix()),
-			RoboStakeAmount: 0.00007,
-		}
-
-		oreJSON, _ := json.Marshal(ore)
-		resp, err := http.Post(server.URL, "application/json", bytes.NewBuffer(oreJSON))
+		err := queueManager.AddHash(hash, contract, "test-digger", roboStake)
 		if err != nil {
-			t.Fatalf("failed to POST ore %d: %v", i, err)
+			t.Fatalf("failed to add hash %d: %v", i, err)
 		}
 
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		if i < 2 {
-			// First 2 should succeed
-			if resp.StatusCode != http.StatusOK {
-				t.Errorf("ore %d: expected status 200, got %d - %s", i, resp.StatusCode, string(body))
-			}
-		} else {
-			// 3rd should be rejected with 429 (queue full)
-			if resp.StatusCode != http.StatusTooManyRequests {
-				t.Errorf("ore %d: expected status 429 (queue full), got %d - %s", i, resp.StatusCode, string(body))
-			}
+		if (i + 1) % 3600 == 0 {
+			t.Logf("Added %d hashes", i+1)
 		}
 	}
+
+	t.Log("Waiting for ingots to be assembled...")
+	time.Sleep(2 * time.Second)
+
+	// Get completed ingots
+	completedIngots := ingotAssembler.GetCompletedIngots()
+
+	if len(completedIngots) < 2 {
+		t.Fatalf("expected 2 ingots, got %d", len(completedIngots))
+	}
+
+	t.Logf("Found %d ingots, publishing to NATS...", len(completedIngots))
+
+	// Publish first batch
+	if err := mintClient.PublishPhase2Batch(completedIngots[:1]); err != nil {
+		t.Fatalf("failed to publish first batch: %v", err)
+	}
+
+	// Wait for both published
+	select {
+	case batch := <-publishedBatches:
+		count := int(batch["count"].(float64))
+		if count != 1 {
+			t.Errorf("expected 1 ingot in batch, got %d", count)
+		}
+		t.Log("✅ Multiple ingots test PASSED")
+
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for batch publication")
+	}
 }
+
 
 // BatchEnvelope matches the structure in mint_client.go
 type BatchEnvelope struct {
-	BatchID   string                   `json:"batch_id"`
-	Timestamp time.Time                `json:"timestamp"`
-	Count     int                      `json:"count"`
-	Ingots    []*models.TokenTorqIngot `json:"ingots"`
+	BatchID   string                 `json:"batch_id"`
+	Timestamp time.Time              `json:"timestamp"`
+	Count     int                    `json:"count"`
+	Ingots    []*Phase2Ingot         `json:"ingots"`
 }

@@ -20,7 +20,6 @@ func TestNewHashBatchReceiver(t *testing.T) {
 
 	assert.NotNil(t, receiver)
 	assert.NotNil(t, receiver.verifier)
-	assert.NotNil(t, receiver.metrics)
 }
 
 func TestReceiveHashBatch_StructureValidation(t *testing.T) {
@@ -123,17 +122,6 @@ func TestReceiveHashBatch_StructureValidation(t *testing.T) {
 // Note: Tests for valid/invalid Falcon signatures require liboqs
 // These will be run in Docker during CI
 // For local testing without liboqs, the tests above verify structure validation
-
-func TestHashBatchMetrics_Creation(t *testing.T) {
-	metrics := NewHashBatchMetrics()
-
-	assert.NotNil(t, metrics)
-	assert.NotNil(t, metrics.BatchesReceivedTotal)
-	assert.NotNil(t, metrics.SignaturesVerifiedTotal)
-	assert.NotNil(t, metrics.SignaturesFailedTotal)
-	assert.NotNil(t, metrics.HashesReceivedTotal)
-	assert.NotNil(t, metrics.VerificationDuration)
-}
 
 // TODO Phase 5 Sprint 2: Add integration test with real Falcon signatures
 // - Generate keypair with liboqs

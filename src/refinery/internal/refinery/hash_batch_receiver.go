@@ -6,6 +6,7 @@ package refinery
 import (
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"b2b/refinery/internal/crypto"
 	"b2b/refinery/internal/models"
@@ -13,77 +14,65 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// Metrics for hash batch processing
+var (
+	hashBatchesReceivedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "refinery_hash_batches_received_total",
+		Help: "Total number of hash batches received from Digger",
+	})
+	signaturesVerifiedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "refinery_falcon_signatures_verified_total",
+		Help: "Total number of Falcon-1024 signatures successfully verified",
+	})
+	signaturesFailedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "refinery_falcon_signatures_failed_total",
+		Help: "Total number of Falcon-1024 signature verification failures",
+	})
+	hashesReceivedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "refinery_jtu_hashes_received_total",
+		Help: "Total number of JTU hashes received in batches",
+	})
+	verificationDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "refinery_falcon_verification_duration_seconds",
+		Help:    "Time taken to verify Falcon-1024 signatures",
+		Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to 1s
+	})
+
+	hashBatchMetricsOnce sync.Once
+)
+
+func init() {
+	// Register hash batch metrics (only once)
+	hashBatchMetricsOnce.Do(func() {
+		prometheus.MustRegister(
+			hashBatchesReceivedTotal,
+			signaturesVerifiedTotal,
+			signaturesFailedTotal,
+			hashesReceivedTotal,
+			verificationDuration,
+		)
+	})
+}
+
 // HashBatchReceiver handles incoming hash batches with Falcon-1024 verification
 type HashBatchReceiver struct {
 	verifier         *crypto.FalconVerifier
 	queueMgr         *QueueManager
-	metrics          *HashBatchMetrics
 	skipVerification bool // For testing - skip Falcon verification
-}
-
-// HashBatchMetrics tracks signature verification metrics
-type HashBatchMetrics struct {
-	BatchesReceivedTotal    prometheus.Counter
-	SignaturesVerifiedTotal prometheus.Counter
-	SignaturesFailedTotal   prometheus.Counter
-	HashesReceivedTotal     prometheus.Counter
-	VerificationDuration    prometheus.Histogram
-}
-
-// NewHashBatchMetrics creates Prometheus metrics for hash batch processing
-func NewHashBatchMetrics() *HashBatchMetrics {
-	return &HashBatchMetrics{
-		BatchesReceivedTotal: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "refinery_hash_batches_received_total",
-			Help: "Total number of hash batches received from Digger",
-		}),
-		SignaturesVerifiedTotal: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "refinery_falcon_signatures_verified_total",
-			Help: "Total number of Falcon-1024 signatures successfully verified",
-		}),
-		SignaturesFailedTotal: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "refinery_falcon_signatures_failed_total",
-			Help: "Total number of Falcon-1024 signature verification failures",
-		}),
-		HashesReceivedTotal: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "refinery_jtu_hashes_received_total",
-			Help: "Total number of JTU hashes received in batches",
-		}),
-		VerificationDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
-			Name:    "refinery_falcon_verification_duration_seconds",
-			Help:    "Time taken to verify Falcon-1024 signatures",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to 1s
-		}),
-	}
-}
-
-// RegisterMetrics registers all metrics with Prometheus
-func (m *HashBatchMetrics) RegisterMetrics() {
-	prometheus.MustRegister(
-		m.BatchesReceivedTotal,
-		m.SignaturesVerifiedTotal,
-		m.SignaturesFailedTotal,
-		m.HashesReceivedTotal,
-		m.VerificationDuration,
-	)
 }
 
 // NewHashBatchReceiver creates a new hash batch receiver with verification
 func NewHashBatchReceiver(queueMgr *QueueManager, skipVerification bool) *HashBatchReceiver {
-	metrics := NewHashBatchMetrics()
-	metrics.RegisterMetrics()
-
 	return &HashBatchReceiver{
 		verifier:         crypto.NewFalconVerifier(),
 		queueMgr:         queueMgr,
-		metrics:          metrics,
 		skipVerification: skipVerification,
 	}
 }
 
 // ReceiveHashBatch processes a hash batch with Falcon-1024 signature verification
 func (hbr *HashBatchReceiver) ReceiveHashBatch(batch *models.HashBatchOre) error {
-	hbr.metrics.BatchesReceivedTotal.Inc()
+	hashBatchesReceivedTotal.Inc()
 
 	// 1. Validate structure
 	if err := batch.Validate(); err != nil {
@@ -106,7 +95,7 @@ func (hbr *HashBatchReceiver) ReceiveHashBatch(batch *models.HashBatchOre) error
 			"contract", batch.ContractID,
 			"digger", batch.DiggerID)
 	} else {
-		timer := prometheus.NewTimer(hbr.metrics.VerificationDuration)
+		timer := prometheus.NewTimer(verificationDuration)
 		defer timer.ObserveDuration()
 
 		err := hbr.verifier.VerifyHashBatch(
@@ -122,7 +111,7 @@ func (hbr *HashBatchReceiver) ReceiveHashBatch(batch *models.HashBatchOre) error
 		)
 
 		if err != nil {
-			hbr.metrics.SignaturesFailedTotal.Inc()
+			signaturesFailedTotal.Inc()
 
 			slog.Error("SECURITY: Falcon signature verification FAILED",
 				"contract", batch.ContractID,
@@ -139,7 +128,7 @@ func (hbr *HashBatchReceiver) ReceiveHashBatch(batch *models.HashBatchOre) error
 			return fmt.Errorf("signature verification failed: %w", err)
 		}
 
-		hbr.metrics.SignaturesVerifiedTotal.Inc()
+		signaturesVerifiedTotal.Inc()
 
 		slog.Info("✅ Falcon signature verified",
 			"contract_id", batch.ContractID,
@@ -147,7 +136,7 @@ func (hbr *HashBatchReceiver) ReceiveHashBatch(batch *models.HashBatchOre) error
 			"hashes", batch.HashCount)
 	}
 
-	hbr.metrics.HashesReceivedTotal.Add(float64(batch.HashCount))
+	hashesReceivedTotal.Add(float64(batch.HashCount))
 
 	// 3. Distribute RoboStake across all hashes
 	roboStakePerHash := batch.RoboStake / float64(batch.HashCount)
