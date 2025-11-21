@@ -52,7 +52,9 @@ async fn test_full_contract_lifecycle() {
     };
 
     let keypair = DiggerKeypair::generate();
-    let metrics = DiggerMetrics::default();`n    let state = let printer_registry = PrinterRegistry::new();`n    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics, printer_registry);
+    let metrics = DiggerMetrics::default();
+    let printer_registry = PrinterRegistry::new();
+    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics, printer_registry);
     let app = create_router(state);
 
     // ========================================================================
@@ -283,7 +285,9 @@ async fn test_contract_not_found() {
     };
 
     let keypair = DiggerKeypair::generate();
-    let metrics = DiggerMetrics::default();`n    let state = let printer_registry = PrinterRegistry::new();`n    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics, printer_registry);
+    let metrics = DiggerMetrics::default();
+    let printer_registry = PrinterRegistry::new();
+    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics, printer_registry);
     let app = create_router(state);
 
     let response = app
@@ -327,7 +331,9 @@ async fn test_execute_before_stake_payment() {
     };
 
     let keypair = DiggerKeypair::generate();
-    let metrics = DiggerMetrics::default();`n    let state = let printer_registry = PrinterRegistry::new();`n    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics, printer_registry);
+    let metrics = DiggerMetrics::default();
+    let printer_registry = PrinterRegistry::new();
+    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics, printer_registry);
     let app = create_router(state);
 
     // Create contract
@@ -408,7 +414,9 @@ async fn test_invalid_torq_values() {
     };
 
     let keypair = DiggerKeypair::generate();
-    let metrics = DiggerMetrics::default();`n    let state = let printer_registry = PrinterRegistry::new();`n    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics, printer_registry);
+    let metrics = DiggerMetrics::default();
+    let printer_registry = PrinterRegistry::new();
+    let state = ApiState::new(config, contract_manager, storage_manager, nats_client, keypair, metrics, printer_registry);
     let app = create_router(state);
 
     // Test negative torq
