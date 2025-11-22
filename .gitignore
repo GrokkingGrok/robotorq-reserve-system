@@ -31,14 +31,27 @@ __pycache__/*
 # VS Code workspace settings (keep locally, not in git)
 .vscode/
 
-.env                    
-.env.local
-*.log                  
-node_modules/          
-dist/             
-coverage/         
-*.swp 
+# Secrets & environment files (never commit real values)
+.env
+.env.*
+*.key
+*.pem
+*.crt
+certs/*.key
+
+# Logs & coverage artifacts
+*.log
+coverage/
+
+# Frontend / build outputs (future)
+dist/
+node_modules/
+
+# Editor & OS cruft
+*.swp
 *.swo
 .DS_Store
-.db 
-*.orig 
+Thumbs.db
+*.orig
+
+# Duplicate pattern cleanup (SQLite already covered above)
