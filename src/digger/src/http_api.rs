@@ -1,11 +1,25 @@
-// HTTP API for Digger contract management
-//
-// Provides REST endpoints for:
-// - Contract creation (with torq + robo_stake)
-// - Stake payment
-// - Contract execution simulation
-// - Status queries
-// - JTU queries
+//! HTTP API module for the Digger service.
+//!
+//! This module exposes Axum-based REST endpoints that allow external actors
+//! (Trust service, Printers, monitoring tooling) to interact with the digger's
+//! contract lifecycle and production data. It intentionally keeps business
+//! logic out of handlers; handlers marshal request/response DTOs, invoke
+//! state managers, record metrics, and perform lightweight validation.
+//!
+//! High-level endpoint groups:
+//! * Contract Management (Trust → Digger): create, fund, execute, status, JTU stats.
+//! * Printer Workflow (Printer → Digger): assignment, job start, milestone reports, completion.
+//! * System: health, metrics, root index.
+//!
+//! Design notes:
+//! * All handlers are `async` and use interior mutability (`Arc<Mutex<...>>`) for
+//!   state managers. Contention is minimal because operations are short-lived.
+//! * DTO structs derive `Serialize`/`Deserialize` to ensure stable external API.
+//! * Errors return structured JSON with appropriate HTTP status codes.
+//! * Metrics are incremented at the point of successful state mutation to avoid
+//!   double counting on retries.
+//! * Future work (phase-4 crypto): integrate per-JTU Falcon-1024 signatures and
+//!   printer identity binding inside execution and milestone flows.
 
 use axum::{
     extract::{Path, State},
@@ -41,6 +55,20 @@ pub struct ApiState {
 }
 
 impl ApiState {
+    /// Construct a new `ApiState` wrapper binding all shared service components.
+    ///
+    /// The state is cloned into each handler via Axum's `State` extractor;
+    /// heavy objects (e.g., managers, registries) are wrapped in `Arc` and
+    /// interior synchronized where mutation is required.
+    ///
+    /// Arguments:
+    /// * `config` - Immutable digger configuration loaded at startup.
+    /// * `contract_manager` - Tracks lifecycle & accounting for active contracts.
+    /// * `storage_manager` - Persists and queries JouleTorqUnits per contract.
+    /// * `nats_client` - Publishes assignment / (future) hash events.
+    /// * `keypair` - Falcon-1024 keypair (placeholder usage until signature phase).
+    /// * `metrics` - Prometheus collectors aggregated for `GET /metrics`.
+    /// * `printer_registry` - Registered printers + assignment tracking.
     pub fn new(
         config: DiggerConfig,
         contract_manager: ContractStateManager,
@@ -1099,6 +1127,11 @@ pub async fn root() -> impl IntoResponse {
 // Router Setup
 // ============================================================================
 
+/// Build the Axum `Router` wiring all HTTP endpoints to handlers.
+///
+/// The router groups endpoints by functional domain but keeps them flat for
+/// clarity. Versioning strategy (future) can prepend `/v1` without changing
+/// handler signatures. Shared `ApiState` is attached via `.with_state(state)`.
 pub fn create_router(state: ApiState) -> Router {
     Router::new()
         .route("/", get(root))

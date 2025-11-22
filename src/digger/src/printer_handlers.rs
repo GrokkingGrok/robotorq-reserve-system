@@ -1,3 +1,22 @@
+//! Asynchronous NATS event handlers for printer lifecycle integration.
+//!
+//! Dedicated connections per handler isolate backpressure and avoid head-of-line
+//! blocking across different subjects (`printer.register`, `printer.contract_started`,
+//! `printer.contract_completed`). Each handler performs minimal parsing,
+//! validation, state mutation, and publishing follow-up messages (e.g., certificates).
+//!
+//! Design considerations:
+//! * Registration generates & signs a printer certificate (currently placeholder
+//!   signature workflow; future Falcon signing for certificate fields).
+//! * Contract completion triggers internal execution to produce JTUs & ore.
+//! * Long-running loops include simple timeout instrumentation to surface stalls.
+//! * Internal helper `execute_contract_internal` mirrors HTTP execute logic for
+//!   reuse without duplicate code paths.
+//!
+//! Future enhancements:
+//! * Structured error metrics and retry backoff on transient failures.
+//! * Printer capability negotiation (rated watts vs actual load).
+//! * Event schema versioning and signature verification on inbound messages.
 use crate::crypto::DiggerKeypair;
 use crate::http_api::ApiState;
 use crate::printer_registry::{PrinterCertificate, PrinterRegistration};
@@ -6,7 +25,7 @@ use sha2::{Digest, Sha256};
 use tracing::{error, info, warn};
 use tokio_stream::StreamExt;
 
-/// Start listening for printer-related NATS events
+/// Spawn asynchronous tasks for all printer-related NATS subjects.
 pub async fn start_printer_listeners(state: ApiState, nats_url: String) {
     // Spawn listener for printer registrations with its own NATS connection
     let reg_state = state.clone();
@@ -38,7 +57,7 @@ pub async fn start_printer_listeners(state: ApiState, nats_url: String) {
     info!("🎧 Printer event listeners started");
 }
 
-/// Handle printer registration requests
+/// Listen for `printer.register` events, issue certificates, and persist printer state.
 async fn handle_printer_registrations(state: ApiState, nats_url: String) -> Result<(), Box<dyn std::error::Error>> {
     // Create dedicated NATS connection for this handler
     info!("🔌 Connecting to NATS for printer registration handler...");
@@ -142,7 +161,7 @@ async fn handle_printer_registrations(state: ApiState, nats_url: String) -> Resu
     Ok(())
 }
 
-/// Issue a certificate for a registered printer
+/// Build and sign a printer certificate from registration data.
 async fn issue_certificate(
     registration: &PrinterRegistration,
     keypair: &DiggerKeypair,
@@ -184,7 +203,7 @@ async fn issue_certificate(
     Ok(final_cert)
 }
 
-/// Handle contract_started events from printers
+/// Subscribe to `printer.contract_started` events and log commencement.
 async fn handle_contract_started_events(
     _state: ApiState,
     nats_url: String,
@@ -226,7 +245,7 @@ async fn handle_contract_started_events(
     Ok(())
 }
 
-/// Handle contract_completed events from printers
+/// Subscribe to `printer.contract_completed` events, update printer stats, and execute contract work.
 async fn handle_contract_completed_events(
     state: ApiState,
     nats_url: String,
@@ -310,7 +329,7 @@ async fn handle_contract_completed_events(
     Ok(())
 }
 
-/// Internal helper to execute contract (shared by HTTP API and NATS handlers)
+/// Internal contract execution shared by NATS completion handler & HTTP endpoint.
 async fn execute_contract_internal(
     state: &crate::http_api::ApiState,
     req: crate::http_api::ExecuteContractRequest,

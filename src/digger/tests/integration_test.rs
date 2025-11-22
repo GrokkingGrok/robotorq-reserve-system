@@ -23,6 +23,7 @@ use digger::{
     http_api::{ApiState, create_router},
     metrics::DiggerMetrics,
 };
+use digger::printer_registry::PrinterRegistry; // Added missing import for printer registry
 
 #[tokio::test]
 async fn test_full_contract_lifecycle() {
@@ -95,12 +96,14 @@ async fn test_full_contract_lifecycle() {
     assert_eq!(create_response["contract_id"], "integration-test-001");
 
     // ========================================================================
-    // Step 2: Pay Stake (Approve Contract)
+    // Step 2: Fund Contract (Approve Stake)
     // ========================================================================
-    println!("\n=== Step 2: Pay Stake ===");
-    
-    let stake_body = json!({
-        "contract_id": "integration-test-001"
+    println!("\n=== Step 2: Fund Contract ===");
+
+    // Funding replaces previous stake endpoint; amount must equal robo_stake to fully fund.
+    let fund_body = json!({
+        "contract_id": "integration-test-001",
+        "amount": 5.0
     });
 
     let response = app
@@ -108,22 +111,39 @@ async fn test_full_contract_lifecycle() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/contracts/stake")
+                .uri("/contracts/fund")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&stake_body).unwrap()))
+                .body(Body::from(serde_json::to_string(&fund_body).unwrap()))
                 .unwrap(),
         )
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let stake_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    
-    println!("Stake Response: {}", serde_json::to_string_pretty(&stake_response).unwrap());
-    
-    assert_eq!(stake_response["approval_status"], "StakeApproved");
+    let fund_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    println!("Fund Response: {}", serde_json::to_string_pretty(&fund_response).unwrap());
+    assert_eq!(fund_response["is_funded"], true);
+    assert_eq!(fund_response["robo_stake_received"], 5.0);
+
+    // Query status to assert approval state
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/contracts/integration-test-001")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let status_after_fund: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status_after_fund["approval_status"], "StakeApproved");
 
     // ========================================================================
     // Step 3: Execute Contract (Generate Ore - First Batch)

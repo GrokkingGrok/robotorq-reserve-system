@@ -1,56 +1,61 @@
-// Configuration - Environment variables and defaults
-// Phase 1: Digger Rewrite - Day 3
+//! Digger configuration management.
+//!
+//! Loads runtime settings from environment variables with sensible defaults
+//! for development, test, and production profiles. The configuration is kept
+//! immutable after creation and shared via `Arc<DiggerConfig>` where needed.
+//!
+//! Environment variables (optional unless noted):
+//! * `DIGGER_ID`            (required) Unique identifier for this instance.
+//! * `NATS_URL`             (default: `nats://localhost:4222`)
+//! * `HTTP_PORT`            (default: `9000`)
+//! * `STORAGE_PATH`         (default: `./jtu_storage`)
+//! * `BATCH_INTERVAL_SEC`   (default: `60`) Hash batch cadence.
+//! * `PRUNE_AFTER_DAYS`     (default: `30`) Local retention window.
+//! * `LOG_LEVEL`            (default: `info`)
+//!
+//! Profile helpers (`default_test`, `default_dev`, `default_prod`) allow rapid
+//! instantiation for different deployment contexts without manual env setup.
+//! Production profile intentionally requires overriding `digger_id`.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Digger Configuration
-/// 
-/// Loaded from environment variables with sensible defaults.
-/// Can be customized per deployment (dev, testnet, mainnet).
+/// Immutable configuration values for a running Digger instance.
+///
+/// All fields are public to allow direct read access; mutation should occur
+/// only through creating a new config instance. Paths are not auto-created;
+/// callers must ensure `storage_path` exists and is writable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiggerConfig {
-    /// Unique identifier for this Digger instance
-    /// Example: "digger-dev-001", "digger-prod-alice-miner-1"
+    /// Unique identifier for this Digger instance.
+    /// Example: `digger-dev-001`, `digger-prod-alice-miner-1`.
     pub digger_id: String,
     
-    /// NATS server URL for message passing
-    /// Default: "nats://localhost:4222"
+    /// NATS server URL for message passing (cluster or single node).
     pub nats_url: String,
     
-    /// HTTP server port for API endpoints
-    /// Default: 9000
+    /// HTTP server port for REST API exposure.
     pub http_port: u16,
     
-    /// Local storage path for JTU databases
-    /// Default: "./jtu_storage"
+    /// Local filesystem path for per-contract JTU SQLite databases.
     pub storage_path: PathBuf,
     
-    /// How often to send hash batches to Refinery (seconds)
-    /// Default: 60 (1 minute)
-    /// Production: Could be 300 (5 minutes) to reduce bandwidth
+    /// Interval in seconds for sending hash batches to Refinery.
+    /// Higher values reduce network overhead; lower values improve latency.
     pub batch_interval_sec: u64,
     
-    /// How long to keep JTUs locally before pruning (days)
-    /// Default: 30 (Digger's responsibility period)
+    /// Retention window (days) before local JTU pruning. Must meet minimum
+    /// accountability period for disputes. Shortened in dev to save disk.
     pub prune_after_days: i64,
     
-    /// Log level (trace, debug, info, warn, error)
-    /// Default: "info"
+    /// Global log level (`trace|debug|info|warn|error`).
     pub log_level: String,
 }
 
 impl DiggerConfig {
-    /// Load configuration from environment variables
-    /// 
-    /// Environment variables:
-    /// - DIGGER_ID (required)
-    /// - NATS_URL (default: nats://localhost:4222)
-    /// - HTTP_PORT (default: 9000)
-    /// - STORAGE_PATH (default: ./jtu_storage)
-    /// - BATCH_INTERVAL_SEC (default: 60)
-    /// - PRUNE_AFTER_DAYS (default: 30)
-    /// - LOG_LEVEL (default: info)
+    /// Load configuration from environment variables, applying defaults where
+    /// unspecified. Returns an error if the required `DIGGER_ID` is missing or
+    /// any numeric field fails to parse.
     pub fn from_env() -> Result<Self, String> {
         // Load .env file if it exists (for local development)
         dotenvy::dotenv().ok();
@@ -94,7 +99,8 @@ impl DiggerConfig {
         })
     }
     
-    /// Create default configuration for testing
+    /// Create a baseline configuration for tests. Uses deterministic values,
+    /// retains full batch cadence, and enables `debug` logging for visibility.
     pub fn default_test() -> Self {
         Self {
             digger_id: "test-digger".to_string(),
@@ -107,7 +113,8 @@ impl DiggerConfig {
         }
     }
     
-    /// Create configuration for development
+    /// Create a configuration optimized for local development: shorter prune
+    /// window and more verbose logging for rapid iteration.
     pub fn default_dev() -> Self {
         Self {
             digger_id: "digger-dev-001".to_string(),
@@ -120,7 +127,9 @@ impl DiggerConfig {
         }
     }
     
-    /// Create configuration for production
+    /// Create a production template configuration. The `digger_id` must be
+    /// overridden by operator provisioning. Longer batch interval reduces
+    /// bandwidth while preserving timely hash propagation.
     pub fn default_prod() -> Self {
         Self {
             digger_id: "digger-prod-CHANGEME".to_string(), // Must override!
@@ -143,6 +152,12 @@ impl Default for DiggerConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Global lock to serialize environment-variable manipulating tests.
+    // Rust tests run in parallel by default; without this, env mutations
+    // race and cause nondeterministic failures.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_default_test_config() {
@@ -170,6 +185,7 @@ mod tests {
 
     #[test]
     fn test_from_env_missing_digger_id() {
+        let _guard = ENV_LOCK.lock().unwrap();
         // Clear env to test error case
         unsafe { std::env::remove_var("DIGGER_ID"); }
         
@@ -180,6 +196,7 @@ mod tests {
 
     #[test]
     fn test_from_env_with_all_vars() {
+        let _guard = ENV_LOCK.lock().unwrap();
         // Set all env vars
         unsafe {
             std::env::set_var("DIGGER_ID", "test-env-digger");
@@ -215,6 +232,7 @@ mod tests {
 
     #[test]
     fn test_from_env_with_defaults() {
+        let _guard = ENV_LOCK.lock().unwrap();
         // Clean up any lingering env vars from other tests
         unsafe {
             std::env::remove_var("DIGGER_ID");

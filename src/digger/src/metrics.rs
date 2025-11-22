@@ -1,17 +1,23 @@
-// Prometheus metrics for Digger
-//
-// Tracks:
-// - Contract lifecycle (create/stake/execute)
-// - Printer interactions (job start/milestone/complete)
-// - JTU generation and storage
-// - Hash batch transmission
+//! Prometheus metrics instrumentation for the Digger service.
+//!
+//! Captures counters, gauges, and histograms across core domains:
+//! * Contract lifecycle (create, execution batches, active count).
+//! * Printer workflow (jobs started/completed, milestones).
+//! * JTU generation & storage persistence.
+//! * Hash batch transmission cadence & total RoboStake represented.
+//! * API latency & error classification by endpoint + method.
+//!
+//! Registry is exposed via `gather()` for the `/metrics` HTTP endpoint using
+//! the standard Prometheus text encoder. All collectors are registered under
+//! unique names prefixed with `digger_` to avoid collision in multi-service
+//! deployments scraping a shared Prometheus instance.
 
 use prometheus::{
     Counter, HistogramVec, IntCounter, IntCounterVec, IntGauge, Opts, Registry,
 };
 use std::sync::Arc;
 
-/// Digger metrics collector
+/// Aggregated metrics collectors registered in a Prometheus `Registry`.
 #[derive(Clone)]
 pub struct DiggerMetrics {
     // Contract metrics
@@ -46,7 +52,7 @@ pub struct DiggerMetrics {
 }
 
 impl DiggerMetrics {
-    /// Create new metrics collector with default registry
+    /// Instantiate and register all metrics with a fresh `Registry`.
     pub fn new() -> Result<Self, prometheus::Error> {
         let registry = Registry::new();
         
@@ -156,12 +162,12 @@ impl DiggerMetrics {
         })
     }
     
-    /// Get the registry for /metrics endpoint
+    /// Borrow the underlying registry (used for encoding on scrape).
     pub fn registry(&self) -> &Registry {
         &self.registry
     }
     
-    /// Gather all metrics for Prometheus scraping
+    /// Collect metric families for serialization at scrape time.
     pub fn gather(&self) -> Vec<prometheus::proto::MetricFamily> {
         self.registry.gather()
     }

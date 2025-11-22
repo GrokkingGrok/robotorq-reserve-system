@@ -1,15 +1,33 @@
-// Contract State Machine - Lifecycle management for contracts
-// Phase 1: Digger Rewrite - Day 3
+//! Contract lifecycle state machine and per-contract economic tracking.
+//!
+//! This module encapsulates the mutable state for each active contract and
+//! exposes a lightweight manager for aggregation queries (e.g., which
+//! contracts are ready to send hash batches). It enforces economic invariants
+//! and progression rules:
+//!
+//! States:
+//! * `PendingStake` → awaiting funding approval.
+//! * `StakeApproved` → active execution; hash batches allowed.
+//! * `ExecutionComplete` → all milestones fulfilled; terminal state (final
+//!   hash batches still permitted).
+//!
+//! Economic invariants:
+//! * `ore_target = torq × robo_stake` (not subtraction; multiplicative value
+//!   expansion loop).
+//! * Funding (`add_funding`) transitions only from `PendingStake`.
+//! * Milestone completion triggers `ExecutionComplete` only when cumulative
+//!   count reaches `milestones_total`.
+//!
+//! Concurrency model: All mutation occurs behind external `Mutex<ContractStateManager>`.
+//! The manager itself is not internally synchronized to avoid double-locking.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Contract approval status (state machine)
-/// 
-/// State transitions:
-/// PendingStake → StakeApproved → ExecutionComplete
-///     ↓              ↓
-///   (error)      (can send hashes)
+/// Contract approval / lifecycle status.
+///
+/// Allowed progression: `PendingStake → StakeApproved → ExecutionComplete`.
+/// Any attempt to re-fund or re-complete beyond terminal state yields errors.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ApprovalStatus {
     /// Contract created, but no RoboStake paid yet
@@ -25,16 +43,11 @@ pub enum ApprovalStatus {
     ExecutionComplete,
 }
 
-/// Per-contract state
-/// 
-/// Tracks everything needed to manage one contract's lifecycle.
-/// 
-/// **CRITICAL ECONOMICS** (differs from whitepaper):
-/// - Torq (Selling Price): Total value being created (goes to UBD wallets)
-/// - RoboStake: Payment for robot (goes to DistoDam Reserve)
-/// - Ore Target: Torq × RoboStake (how much to dig!)
-/// 
-/// This creates the self-sustaining Robotic Labor Reserve Loop.
+/// Mutable state for a single contract instance.
+///
+/// Fields track economic inputs (torq, robo_stake), progress (milestones,
+/// JTUs, ore generated), and machine specs (`power_watts`). Future phases will
+/// extend with multi-robot attribution and richer accountability metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContractState {
     pub contract_id: String,
@@ -72,18 +85,11 @@ pub struct ContractState {
 }
 
 impl ContractState {
-    /// Create new contract with correct economics
-    /// 
-    /// **CRITICAL**: Ore target = Torq × RoboStake (not Torq - RoboStake!)
-    /// 
-    /// Example:
-    /// - Torq: 100 RT (selling price)
-    /// - RoboStake: 5 RT (5% of torq)
-    /// - Ore Target: 100 × 5 = 500 RT worth of ore
-    /// 
-    /// Distribution after minting:
-    /// - 100 RT → UBD wallets (Disto)
-    /// - 5 RT → DistoDam Reserve (robot payment pool)
+    /// Instantiate a new contract state computing `ore_target = torq × robo_stake`.
+    ///
+    /// Returns a contract in `PendingStake` awaiting funding approval. No JTU
+    /// or milestone progress is present at creation. `created_at` records UTC
+    /// timestamp for audit; downstream services may use this for SLA metrics.
     pub fn new(
         contract_id: String,
         torq: f64,
@@ -110,10 +116,15 @@ impl ContractState {
         }
     }
     
-    /// Add funding from DistoDam (via Trust)
-    /// 
-    /// When DistoDam releases RoboStake, it both funds AND approves the contract.
-    /// Transitions: PendingStake → StakeApproved
+    /// Apply funding (RoboStake) released by upstream distribution (Trust/DistoDam).
+    ///
+    /// Side effects:
+    /// * Increments `robo_stake_received`.
+    /// * Transitions `PendingStake → StakeApproved`.
+    ///
+    /// Errors:
+    /// * Funding attempted in non-`PendingStake` state.
+    /// * Non-positive funding amount.
     pub fn add_funding(&mut self, amount: f64) -> Result<(), String> {
         if self.approval_status != ApprovalStatus::PendingStake {
             return Err(format!(
@@ -134,17 +145,17 @@ impl ContractState {
         Ok(())
     }
     
-    /// Check if contract is fully funded
+    /// Returns true if received funding meets or exceeds required robo stake.
     pub fn is_funded(&self) -> bool {
         self.robo_stake_received >= self.robo_stake
     }
     
-    /// Check if we should send hashes now
-    /// 
-    /// Returns true if:
-    /// 1. Contract is StakeApproved or ExecutionComplete
-    /// 2. Enough time has passed since last send (batch_interval_sec)
-    /// 3. We have at least 1 JTU to send
+    /// Determine whether hash batch emission criteria are met.
+    ///
+    /// Conditions:
+    /// 1. Lifecycle in `StakeApproved` or `ExecutionComplete`.
+    /// 2. At least one JTU present (`jtu_count > 0`).
+    /// 3. Interval since `last_hash_send` ≥ `batch_interval_sec` (or never sent).
     pub fn should_send_hashes(&self, batch_interval_sec: u64) -> bool {
         // Must be approved or complete
         if self.approval_status != ApprovalStatus::StakeApproved
@@ -169,25 +180,27 @@ impl ContractState {
         }
     }
     
-    /// Mark that we just sent hashes
+    /// Update `last_hash_send` to current UTC timestamp after successful publish.
     pub fn mark_hash_send(&mut self) {
         self.last_hash_send = Some(chrono::Utc::now().timestamp());
     }
     
-    /// Increment JTU count and ore generated (when new JTUs are created)
-    /// 
-    /// **Each JTU represents work done**, contributing to ore generation.
+    /// Record newly generated JTUs and corresponding ore value contribution.
+    /// Assumes caller has already calculated fair ore distribution per unit.
     pub fn add_jtus(&mut self, count: i64, ore_value: f64) {
         self.jtu_count += count;
         self.ore_generated += ore_value;
     }
     
-    /// Check if ore target reached
+    /// Returns true if cumulative ore meets or exceeds the economic target.
     pub fn is_ore_target_reached(&self) -> bool {
         self.ore_generated >= self.ore_target
     }
     
-    /// Complete a milestone
+    /// Mark a single milestone as completed, transitioning to
+    /// `ExecutionComplete` when final milestone is reached.
+    ///
+    /// Errors on overflow (attempting completion beyond `milestones_total`).
     pub fn complete_milestone(&mut self) -> Result<(), String> {
         if self.milestones_completed >= self.milestones_total {
             return Err(format!(
@@ -206,12 +219,12 @@ impl ContractState {
         Ok(())
     }
     
-    /// Check if contract is complete
+    /// Returns true if lifecycle has reached terminal `ExecutionComplete`.
     pub fn is_complete(&self) -> bool {
         self.approval_status == ApprovalStatus::ExecutionComplete
     }
     
-    /// Get progress percentage (0.0 to 1.0)
+    /// Fractional progress (0.0–1.0) based on milestone completion ratio.
     pub fn progress(&self) -> f64 {
         if self.milestones_total == 0 {
             return 0.0;
@@ -220,7 +233,7 @@ impl ContractState {
     }
 }
 
-/// Contract state manager - Manages all active contracts
+/// Aggregates and indexes active contracts; provides selection helpers.
 #[derive(Debug, Clone, Default)]
 pub struct ContractStateManager {
     contracts: HashMap<String, ContractState>,
@@ -233,7 +246,7 @@ impl ContractStateManager {
         }
     }
     
-    /// Create new contract with economics
+    /// Insert a newly created contract; errors if `contract_id` already present.
     pub fn create_contract(
         &mut self,
         contract_id: String,
@@ -252,17 +265,17 @@ impl ContractStateManager {
         Ok(())
     }
     
-    /// Get contract state (mutable)
+    /// Retrieve mutable access to a contract by id.
     pub fn get_mut(&mut self, contract_id: &str) -> Option<&mut ContractState> {
         self.contracts.get_mut(contract_id)
     }
     
-    /// Get contract state (immutable)
+    /// Retrieve immutable access to a contract by id.
     pub fn get(&self, contract_id: &str) -> Option<&ContractState> {
         self.contracts.get(contract_id)
     }
     
-    /// Get all contracts that should send hashes now
+    /// Collect contract IDs eligible for hash batch emission.
     pub fn contracts_ready_to_send(&self, batch_interval_sec: u64) -> Vec<String> {
         self.contracts
             .iter()
@@ -271,12 +284,12 @@ impl ContractStateManager {
             .collect()
     }
     
-    /// Get all contract IDs
+    /// Return a vector of all currently tracked contract IDs.
     pub fn all_contract_ids(&self) -> Vec<String> {
         self.contracts.keys().cloned().collect()
     }
     
-    /// Remove completed contracts (for cleanup)
+    /// Remove and return IDs of contracts in terminal `ExecutionComplete` state.
     pub fn remove_completed(&mut self) -> Vec<String> {
         let completed: Vec<String> = self
             .contracts

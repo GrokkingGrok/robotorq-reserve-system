@@ -1,5 +1,14 @@
-// Digger v0.2.0 - Pure Backend (No Tauri)
-// Phase 1: HTTP Server + SQLite Storage + Hash-Only Transmission
+//! Digger entrypoint: initializes configuration, connectivity, state managers,
+//! metrics, printer listeners, and launches the Axum HTTP server plus hash batch
+//! background task.
+//!
+//! Key phases represented:
+//! * Phase 1: HTTP server + SQLite storage + hash-only transmission.
+//! * Upcoming (Phase 4): Falcon-1024 signatures for JTU batches.
+//! * Future: TOON compressed batch format & multi-robot attribution.
+//!
+//! Graceful shutdown handling is minimal; future work will integrate signal
+//! listeners to flush pending hash batches and close storage handles cleanly.
 
 use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -125,13 +134,11 @@ async fn main() {
 // Background Hash Sender Task
 // ============================================================================
 
-/// Background task that periodically sends JTU hash batches to NATS
-/// 
-/// This task runs every `batch_interval_sec` seconds and:
-/// 1. Checks which contracts are ready to send hashes (approved + interval elapsed)
-/// 2. Retrieves all JTU hashes for each contract from storage
-/// 3. Publishes hash batch to NATS subject "ore.batch"
-/// 4. Updates contract state with last_hash_send timestamp
+/// Periodic batch publisher for per-contract JTU hash emission.
+///
+/// Interval loop selects eligible contracts and publishes signed hash bundles.
+/// Each contract is processed concurrently for scalability. Signature currently
+/// covers batch hash only; future expansion will add full payload canonicalization.
 async fn hash_sender_task(state: ApiState, batch_interval_sec: u64) {
     tracing::info!("🚀 Hash sender task started (interval: {}s)", batch_interval_sec);
     

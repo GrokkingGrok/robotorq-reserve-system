@@ -1,3 +1,21 @@
+//! Printer registry: persistent tracking of bonded printers and assignment state.
+//!
+//! Responsibilities:
+//! * Accept new printer registrations and issue certificates.
+//! * Persist registry state to disk for restart durability.
+//! * Track current contract assignment and aggregate delivered capacity.
+//! * Provide model validation (basic demo whitelist) and access queries.
+//!
+//! Concurrency model: Uses `Arc<RwLock<HashMap<..>>>` to allow concurrent reads
+//! of printer data with exclusive write access for modifications (register,
+//! assign, complete). All public mutation methods persist changes opportunistically.
+//! Persistence errors are logged and treated as non-fatal for availability.
+//!
+//! Future extensions:
+//! * Signature verification of registration payload.
+//! * Capacity accounting cross-checked against contract economics.
+//! * Expiring certificates with rotation scheduling.
+//! * Multi-printer contract orchestration & load balancing.
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -5,7 +23,8 @@ use tokio::sync::RwLock;
 use std::path::Path;
 use tracing::info;
 
-/// Printer registration request from printer service
+/// Incoming printer registration data submitted by a printer service.
+/// Public key is Falcon-1024 (hex encoded) for future signed proof validation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrinterRegistration {
     pub printer_id: String,
@@ -16,7 +35,8 @@ pub struct PrinterRegistration {
     pub public_key: String, // Falcon-1024 public key (hex)
 }
 
-/// Certificate issued to printer after registration
+/// Issued certificate binding printer identity to rated capacity and public key.
+/// Hash ensures deterministic signature payload integrity.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrinterCertificate {
     pub printer_id: String,
@@ -29,7 +49,7 @@ pub struct PrinterCertificate {
     pub signature: String,          // Digger signature (hex)
 }
 
-/// Bonded printer - registered and certified
+/// Fully bonded printer with runtime mutable stats (assignment & capacity).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BondedPrinter {
     pub registration: PrinterRegistration,
@@ -39,13 +59,14 @@ pub struct BondedPrinter {
     pub total_capacity_hours: f64, // Total watt-hours delivered
 }
 
-/// Registry of all bonded printers
+/// In-memory + disk-backed registry of bonded printers.
 pub struct PrinterRegistry {
     printers: Arc<RwLock<HashMap<String, BondedPrinter>>>,
     storage_path: String,
 }
 
 impl PrinterRegistry {
+    /// Create a registry using the default file `printer_registry.json` in CWD.
     pub fn new() -> Self {
         Self {
             printers: Arc::new(RwLock::new(HashMap::new())),
@@ -53,6 +74,7 @@ impl PrinterRegistry {
         }
     }
     
+    /// Create a registry persisting to a custom path. Useful for tests.
     pub fn with_path(path: String) -> Self {
         Self {
             printers: Arc::new(RwLock::new(HashMap::new())),
@@ -60,7 +82,8 @@ impl PrinterRegistry {
         }
     }
     
-    /// Load printer registry from disk
+    /// Load printer registry contents from disk, if present.
+    /// Missing file treated as empty registry (OK for first startup).
     pub async fn load(&self) -> Result<(), String> {
         if !Path::new(&self.storage_path).exists() {
             info!("📂 No existing printer registry found at {}", self.storage_path);
@@ -80,7 +103,7 @@ impl PrinterRegistry {
         Ok(())
     }
     
-    /// Save printer registry to disk
+    /// Persist current printer map to disk. Best-effort; errors surfaced.
     async fn save(&self) -> Result<(), String> {
         let printers = self.printers.read().await;
         
@@ -93,7 +116,7 @@ impl PrinterRegistry {
         Ok(())
     }
 
-    /// Register a new printer and return certificate
+    /// Register a new printer, storing its certificate and initializing stats.
     pub async fn register(
         &self,
         registration: PrinterRegistration,
@@ -116,14 +139,14 @@ impl PrinterRegistry {
         Ok(())
     }
 
-    /// Get printer by ID
+    /// Retrieve a printer by ID, cloning the struct for caller isolation.
     pub async fn get(&self, printer_id: &str) -> Option<BondedPrinter> {
         let printers = self.printers.read().await;
         printers.get(printer_id).cloned()
     }
 
-    /// Assign contract to printer
-    /// Allows reassignment - http_api checks if contract is already completed before calling
+    /// Assign a contract ID to a printer, overwriting any previous assignment.
+    /// Validation for completion or funding occurs upstream in HTTP layer.
     pub async fn assign_contract(
         &self,
         printer_id: &str,
@@ -143,7 +166,8 @@ impl PrinterRegistry {
         Ok(())
     }
 
-    /// Mark print completed and update stats
+    /// Mark a print job as completed, increment counters, accumulate capacity
+    /// and clear current assignment.
     pub async fn complete_print(
         &self,
         printer_id: &str,
@@ -164,13 +188,13 @@ impl PrinterRegistry {
         Ok(())
     }
 
-    /// Get all registered printers
+    /// Return snapshot of all bonded printers.
     pub async fn list_all(&self) -> Vec<BondedPrinter> {
         let printers = self.printers.read().await;
         printers.values().cloned().collect()
     }
 
-    /// Validate printer model (basic validation for demo)
+    /// Basic model validation against allowlist (demo only).
     pub fn validate_model(model: &str) -> bool {
         // For demo, accept common 3D printer models
         let valid_models = vec![

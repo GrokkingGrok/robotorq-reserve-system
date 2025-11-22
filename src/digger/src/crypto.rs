@@ -1,13 +1,25 @@
-/*!
- * Post-Quantum Cryptography Module
- * 
- * Implements Falcon-1024 signatures for JouleTorqOre validation
- * 
+/*! Post-Quantum Cryptography primitives for the Digger service.
+ *
+ * Implements Falcon-1024 signatures for JouleTorqOre / JTU–ore aggregation
+ * validation. This module provides key management (generate / serialize /
+ * reconstruct), signing, verification, and deterministic hashing of ore
+ * payloads prior to signature.
+ *
  * Why Falcon-1024?
- * - Fast signing (~0.5ms) - critical for high-throughput Diggers
- * - Compact signatures (~1.3KB) - reasonable bandwidth overhead
- * - NIST Round 3 finalist - proven security
- * - Perfect for ephemeral proofs (ore → ingot pipeline)
+ * - Fast signing (~0.5 ms) enabling high-throughput token proof chains.
+ * - Compact signatures (~1.3 KiB) balanced against PQ security level.
+ * - NIST PQC finalist with broad cryptanalysis scrutiny.
+ * - Suitable for ephemeral proof objects (ore → ingot pipeline) where latency
+ *   dominates resource economics.
+ *
+ * Operational guidance:
+ * - Keys SHOULD be rotated periodically (e.g., monthly) with overlap window
+ *   allowing verification of historical batches. Rotation strategy will be
+ *   added in a future phase.
+ * - Secret key storage MUST be protected (filesystem ACL + optional sealing
+ *   via OS keystore). Leakage permits fabrication of ore proofs.
+ * - Hashing uses SHA256; changing hash function requires coordinated migration
+ *   in Refinery verification logic.
  */
 
 use pqcrypto_falcon::falcon1024;

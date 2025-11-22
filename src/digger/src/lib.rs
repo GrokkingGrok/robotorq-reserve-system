@@ -1,4 +1,8 @@
-// Digger Library - Expose modules for integration testing
+//! Library exports for integration tests and external tooling.
+//!
+//! Re-exports internal modules so test crates and auxiliary scripts can access
+//! configuration loaders, state managers, HTTP types, and registry utilities
+//! without relying on binary-only interfaces.
 
 pub mod config;
 pub mod contract_state;
