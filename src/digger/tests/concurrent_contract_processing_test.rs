@@ -1,5 +1,20 @@
-// Test for concurrent contract hash batch processing
-// Verifies that multiple contracts are processed in parallel, not sequentially
+//! Concurrency tests for contract hash batch processing simulation.
+//!
+//! These tests model the scheduling and execution behavior of processing
+//! multiple contract hash batches concurrently vs sequentially, ensuring:
+//! * Parallel spawning reduces cumulative wall time (expected near single-task latency).
+//! * Shared state mutation via `Mutex` remains race-free and complete.
+//! * Lock acquisition ordering does not introduce deadlocks under mixed patterns.
+//!
+//! The real system spawns per-contract tasks during hash emission; here we
+//! simulate processing time with `tokio::time::sleep` to avoid external I/O.
+//! Tests enforce conservative speedup expectations that tolerate slower CI
+//! hardware while still signaling regressions.
+//!
+//! Future improvements:
+//! * Replace sleeps with instrumentation harness to measure actual hashing cost.
+//! * Introduce property-based tests for lock ordering permutations.
+//! * Add metrics snapshot assertions once exposed in test environment.
 
 #[cfg(test)]
 mod concurrent_tests {
@@ -7,7 +22,7 @@ mod concurrent_tests {
     use std::time::{Duration, Instant};
     use tokio::time::sleep;
 
-    /// Mock function simulating sequential contract processing
+    /// Simulate sequential processing: each contract awaits 100ms before continuing.
     async fn process_contracts_sequential(contract_ids: Vec<String>) -> Duration {
         let start = Instant::now();
         
@@ -20,7 +35,7 @@ mod concurrent_tests {
         start.elapsed()
     }
 
-    /// Mock function simulating concurrent contract processing
+    /// Simulate concurrent processing: spawn all sleep tasks and await their completion.
     async fn process_contracts_concurrent(contract_ids: Vec<String>) -> Duration {
         let start = Instant::now();
         let mut tasks = vec![];
@@ -53,15 +68,15 @@ mod concurrent_tests {
             "contract-5".to_string(),
         ];
 
-        // Sequential: should take ~500ms (5 contracts × 100ms each)
+        // Sequential pass (~5 × 100ms ≈ 500ms)
         let sequential_time = process_contracts_sequential(contracts.clone()).await;
         println!("Sequential processing took: {:?}", sequential_time);
         
-        // Concurrent: should take ~100ms (all 5 in parallel)
+        // Concurrent pass (expect near 100–150ms on typical hardware)
         let concurrent_time = process_contracts_concurrent(contracts.clone()).await;
         println!("Concurrent processing took: {:?}", concurrent_time);
         
-        // Verify concurrent is significantly faster (at least 3x speedup)
+        // Assert ≥3× speedup (allows variance for scheduling overhead).
         assert!(
             concurrent_time < sequential_time / 3,
             "Concurrent processing should be at least 3x faster. Sequential: {:?}, Concurrent: {:?}",
@@ -69,7 +84,7 @@ mod concurrent_tests {
             concurrent_time
         );
         
-        // Verify concurrent time is close to single contract time (~100ms)
+        // Ensure concurrent time hovers near single-contract duration (≤200ms).
         assert!(
             concurrent_time.as_millis() < 200,
             "Concurrent processing should complete in ~100ms, took {:?}",
@@ -79,7 +94,7 @@ mod concurrent_tests {
 
     #[tokio::test]
     async fn test_concurrent_with_shared_state() {
-        // Test that concurrent tasks can safely access shared state with mutexes
+        // Validate mutex-protected shared counter increments exactly once per task.
         let shared_counter = Arc::new(Mutex::new(0));
         let contract_ids = vec!["c1", "c2", "c3", "c4", "c5"];
         
@@ -92,7 +107,7 @@ mod concurrent_tests {
                 // Simulate processing
                 sleep(Duration::from_millis(50)).await;
                 
-                // Update shared state (like contract manager mark_hash_send)
+                    // Update shared state (analogous to contract mark_hash_send).
                 let mut count = counter_clone.lock().unwrap();
                 *count += 1;
                 
@@ -107,14 +122,14 @@ mod concurrent_tests {
             let _ = task.await;
         }
         
-        // Verify all contracts updated shared state
+        // Check all increments applied; absence indicates lost update / race.
         let final_count = *shared_counter.lock().unwrap();
         assert_eq!(final_count, 5, "All 5 contracts should have incremented counter");
     }
 
     #[tokio::test]
     async fn test_no_deadlock_with_concurrent_locks() {
-        // Ensure concurrent mutex access doesn't deadlock
+        // Ensure mixed lock acquisition ordering avoids deadlock by scoping guards.
         let state1 = Arc::new(Mutex::new(vec![1, 2, 3]));
         let state2 = Arc::new(Mutex::new(vec![4, 5, 6]));
         
@@ -125,7 +140,7 @@ mod concurrent_tests {
             let s2 = Arc::clone(&state2);
             
             let task = tokio::spawn(async move {
-                // Properly scope mutex guards before await
+                    // Properly scope mutex guards before awaited sleep to prevent holding across await.
                 if i % 2 == 0 {
                     {
                         let _data1 = s1.lock().unwrap();
@@ -152,7 +167,7 @@ mod concurrent_tests {
             tasks.push(task);
         }
         
-        // This test passes if it completes without hanging
+        // Test passes by completion; hanging indicates potential deadlock.
         let start = Instant::now();
         for task in tasks {
             let _ = task.await;
@@ -161,7 +176,7 @@ mod concurrent_tests {
         let elapsed = start.elapsed();
         println!("All tasks completed in {:?}", elapsed);
         
-        // Should complete quickly without deadlock
+        // Completion should remain well under 2 seconds on commodity hardware.
         assert!(
             elapsed.as_secs() < 2,
             "Tasks should complete quickly without deadlock"
