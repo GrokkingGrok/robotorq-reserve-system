@@ -1,8 +1,10 @@
 # The RoboTorq Reserve System
 
+The RoboTorq Reserve System is an open source, decentralized, Universal Basic Dividend-Paying monetary system.
+
 ## What is RoboTorq?
 
-A deterministic, physics-backed reserve currency generated from cryptographically verified robotic labor, without blockchain mining or speculative inflation. Minted digitally, it can be redeemed physically from any 3D printer.
+A deterministic, physics-backed reserve currency generated from cryptographically verified robotic labor, without blockchain mining or speculative inflation. Minted and traded digitally initially, RoboTorq can be redeemed physically from any 3D printer.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://www.docker.com/)
@@ -62,8 +64,11 @@ All proofs are signed, merklized, and linked, but RoboTorq Certificates never le
 
 There is **no mining**, **no global transaction ledger**, and **no chain data bloat**.
 
-The RoboTorq Reserve System is now and always will be lightweight enough to run on about a dozen Raspberry Pis — by design, not as a stunt. The architecture scales horizontally, making it easily deployable even on low-power hardware. Citizens of developing countries can operate a full collection of nodes just as effectively as those in developed nations.
+The RoboTorq Reserve System is now and always will be lightweight enough to run on about a dozen Raspberry Pis — by design, not as a stunt. 
 
+The architecture design scales horizontally, easily deployable even on low-power hardware. The goal is that citizens of developing countries should be able to operate a full collection of nodes just as effectively as those in developed nations.
+
+All indications are that success is mathematically possible.
 
 ---
 
@@ -74,7 +79,7 @@ The RoboTorq Reserve System is now and always will be lightweight enough to run 
 | L1 | TokenTorqIngot | 3,600 units of Ore | 1,000 per certificate | Merkle branch root + Signed | Batched for minting |
 | L2 | RoboTorq Certificate | 1,000 ingots (3.6M units of Ore) | Basis for reserve | Merkle batch root + Signed | Monetary Backing |
 | L3 | RoboTorqUnits | Certificate-Backed, Digital, 1:1 | Dynamic | Signed Distribution Events | Circulation |
-| L4 | Bearer Bond | Certificate-Backed, Physcal, 1:1 | Dynamic | Merkle Cert Collection + Signed | Circulation |
+| L4 | Bearer Bond | Certificate-Backed, Physical, 1:1 | Dynamic | Merkle Cert Collection + Signed | Circulation |
 
 Formula relationships:
 `1 TokenTorqIngot = 3,600 JouleTorqOre units`
@@ -275,7 +280,7 @@ Apache License 2.0 with Patent Pledge - see [`LICENSE`](./LICENSE) for details.
 - Energy tracking and cryptographic signing
 - Merkle tree aggregation at all layers (except physical bearer bond merkles, depends on vault)
 - Wallet recieves UBD, but cannot spend
-- Prometheus + Grafana observability (Watch the cypto pipeline in action)
+- Prometheus + Grafana observability (Watch the crypto pipeline in action)
 
 **In Progress**:
 - Vault System fully designed, but not implemented.
