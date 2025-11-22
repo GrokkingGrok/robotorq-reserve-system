@@ -3,13 +3,14 @@
 
 The RoboTorq Reserve System is an open source, decentralized, Universal Basic Dividend-Paying monetary system.
 
-## What is RoboTorq?
-
-A deterministic, physics-backed reserve currency generated from cryptographically verified robotic labor, without blockchain mining or speculative inflation. Minted and traded digitally initially, RoboTorq Bearer Bonds can be redeemed physically from any 3D printer.
-
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://www.docker.com/)
 ![Status](https://img.shields.io/badge/status-pre-release-orange)
+
+
+## What is RoboTorq?
+
+A deterministic, physics-backed reserve currency generated from cryptographically verified robotic labor, without blockchain mining or speculative inflation. Minted and traded digitally initially, RoboTorq Bearer Bonds can be redeemed physically from any 3D printer.
 
 ---
 
@@ -89,7 +90,7 @@ Formula relationships:
 `1 TokenTorqIngot = 3,600 JouleTorqOre units`
 `1 RoboTorq Certificate = 1,000 ingots = 3,600,000 Ore units`
 
-Extended economic flow & vault mechanics: see [`docs/ECONOMICS_OVERVIEW.md`](./docs/ECONOMICS_OVERVIEW.md).
+Extended layered explanation: see [`ROBOTORQ_CONCEPT_STACK_V1.md`](./ROBOTORQ_CONCEPT_STACK_V1.md).
 
 
 ---
@@ -97,7 +98,7 @@ Extended economic flow & vault mechanics: see [`docs/ECONOMICS_OVERVIEW.md`](./d
 ## Quick Start
 
 ```bash
-git clone https://github.com/GrokkingGrok/robotorq-reserve-system.git
+git clone https://github.com/GrokkingGrok/robotorq-reserve-system
 cd robotorq-reserve-system
 docker compose up -d
 docker compose ps            # all services “healthy”
@@ -186,12 +187,12 @@ RoboTorq uses a **message-passing architecture** (NATS pub/sub) with services th
 
 Note on "printer" module: 3D-printers are considered robots by this system. The current Mock Printer setup allows you to generate ore for the pipeline. Printer logic will soon involve printing physical RoboTorq as well.
 
-![CAD drawing of RoboTorq coin](images\RoboTorqCoinCAD.PNG)
+![CAD drawing of RoboTorq coin](images/RoboTorqCoinCAD.PNG)
 
 ---
 
 ## Companion Simulator Repo
-The RoboTorq Reserve System is designed (not yet immplemented, see [research\SIMULATION_FRAMEWORK.md](research\SIMULATION_FRAMEWORK.md)) to run simulations on production code by scaling the waits that slow down Digger contract execution logic to be "real-tme".
+The RoboTorq Reserve System is designed to run simulations on production code (not yet implemented, see [research/SIMULATION_FRAMEWORK.md](research/SIMULATION_FRAMEWORK.md)) by scaling the waits that slow down Digger contract execution logic to be "real-time" in production.
 
 This planned academic-grade simulator will require minimal refactoring, and will be the primary focus after the first physical Bearer Bond RoboTorq prototype has been printed and tagged. Current expected delivery of first scannable, physical RoboTorq prototype in January-February 2026 (hardware integration, unknown landmines exist).
 
@@ -201,7 +202,7 @@ The simulator configuration logic will live under a different repo and a GPL lic
 
 ### High-Level Flow
 
-`Robot → Digger → Refinery → Mint → DistoDam → Wallet`
+`Robot → Digger → Refinery → Mint → Vault → Wallet`
 
 ---
 
@@ -267,10 +268,10 @@ See [`BRANCHING.md`](./BRANCHING.md) for the complete development workflow, incl
 Contributions welcome (and needed)! Please see [`CONTRIBUTING.md`](./CONTRIBUTING.md) for guidelines.
 
 **Key Points**:
-- Follow the Power Workflow in `BRANCHING.md`
+- Follow the branching strategy in `BRANCHING.md`
 - Write tests (80%+ unit coverage target, cover remaining with integration and e2e)
-- Use Conventional Commits format
-- Update architecture docs when changing designs
+- Use Conventional Commits format if you know it
+- Update architecture docs when proposing changing designs
 
 ---
 
