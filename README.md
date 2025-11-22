@@ -1,24 +1,29 @@
-# The RoboTorq Reserve System
+# The RoboTorq Reserve System Paper
+*Author*: Jonathan Clark
 
 The RoboTorq Reserve System is an open source, decentralized, Universal Basic Dividend-Paying monetary system.
 
 ## What is RoboTorq?
 
-A deterministic, physics-backed reserve currency generated from cryptographically verified robotic labor, without blockchain mining or speculative inflation. Minted and traded digitally initially, RoboTorq can be redeemed physically from any 3D printer.
+A deterministic, physics-backed reserve currency generated from cryptographically verified robotic labor, without blockchain mining or speculative inflation. Minted and traded digitally initially, RoboTorq Bearer Bonds can be redeemed physically from any 3D printer.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://www.docker.com/)
-![Status](https://img.shields.io/badge/status-pre--release-orange)
+![Status](https://img.shields.io/badge/status-pre-release-orange)
 
 ---
 
-## TL;DR
+## Executive TL;DR
 - Not a cryptocurrency: no mining, no gas, no chain bloat.
-- 1 RoboTorq = 1 hour of cryptographically proven robotic labor.
-- Proof chain compresses raw token work → ingots → certificates.
-- Demurrage (hoarding fee) drives circulation + funds operations.
+- 1 RoboTorq = 1 kWh x 1 token/second = 1 *thermodynamically ideal* hour of cryptographically proven robotic labor (imagine an economic Carnot Heat Engine in modern robotic form)
+- Proof chain compresses raw token x energy "ore" data → ingots → certificates.
+- Demurrage (hoarding fee) drives circulation + funds new robotic labor to make new currency.
 - One command to run: `docker compose up -d`.
-- Everything merklized & signed at each layer.
+- Everything merklized & signed at multiple layers.
+
+The RoboTorq Reserve System circulates a hard currency in a closed-loop economy. The self-regulating system is designed such that the collateral can, mathematically speaking, never run dry... but only so long as people choose to keep using it.
+
+How? Every atomic investment in robotic labor creates more RoboTorq, bounded by the laws of physics. The closed loop design + contract approval vault check + demurrage ensures the `StakeVault` never accepts a contract it can't fund.
 
 ---
 
@@ -43,32 +48,31 @@ A deterministic, physics-backed reserve currency generated from cryptographicall
 
 ## Philosophy
 
-> **"Watts > Wall Street"**
+*"Watts > Wall Street"*
 
-The RoboTorq Reserve System challenges the assumption that money must be:
-- Created by governments (centralized)
-- Mined wastefully (Bitcoin)
-- Backed by speculation (fiat/altcoins)
+RoboTorq challenges three assumptions:
+- Money must be state-issued
+- Mining must waste energy
+- Value must be speculative
 
-Instead, we anchor value to **measurable physics**: energy and computation consumed performing useful robotic labor, where the selling price is arranged in advance, and therefore the value to be generated as money and distributed is mathematically knowable. 
+Instead, RoboTorq anchors value to *measurable physics* — actual energy and computation consumed by contracted robotic labor. Each unit is minted only after the work is performed, priced in advance, and cryptographically proven.
 
-Every RoboTorq represents real work that actually happened, cryptographically proven at every layer.
+Every RoboTorq corresponds to real, verifiable work. This is not “blockchain because blockchain” (there is no blockchain). 
 
-This is not "blockchain for blockchain's sake"—it's a **reserve system** where robotic labor creates tangible value that can be verified, traded, and used to compensate humans in the form of a universal basic dividend.
+It’s a reserve system where robotic labor produces tangible, auditable, certificate-backed currency and enables universal basic dividends without political inflation games or Wall Street speculation.
+
+Demurrage-free savings and investment schemas ensure liquidity, while demurrage on idle wallets yields interest to savers and funds Robotic Labor. All Bearer Bonds are demurrage exempt and can be printed at home because printing does not equal minting in the RoboTorq Reserve System.
 
 ## Why No Blockchain?
 
-RoboTorq uses a lightweight message-passing network (NATS) and certificate-backing instead of blockchain consensus.
+RoboTorq uses a lightweight, message-passing network (NATS) and vaulted certificate-backed proofs instead of global consensus.
+- Certificates remain inside distributed vaults
+- All vaulted artifacts are signed, merklized, and linked
+- No mining, no gas, no chain bloat, no global ledger
 
-All proofs are signed, merklized, and linked, but RoboTorq Certificates never leave the distributed vaults.
+The core system is intentionally compact — with each service designed to eventually run on a small cluster of Raspberry Pis + minimal storage if need be — so communities with limited resources could hypothetically operate local reserve system nodes on the same footing as anyone else.
 
-There is **no mining**, **no global transaction ledger**, and **no chain data bloat**.
-
-The RoboTorq Reserve System is now and always will be lightweight enough to run on about a dozen Raspberry Pis — by design, not as a stunt. 
-
-The architecture design scales horizontally, easily deployable even on low-power hardware. The goal is that citizens of developing countries should be able to operate a full collection of nodes just as effectively as those in developed nations.
-
-All indications are that success is mathematically possible.
+Any productive machine (3D printers, CNCs, Cricuts, etc.) can act as a tracked robot, creating a low-barrier, closed-loop economy. If participants choose to use it, the system can sustain itself mathematically through continuous, provable robotic labor rather than speculative growth.
 
 ---
 
@@ -96,8 +100,17 @@ Extended economic flow & vault mechanics: see [`docs/ECONOMICS_OVERVIEW.md`](./d
 git clone https://github.com/GrokkingGrok/robotorq-reserve-system.git
 cd robotorq-reserve-system
 docker compose up -d
-docker compose ps            # all services “Up”
+docker compose ps            # all services “healthy”
+python ./tests/integration/hardware/test_printer_flow.py
+# open browser to http://localhost:3001/ for Grafana metric Dashboard
 ```
+
+**Monitoring**: 
+- Grafana http://localhost:3001 (admin/admin) ⚠️ **Local dev only** — change password before exposing to network
+- Grafana/robotorq-complete-pipeline.json (fully configured pipeline viewer definition)
+
+![The RoboTorq Crypto Pipeline Viewer in Grafana](images/grafana-dashboard01.PNG)
+
 
 **Logs**: 
 ```bash
@@ -113,10 +126,6 @@ python scripts/logs/mintlogs.py --tail 100
 # Follow logs in real-time (skip initial tail, stream continuously)
 python scripts/logs/mintlogs.py -f
 ```
-
-**Monitoring**: 
-- Grafana http://localhost:3000 (admin/admin)
-- Grafana/robotorq-complete-pipeline.json (fully configured pipeline viewer definition)
 
 
 **Stop**:
@@ -140,7 +149,7 @@ That's it. Everything runs in containers.
 ### Unit Tests (Go)
 ```bash
 # Run all Go tests with coverage
-cd src/mint  # or refinery, distodam, etc.
+cd src/mint  # or refinery, digger, etc.
 go test ./... -v -cover -race
 ```
 
@@ -171,9 +180,22 @@ RoboTorq uses a **message-passing architecture** (NATS pub/sub) with services th
 - **Digger**: Tracks contracted robotic labor, measures energy, creates signed proof units of Ore
 - **Refinery**: Aggregates 3,600 proof units into ingots with merkle branch hashes
 - **Mint**: Validates 1,000 ingots, builds merkle tree, mints 1 RoboTorq unit
-- **DistoDam**: Distributes minted units to wallets based on demurrage model
+- **DistoDam** – Distributor + proto-Vault (will be replaced by full Vault)
 - **Wallet**: Manages balances, transactions, and unit verification
-- **Printer**: Registration service for new diggers joining the network
+- **Printer**: (aka a productive robot) track a mock printer as a test robot
+
+Note on "printer" module: 3D-printers are considered robots by this system. The current Mock Printer setup allows you to generate ore for the pipeline. Printer logic will soon involve printing physical RoboTorq as well.
+
+![CAD drawing of RoboTorq coin](images\RoboTorqCoinCAD.PNG)
+
+---
+
+## Companion Simulator Repo
+The RoboTorq Reserve System is designed (not yet immplemented, see [research\SIMULATION_FRAMEWORK.md](research\SIMULATION_FRAMEWORK.md)) to run simulations on production code by scaling the waits that slow down Digger contract execution logic to be "real-tme".
+
+This planned academic-grade simulator will require minimal refactoring, and will be the primary focus after the first physical Bearer Bond RoboTorq prototype has been printed and tagged. Current expected delivery of first scannable, physical RoboTorq prototype in January-February 2026 (hardware integration, unknown landmines exist).
+
+The simulator configuration logic will live under a different repo and a GPL license: [Project Asimov](https://github.com/GrokkingGrok/Project-Asimov)
 
 ---
 
@@ -242,7 +264,7 @@ See [`BRANCHING.md`](./BRANCHING.md) for the complete development workflow, incl
 
 ## Contributing
 
-Contributions welcome! Please see [`CONTRIBUTING.md`](./CONTRIBUTING.md) (coming soon) for guidelines.
+Contributions welcome (and needed)! Please see [`CONTRIBUTING.md`](./CONTRIBUTING.md) for guidelines.
 
 **Key Points**:
 - Follow the Power Workflow in `BRANCHING.md`
@@ -254,7 +276,7 @@ Contributions welcome! Please see [`CONTRIBUTING.md`](./CONTRIBUTING.md) (coming
 
 ## Security
 
-For security concerns or vulnerability reports, see [`SECURITY.md`](./SECURITY.md) (coming soon).
+For security concerns or vulnerability reports, see [`SECURITY.md`](./SECURITY.md).
 
 **Current Status**: Pre-release development on `release/v0-cleanup` branch. Not production-ready.
 
@@ -271,23 +293,38 @@ Apache License 2.0 with Patent Pledge - see [`LICENSE`](./LICENSE) for details.
 
 ## Status
 
+The RoboTorq Reserve System has been designed and built up to release by the author alone.
+
+This isn't a "flex": the author can't proceed too much further without expert help.
+
 **Current Phase**: v0 Cleanup & Open Source Preparation  
 **Branch**: `release/v0`  
 **Target**: Public release with working crypto pipeline, extensive documentation, and observability.
 
 **What Works**:
 - Complete proof chain (Robot → Digger → Refinery → Mint → DistoDam)
-- Energy tracking and cryptographic signing
-- Merkle tree aggregation at all layers (except physical bearer bond merkles, depends on vault)
-- Wallet recieves UBD, but cannot spend
 - Prometheus + Grafana observability (Watch the crypto pipeline in action)
+- Basic labor tracking
+- Cryptographic signing
+- Merkle tree aggregation at all layers (except physical bearer bond merkles, depends on vault)
+- Persistance of some data
+- Wallet recieves UBD, but cannot spend
 
 **In Progress**:
-- Vault System fully designed, but not implemented.
+- In-Flight mint ingot recovery backend implemented, needs integration
+- Vault System fully designed, but not implemented, will be rust
+- DistoDam will be replaced by Vault logic
+- Mock-Printer to Real 3D Printer (aka robot)
 - Comprehensive documentation
-- Security audit and hardening
-- Trust service (Executes Contracts)
-- BidNet (invest in robotic labor projects)
+- Simulator configuration design
+
+
+**Effectively Blocked**:
+- Security audit and hardening (high priority, expert needed)
+- Trust service needs full rewrite, rust preferred (Executes Contracts, needs vault first)
+- BidNet (invest in robotic labor projects, needs vault first) not started, but high-level design known.
+- Horizontal scaling (distributed systems experts needed)
+- Build/dependency improvements (experts needed)
 
 ---
 

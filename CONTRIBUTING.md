@@ -2,7 +2,7 @@
 
 Thanks for jumping in. This is the short, human version. If anything below feels heavy, ignore the optional bits and open a PR — we can guide you.
 
-## Super Simple Flow (90% of contributions)
+## Super Simple Flow (little contributions)
 1. Create a branch: `git checkout -b feature/<thing-you-fixed>`
 2. Make the change.
 3. Add/adjust a test (if it’s code, not docs).
@@ -28,8 +28,8 @@ That’s it. Fancy process only for big architectural shifts.
 - Create feature branches: `feature/<concise-kebab-description>`.
 - Avoid rebasing public branches; use merges or squash at PR completion.
 
-## Commit Messages (Lightweight)
-Use whatever is readable. Conventional Commits are nice but optional.
+## Commit Messages
+Use whatever is readable and verbose enough to explain the key issues.
 
 Handy patterns:
 ```
