@@ -54,4 +54,3 @@ node_modules/
 Thumbs.db
 *.orig
 
-# Duplicate pattern cleanup (SQLite already covered above)
