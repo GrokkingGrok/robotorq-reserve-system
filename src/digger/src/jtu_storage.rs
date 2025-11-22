@@ -5,10 +5,27 @@ use rusqlite::{Connection, params, Result as SqliteResult};
 use serde::{Serialize, Deserialize};
 use std::path::PathBuf;
 
-/// JouleTorqUnit - The atomic unit of the RoboTorq system
-/// 
-/// Every token becomes exactly ONE JTU. This preserves the complete
-/// proof chain from token → unit → ingot → batch → mint.
+/// JouleTorqUnit – atomic record for a single token's work.
+///
+/// A JTU represents the cross product of energy consumed while that
+/// token was being processed (power draw × elapsed seconds → joules)
+/// plus its stake cost at time of execution. There is one JTU per
+/// token index, but the joules field can span the entire execution
+/// interval for that token (it is not a trivial 1:1 sample; it is the
+/// accumulated consumption for that token's lifecycle slice).
+///
+/// Invariants:
+/// * `joules_consumed` = total joules for THIS token's processing window
+/// * `robo_stake_paid` = stake cost allocated to THIS token
+/// * `hash` commits to all other fields (stable canonical encoding)
+/// * No post‑hoc mutation; disputes rely on immutability
+///
+/// Purpose:
+/// * Local retention (≈30 days) for dispute proofs / rehash verification
+/// * Source material for downstream ingot assembly (transmit only hashes)
+///
+/// Future (phase‑4 crypto): replace `signature` with Falcon‑1024 and
+/// populate `digger_id` from registration before persistence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JouleTorqUnit {
     pub hash: String,              // SHA256 hash (32 bytes, 64 hex chars)
@@ -30,21 +47,23 @@ pub struct JouleTorqUnit {
     pub robo_stake_paid: f64,      // Cost of THIS token
 }
 
-/// JTU Storage Manager - One SQLite database per contract
-/// 
-/// Why per-contract databases?
-/// 1. Easy cleanup (delete old contracts)
-/// 2. Parallel access (no lock contention)
-/// 3. Clean separation (disputes per contract)
-/// 4. Simple backup (copy one .db file)
+/// JtuStorageManager – per‑contract SQLite shard for JTU persistence.
+///
+/// Design goals:
+/// * Fast lookups for dispute resolution (hash → full JTU)
+/// * Parallelism: separate DB file removes cross‑contract contention
+/// * Lifecycle: whole contract data can be pruned / archived atomically
+/// * Simplicity: plain file copy for backup, easy deletion for expiry
+///
+/// Not a global DB on purpose; size & isolation keep downstream hashing
+/// predictable and simplify cleanup.
 pub struct JtuStorageManager {
     storage_path: PathBuf,
 }
 
 impl JtuStorageManager {
-    /// Create new storage manager
-    /// 
-    /// Creates the storage directory if it doesn't exist.
+    /// Construct a manager rooted at `storage_path`.
+    /// Ensures directory exists. Does *not* open any DB until needed.
     pub fn new(storage_path: PathBuf) -> SqliteResult<Self> {
         std::fs::create_dir_all(&storage_path)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
@@ -52,10 +71,10 @@ impl JtuStorageManager {
         Ok(Self { storage_path })
     }
     
-    /// Get connection to contract-specific database
-    /// 
-    /// Creates table if it doesn't exist. Schema includes ALL fields
-    /// needed for dispute resolution (not just the hash!).
+    /// Get (and lazily initialize) a connection for `contract_id`.
+    /// Creates schema & indexes on first use. Returns a fresh `Connection`.
+    /// Caller should keep the connection short‑lived (no pooling required
+    /// at current scale; SQLite handles file locking internally).
     pub fn get_connection(&self, contract_id: &str) -> SqliteResult<Connection> {
         let db_path = self.storage_path.join(format!("{}.db", contract_id));
         let conn = Connection::open(db_path)?;
@@ -90,10 +109,8 @@ impl JtuStorageManager {
         Ok(conn)
     }
     
-    /// Insert a JTU into storage
-    /// 
-    /// This is the LOCAL proof of work. The Digger OWNS this data
-    /// for 30 days and can provide it on demand for disputes.
+    /// Insert a single JTU (fails if `hash` already exists).
+    /// Local proof retained up to retention window (see `prune_old`).
     pub fn insert_jtu(&self, jtu: &JouleTorqUnit) -> SqliteResult<()> {
         let conn = self.get_connection(&jtu.contract_id)?;
         
@@ -115,10 +132,8 @@ impl JtuStorageManager {
         Ok(())
     }
     
-    /// Batch insert JTUs (faster for bulk operations)
-    /// 
-    /// Uses a transaction to insert multiple JTUs at once.
-    /// ~5,000 inserts/sec on typical hardware.
+    /// Insert many JTUs atomically inside one transaction.
+    /// Approx throughput: ~5k inserts/sec typical dev hardware.
     pub fn insert_batch(&self, jtus: &[JouleTorqUnit]) -> SqliteResult<()> {
         if jtus.is_empty() {
             return Ok(());
@@ -150,10 +165,8 @@ impl JtuStorageManager {
         Ok(())
     }
     
-    /// Get all hashes for a contract (for network transmission)
-    /// 
-    /// Returns ONLY the hashes (32 bytes each), not full JTUs.
-    /// This is what gets sent to the Refinery (hash-only transmission).
+    /// Return all JTU hashes for `contract_id`, ordered by timestamp.
+    /// Only lightweight hash list (used for refinery transmission).
     pub fn get_all_hashes(&self, contract_id: &str) -> SqliteResult<Vec<String>> {
         let conn = self.get_connection(contract_id)?;
         
@@ -164,17 +177,15 @@ impl JtuStorageManager {
         Ok(hashes)
     }
     
-    /// Get JTU count for a contract
+    /// Count total JTUs stored for `contract_id`.
     pub fn get_jtu_count(&self, contract_id: &str) -> SqliteResult<i64> {
         let conn = self.get_connection(contract_id)?;
         let count: i64 = conn.query_row("SELECT COUNT(*) FROM jtus", [], |row| row.get(0))?;
         Ok(count)
     }
     
-    /// Get full JTU by hash (for dispute resolution)
-    /// 
-    /// This is used when someone challenges a hash. The Digger can
-    /// provide the full JTU data to prove the hash is valid.
+    /// Fetch full JTU for `hash`. Returns `Ok(None)` if not present.
+    /// Used to satisfy dispute proofs beyond bare hash transmission.
     pub fn get_jtu_by_hash(&self, contract_id: &str, hash: &str) -> SqliteResult<Option<JouleTorqUnit>> {
         let conn = self.get_connection(contract_id)?;
         
@@ -205,10 +216,8 @@ impl JtuStorageManager {
         }
     }
     
-    /// Prune old JTUs (30-day cleanup)
-    /// 
-    /// Diggers are only responsible for storing proofs for 30 days.
-    /// After that, the data can be archived or deleted.
+    /// Delete JTUs older than `days` for given contract. Returns count removed.
+    /// Recommended default: 30 days (post‑dispute window).
     pub fn prune_old(&self, contract_id: &str, days: i64) -> SqliteResult<usize> {
         let conn = self.get_connection(contract_id)?;
         let cutoff = chrono::Utc::now().timestamp() - (days * 86400);
@@ -219,7 +228,7 @@ impl JtuStorageManager {
         )
     }
     
-    /// Get storage stats for a contract
+    /// Aggregate simple stats (count, total joules, total stake) for contract.
     pub fn get_stats(&self, contract_id: &str) -> SqliteResult<StorageStats> {
         let conn = self.get_connection(contract_id)?;
         
