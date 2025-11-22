@@ -11,7 +11,6 @@ type Phase3RoboTorqUnit struct {
 	TreeHeight     int       `json:"tree_height"`
 	RoboStakeTotal float64   `json:"robo_stake_total"`
 	ContractIDs    []string  `json:"contract_ids"`
-	DiggerIDs      []string  `json:"digger_ids"`
 	MerkleProofAPI string    `json:"merkle_proof_api"`
 	MintedAt       time.Time `json:"minted_at"`
 	Signature      string    `json:"signature,omitempty"`

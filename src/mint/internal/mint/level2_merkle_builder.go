@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"runtime"
 	"sync"
 
 	"b2b/mint/internal/models"
@@ -123,6 +124,11 @@ func (b *Level2MerkleBuilder) BuildLevel2Tree(ctx context.Context) (*Level2Merkl
 		return nil, fmt.Errorf("failed to get hash batch from queue: %w", err)
 	}
 
+	// If context was cancelled after draining partial entries, do not build a tree
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	b.logger.Info("building Level 2 merkle tree",
 		"hash_count", len(entries))
 
@@ -222,26 +228,32 @@ func buildMerkleTree(hashes []string) (string, int, [][]string, error) {
 		numPairs := (len(currentLevel) + 1) / 2
 		nextLevel := make([]string, numPairs)
 
-		// Use parallel processing for larger batches (>100 pairs)
-		// This threshold avoids goroutine overhead for small batches
+		// Use parallel processing for larger batches (>100 pairs) with a worker pool
+		// Avoid spawning a goroutine per pair which was slower than sequential.
 		if numPairs > 100 {
+			workers := runtime.NumCPU()
+			if workers > numPairs {
+				workers = numPairs
+			}
 			var wg sync.WaitGroup
-			for i := 0; i < len(currentLevel); i += 2 {
-				wg.Add(1)
-				idx := i
-				pairIdx := i / 2
-				go func() {
+			wg.Add(workers)
+			for w := 0; w < workers; w++ {
+				pStart := (numPairs * w) / workers     // pair index start
+				pEnd := (numPairs * (w + 1)) / workers // pair index end (exclusive)
+				go func(ps, pe int) {
 					defer wg.Done()
-					var combinedHash string
-					if idx+1 < len(currentLevel) {
-						// Pair exists: hash(left + right)
-						combinedHash = hashPair(currentLevel[idx], currentLevel[idx+1])
-					} else {
-						// Odd number: duplicate last hash
-						combinedHash = hashPair(currentLevel[idx], currentLevel[idx])
+					for p := ps; p < pe; p++ {
+						leftIdx := p * 2
+						rightIdx := leftIdx + 1
+						var combinedHash string
+						if rightIdx < len(currentLevel) {
+							combinedHash = hashPair(currentLevel[leftIdx], currentLevel[rightIdx])
+						} else {
+							combinedHash = hashPair(currentLevel[leftIdx], currentLevel[leftIdx])
+						}
+						nextLevel[p] = combinedHash
 					}
-					nextLevel[pairIdx] = combinedHash
-				}()
+				}(pStart, pEnd)
 			}
 			wg.Wait()
 		} else {

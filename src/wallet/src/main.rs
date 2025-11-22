@@ -264,7 +264,7 @@ async fn verify_certificate_with_mint(
     unit_id: &str,
 ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let mint_verification_url = std::env::var("MINT_VERIFICATION_URL")
-        .unwrap_or_else(|_| "http://mint:8081/verify/certificate".to_string());
+        .unwrap_or_else(|_| "http://mint:8080/verify/certificate".to_string());
 
     let client = reqwest::Client::new();
     let request_body = serde_json::json!({

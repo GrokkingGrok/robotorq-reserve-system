@@ -162,6 +162,20 @@ func (q *IngotHashQueue) GetIngotHashes(ctx context.Context) ([]*models.IngotHas
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	// Cancellation interrupter: ensures a waiting GetIngotHashes unblocks when ctx cancelled.
+	doneCh := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			// Wake any Waiters so cancellation can be observed in loop condition.
+			q.mu.Lock()
+			q.notFull.Broadcast()
+			q.mu.Unlock()
+		case <-doneCh:
+		}
+	}()
+	defer close(doneCh)
+
 	startWait := prometheus.NewTimer(q.metrics.GetBlockedDuration)
 	defer startWait.ObserveDuration()
 
@@ -186,7 +200,7 @@ func (q *IngotHashQueue) GetIngotHashes(ctx context.Context) ([]*models.IngotHas
 			// Continue to wait
 		}
 
-		q.notFull.Wait() // Wait releases lock, re-acquires when signaled
+		q.notFull.Wait() // Wait releases lock, re-acquires when signaled (broadcast on cancellation)
 	}
 
 	// Extract exactly batchSize entries

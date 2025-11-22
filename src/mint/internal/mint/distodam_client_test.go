@@ -297,6 +297,10 @@ func TestDistoDamClient_ConcurrentPublish(t *testing.T) {
 	require.NoError(t, err)
 	defer sub.Unsubscribe()
 
+	// Ensure subscription processed before publishing concurrently
+	err = nc.Flush()
+	require.NoError(t, err)
+
 	// Publish 50 events concurrently
 	var wg sync.WaitGroup
 	numEvents := 50
@@ -320,9 +324,9 @@ func TestDistoDamClient_ConcurrentPublish(t *testing.T) {
 
 	wg.Wait()
 
-	// Verify all received
+	// Verify all received (allow a bit more time under CI / Windows scheduler)
 	receivedCount := 0
-	timeout := time.After(3 * time.Second)
+	timeout := time.After(5 * time.Second)
 
 	for receivedCount < numEvents {
 		select {

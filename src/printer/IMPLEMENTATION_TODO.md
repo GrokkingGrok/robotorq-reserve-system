@@ -1243,7 +1243,7 @@ Start-Sleep -Seconds 3
 
 # Step 2: Check printer registered
 Write-Host "[2] Checking printer registration..." -ForegroundColor Yellow
-$printers = Invoke-RestMethod -Uri "http://localhost:8084/printers"
+$printers = Invoke-RestMethod -Uri "http://localhost:8080/printers"
 
 if ($printers.Count -eq 0) {
     Write-Host "❌ No printers registered" -ForegroundColor Red
@@ -1262,7 +1262,7 @@ $printRequest = @{
     print_request_id = "print-req-test-001"
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri "http://localhost:8084/print" `
+Invoke-RestMethod -Uri "http://localhost:8080/print" `
     -Method Post `
     -ContentType "application/json" `
     -Body $printRequest
@@ -1274,7 +1274,7 @@ $timeout = 60
 $elapsed = 0
 
 while ($elapsed -lt $timeout) {
-    $status = Invoke-RestMethod -Uri "http://localhost:8084/status"
+    $status = Invoke-RestMethod -Uri "http://localhost:8080/status"
     
     Write-Host "  Status: $($status.current_status)" -ForegroundColor Cyan
     
@@ -1283,7 +1283,7 @@ while ($elapsed -lt $timeout) {
         Write-Host "  (Simulating NFC tag placement...)" -ForegroundColor Yellow
         
         # Simulate NFC tag detected
-        Invoke-RestMethod -Uri "http://localhost:8084/nfc/detected" -Method Post
+        Invoke-RestMethod -Uri "http://localhost:8080/nfc/detected" -Method Post
         break
     }
     
@@ -1295,7 +1295,7 @@ while ($elapsed -lt $timeout) {
 Write-Host "[5] Waiting for print completion..." -ForegroundColor Yellow
 
 while ($elapsed -lt 300) {  # 5 min timeout
-    $status = Invoke-RestMethod -Uri "http://localhost:8084/status"
+    $status = Invoke-RestMethod -Uri "http://localhost:8080/status"
     
     if ($status.current_status -eq "complete") {
         Write-Host "✅ Print complete!" -ForegroundColor Green

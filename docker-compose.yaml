@@ -58,11 +58,9 @@ services:
     build: ./src/mint
     ports:
       - "50051:50051"
-      - "8080:8080"
-      - "8084:8081"  # Phase 5: Verification API (host:8084 -> container:8081)
-      - "9090:9090"
+      - "8080:8080"  # Unified Mint HTTP + Verification API
+      - "9090:9090"  # Prometheus metrics
     environment:
-      - HTTP_PORT=8080
       - NATS_URL=nats://nats:4222
       - BATCH_SIZE=1000  # Phase3 units require exactly 1000 Phase2Ingots
       - FLUSH_INTERVAL=60s
@@ -185,7 +183,7 @@ services:
       - NATS_URL=nats://nats:4222
       - HTTP_PORT=8080
       - RUST_LOG=wallet=info,tower_http=info
-      - MINT_VERIFICATION_URL=http://mint:8081/verify/certificate
+      - MINT_VERIFICATION_URL=http://mint:8080/verify/certificate
     depends_on:
       nats:
         condition: service_healthy

@@ -108,7 +108,7 @@ func NewVerificationMetrics(reg prometheus.Registerer) *VerificationMetrics {
 //   - proofCache: Cache of Level2MerkleResults for proof generation
 //   - signatureArchive: Archive of SPHINCS+ signatures
 //   - publicKey: Mint's SPHINCS+ public key (hex-encoded) for distribution
-//   - port: HTTP port to listen on (e.g., ":8081")
+//   - port: HTTP port to listen on (e.g., ":8080")
 //   - logger: Structured logger
 //   - metrics: Prometheus metrics
 //
@@ -541,14 +541,14 @@ func (h *VerificationHandler) handleCertificateVerification(w http.ResponseWrite
 		"merkle_root", req.MerkleRoot)
 
 	h.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"valid":        true,
-		"merkle_root":  req.MerkleRoot,
-		"unit_id":      unitID,
-		"minted_at":    mintedAt,
-		"tree_height":  merkleResult.TreeHeight,
-		"ingot_count":  len(merkleResult.HashEntries),
-		"verified_by":  "RoboTorq Mint",
-		"verified_at":  prometheus.NewTimer(nil).ObserveDuration().String(),
+		"valid":       true,
+		"merkle_root": req.MerkleRoot,
+		"unit_id":     unitID,
+		"minted_at":   mintedAt,
+		"tree_height": merkleResult.TreeHeight,
+		"ingot_count": len(merkleResult.HashEntries),
+		"verified_by": "RoboTorq Mint",
+		"verified_at": prometheus.NewTimer(nil).ObserveDuration().String(),
 	})
 }
 
@@ -569,7 +569,7 @@ func (h *VerificationHandler) handleCertificateVerification(w http.ResponseWrite
 //
 // Usage:
 //
-//	curl http://mint:8081/public-key
+//	curl http://mint:8080/public-key
 func (h *VerificationHandler) handlePublicKey(w http.ResponseWriter, r *http.Request) {
 	h.logger.Debug("public key request")
 

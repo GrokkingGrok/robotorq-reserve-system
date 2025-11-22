@@ -32,7 +32,7 @@ func TestVerificationHandler_SignatureRequest_Success(t *testing.T) {
 	err := signatureArchive.Store(testRecord)
 	require.NoError(t, err)
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8080", logger, metrics)
 
 	// Create signature request
 	req := httptest.NewRequest(http.MethodGet, "/verify/signature/RT-test-unit-001", nil)
@@ -65,7 +65,7 @@ func TestVerificationHandler_SignatureRequest_NotFound(t *testing.T) {
 	proofCache := NewProofCache()
 	signatureArchive := NewSignatureArchive()
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8080", logger, metrics)
 
 	// Request non-existent signature
 	req := httptest.NewRequest(http.MethodGet, "/verify/signature/RT-nonexistent-unit", nil)
@@ -90,7 +90,7 @@ func TestVerificationHandler_SignatureRequest_MissingUnitID(t *testing.T) {
 	proofCache := NewProofCache()
 	signatureArchive := NewSignatureArchive()
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8080", logger, metrics)
 
 	// Request with empty unit_id
 	req := httptest.NewRequest(http.MethodGet, "/verify/signature/", nil)
@@ -132,7 +132,7 @@ func TestVerificationHandler_Health_IncludesSignatureCount(t *testing.T) {
 		SignedAt:   time.Now().UTC().Format(time.RFC3339),
 	})
 
-	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8081", logger, metrics)
+	handler := NewVerificationHandler(proofCache, signatureArchive, "test-public-key", ":8080", logger, metrics)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
