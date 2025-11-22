@@ -11,7 +11,7 @@ import requests
 import argparse
 import json
 
-MINT_API_URL = "http://localhost:8084"
+MINT_API_URL = "http://localhost:8080"
 
 def verify_merkle_proof(proof_type, item_id):
     """Verify merkle proof for token/ingot/unit"""

@@ -40,7 +40,7 @@ from nats.aio.client import Client as NATS
 # Service endpoints
 NATS_URL = "nats://localhost:4222"
 DIGGER_API = "http://localhost:3030"
-MINT_VERIFICATION_API = "http://localhost:8084"
+MINT_VERIFICATION_API = "http://localhost:8080"
 
 # NATS topics
 TOPIC_MINT_INGOTS = "mint.ingots"

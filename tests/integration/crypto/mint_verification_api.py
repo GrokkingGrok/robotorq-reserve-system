@@ -36,7 +36,7 @@ from fixtures.helpers import (
 )
 
 # Mint verification API endpoint
-MINT_VERIFICATION_API = "http://localhost:8084"
+MINT_VERIFICATION_API = "http://localhost:8080"
 
 # Container name
 MINT_CONTAINER = "robotorq-network-mint-1"

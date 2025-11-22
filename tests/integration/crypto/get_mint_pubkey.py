@@ -7,7 +7,7 @@ Usage: python get_mint_pubkey.py
 import requests
 import base64
 
-MINT_API_URL = "http://localhost:8084"
+MINT_API_URL = "http://localhost:8080"
 
 def get_public_key():
     """Get Mint's public key"""

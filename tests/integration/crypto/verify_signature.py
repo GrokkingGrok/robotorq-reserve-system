@@ -8,7 +8,7 @@ import requests
 import argparse
 import json
 
-MINT_API_URL = "http://localhost:8084"
+MINT_API_URL = "http://localhost:8080"
 
 def verify_signature(unit_id):
     """Verify a Phase3 unit's signature"""
