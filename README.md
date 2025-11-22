@@ -10,21 +10,28 @@ The RoboTorq Reserve System is an open source, decentralized, Universal Basic Di
 
 ## What is RoboTorq?
 
-A deterministic, physics-backed reserve currency generated from cryptographically verified robotic labor, without blockchain mining or speculative inflation. Minted and traded digitally initially, RoboTorq Bearer Bonds can be redeemed physically from any 3D printer.
+A deterministic, physics-backed reserve currency generated from cryptographically verified robotic labor, without blockchain mining or speculative inflation. Minted and traded digitally initially, the design also allows for RoboTorq Bearer Bonds to be redeemed physically from any 3D printer, at home, or stamped and sold *en masse*, all backed by on-grid, in-vault certificates on a distributed proof ledger.
 
 ---
 
 ## Executive TL;DR
-- Not a cryptocurrency: no mining, no gas, no chain bloat.
-- 1 RoboTorq = 1 kWh x 1 token/second = 1 *thermodynamically ideal* hour of cryptographically proven robotic labor (imagine an economic Carnot Heat Engine in modern robotic form)
+- Not a "cryptocurrency": no blockchain → no mining → no chain bloat.
+- 1 RoboTorq = Energy × Bonded Token Throughput (a cross-product)
+- Specifically, every joule is mapped to a Bonded Token as each are consumed.
+- Value emerges from both how much work is done and how efficiently it flows into the system.
 - Proof chain compresses raw token x energy "ore" data → ingots → certificates.
 - Demurrage (hoarding fee) drives circulation + funds new robotic labor to make new currency.
 - One command to run: `docker compose up -d`.
-- Everything merklized & signed at multiple layers.
 
-The RoboTorq Reserve System circulates a hard currency in a closed-loop economy. The self-regulating system is designed such that the collateral can, mathematically speaking, never run dry... but only so long as people choose to keep using it.
+## Abstract
 
-How? Every atomic investment in robotic labor creates more RoboTorq, bounded by the laws of physics. The closed loop design + contract approval vault check + demurrage ensures the `StakeVault` never accepts a contract it can't fund.
+The RoboTorq Reserve System circulates a certificate-backed currency in a closed-loop economy. The self-regulating system is designed such that the collateral can, mathematically speaking, never run dry... but only so long as people choose to keep using it.
+
+How? Every atomic investment in robotic labor, the collecitvely paid `RoboStake`, serves as the value basis for minting more RoboTorq, bounded by the laws of physics and smart contracts. The closed loop design + contract approval vault check + demurrage ensures the distributed `StakeVault` never accepts a contract it can't fund.
+
+The RoboTorq Reserve System isn't a government. It doesn't have to go into debt to pay a UBI. It simply accepts whatever growth stimulus we choose to give it, that it and we can already afford, and pays UBD based on that input.
+
+Long-term financing is achieved with collateralized, vaulted savings tied to UBD pledges.
 
 ---
 
@@ -36,6 +43,7 @@ How? Every atomic investment in robotic labor creates more RoboTorq, bounded by 
 - [Quick Start](#quick-start)
 - [Testing](#testing)
 - [Architecture Overview](#architecture-overview)
+- [Companion Simulator Repo](#companion-simulator-repo)
 - [Project Structure](#project-structure)
 - [Development Workflow](#development-workflow)
 - [Architecture Deep Dives](#architecture-deep-dives)
@@ -66,10 +74,11 @@ Demurrage-free savings and investment schemas ensure liquidity, while demurrage 
 
 ## Why No Blockchain?
 
-RoboTorq uses a lightweight, message-passing network (NATS) and vaulted certificate-backed proofs instead of global consensus.
+RoboTorq uses a lightweight, message-passing network (NATS), vaulted certificate-backed proofs, and cryptographically tracked issuance events instead of global consensus.
 - Certificates remain inside distributed vaults
 - All vaulted artifacts are signed, merklized, and linked
-- No mining, no gas, no chain bloat, no global ledger
+- No mining, no gas, no chain bloat, no global *transaction* ledger (proof ledgers are **tiny** by comparison)
+- Track a large nation-state economy of yearly proofs on several terabytes of distrbuted storage.
 
 The core system is intentionally compact — with each service designed to eventually run on a small cluster of Raspberry Pis + minimal storage if need be — so communities with limited resources could hypothetically operate local reserve system nodes on the same footing as anyone else.
 
@@ -84,7 +93,7 @@ Any productive machine (3D printers, CNCs, Cricuts, etc.) can act as a tracked r
 | L1 | TokenTorqIngot | 3,600 units of Ore | 1,000 per certificate | Merkle branch root + Signed | Batched for minting |
 | L2 | RoboTorq Certificate | 1,000 ingots (3.6M units of Ore) | Basis for reserve | Merkle batch root + Signed | Monetary Backing |
 | L3 | RoboTorqUnits | Certificate-Backed, Digital, 1:1 | Dynamic | Signed Distribution Events | Circulation |
-| L4 | Bearer Bond | Certificate-Backed, Physical, 1:1 | Dynamic | Merkle Cert Collection + Signed | Circulation |
+| L4 | Bearer Bond | Certificate-Backed, Physical, N:1 mapping | Dynamic | Merkle Cert Collection + Signed | Circulation |
 
 Formula relationships:
 `1 TokenTorqIngot = 3,600 JouleTorqOre units`
@@ -97,13 +106,15 @@ Extended layered explanation: see [`ROBOTORQ_CONCEPT_STACK_V1.md`](./ROBOTORQ_CO
 
 ## Quick Start
 
+Now that you understand what you'll be quick starting, here's how to do it.
+
 ```bash
 git clone https://github.com/GrokkingGrok/robotorq-reserve-system
 cd robotorq-reserve-system
 docker compose up -d
 docker compose ps            # all services “healthy”
 python ./tests/integration/hardware/test_printer_flow.py
-# open browser to http://localhost:3001/ for Grafana metric Dashboard
+# open browser to http://localhost:3001/ for Grafana metric Dashboard, watch the ore flow
 ```
 
 **Monitoring**: 
@@ -160,13 +171,13 @@ go test ./... -v -cover -race
 
 ```bash
 cd tests
-pytest integration/ -v
+pytest tests/integration/ -v
 ```
 
 ### End-to-End Tests (Python)
 ```bash
 cd tests
-python e2e/phase5_verification_flow.py
+python tests/e2e/test_full_pipeline.py
 ```
 
 **Test Documentation**: See [`tests/README.md`](./tests/README.md)
@@ -217,7 +228,7 @@ robotorq-reserve-system/
 │   ├── mint/           # Go: Ingot validation + RoboTorq minting
 │   ├── distodam/       # Go: Distribution with demurrage
 │   ├── wallet/         # Go: Balance + transaction management
-│   ├── printer/        # Go: A Mock 3D printer to act as robot's labor for tracking, will also print RoboTorq
+│   ├── printer/        # Rust: A Mock 3D printer to act as robot's labor for tracking, printers are a special type of robot that will also print RoboTorq
 │   ├── trust/          # Go: Contract Execution
 │   └── vault/          # Architecture docs for reserve system (planned)
 ├── tests/
@@ -228,9 +239,7 @@ robotorq-reserve-system/
 ├── docs/               # Architecture and phase completion docs
 ├── Grafana/            # Monitoring dashboards
 ├── docker-compose.yaml # Complete service orchestration
-├── MENTAL_MODEL.md     # Conceptual architecture guide
-├── BRANCHING.md        # Git workflow and development process
-└── LICENSE             # Apache 2.0 with patent pledge
+├── prometheus.yml      # Metrics definition
 ```
 
 ---
@@ -306,7 +315,7 @@ This isn't a "flex": the author can't proceed too much further without expert he
 - Complete proof chain (Robot → Digger → Refinery → Mint → DistoDam)
 - Prometheus + Grafana observability (Watch the crypto pipeline in action)
 - Basic labor tracking
-- Cryptographic signing
+- Cryptographic signing (falcon + SPHINCS)
 - Merkle tree aggregation at all layers (except physical bearer bond merkles, depends on vault)
 - Persistance of some data
 - Wallet recieves UBD, but cannot spend
@@ -337,3 +346,15 @@ This isn't a "flex": the author can't proceed too much further without expert he
 ---
 
 **Minted with ⚡ by bots, for humans**
+
+---
+
+**AI DISCLOSURE & AUTHOR NOTE**: This document was written by and is maintained by Jonathan Clark (human). It was and will continue to be edited/refined by several AI agents as part of that efficient maintenance.
+
+Other parts of the repository — including many architecture deep-dive docs, and yes, CODE — were drafted or expanded by AI in close collaboration with me, based on long chats. They serve as living design notebooks and current implementations: reference material for myself and future contributors to challenge, refine, or replace — NOT GOSPEL. Final responsibility for everything (correct, broken, or weird) remains mine.
+
+*The only RoboTorq Gospel:*
+
+`1 JouleTorq = 1 joule x 1 token / 1 second`
+`1 TokenTorq = 3600 JouleTorq`
+`1 RoboTorq = 1000 Tokentorq = 3.6 million JouleTorq`

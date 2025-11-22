@@ -14,7 +14,9 @@ It models markup / efficiency / premium embedding (e.g., craftsmanship, scarcity
 | 1 | Token work (joules + signature) | Hash + Sign | JouleTorqUnit | Atomic priced effort |
 | 2 | 3,600 units | Merkle branch root | TokenTorqIngot | Time‑slice compression |
 | 3 | 1,000 ingots | Merkle batch root + Validation | RoboTorq Certificate | Reserve issuance basis |
-| 4 | Certificates | Scheduling + Demurrage | Streams / UBD | Circulation & redistribution |
+| 4 | Certificates | 1000 ingot hashes | 1 Cert | Circulation Backing |
+| 5 | Digital | Certificates | Streams / UBD | Circulation + Demurrage |
+| 6 | Bearer Bond | Digital + Certs | Phsyical Coinage | Circulation |
 
 ## 3. Vault Subsystems (Shadow Reserve)
 | Vault | Primary Function | Flows | Notes |
@@ -26,7 +28,7 @@ It models markup / efficiency / premium embedding (e.g., craftsmanship, scarcity
 ShortVaults = Liquid member balances. Long‑term reserve pools remain locked to guarantee ongoing issuance integrity.
 
 ## 4. Distribution Activation Path
-Physical bearer RT (printed bonds) → Scan → Wallet bootstrap → Minimum internal spend threshold (e.g. 750 / 1000 RT) → UBD eligibility. Ensures real economic participation precedes perpetual dividend entitlement.
+Physical bearer bond RT (printed bonds) → Scan → Wallet bootstrap → Minimum internal spend threshold (e.g. 750 / 1000 RT) → UBD eligibility. Ensures real economic participation precedes perpetual dividend entitlement.
 
 ## 5. BidNet Role
 Decentralized marketplace / labor exchange: supports converting RoboTorq into goods, funding new robotic labor contracts, optional external stable asset (e.g. USDC) swaps among activated participants—without undermining the physics basis.
