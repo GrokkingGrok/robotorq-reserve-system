@@ -16,11 +16,13 @@ DistoDam:  "8082:8082"  # Main API - CONFLICT!
 
 **Resolution Applied**: November 17, 2025
 ```yaml
-Mint:      "8084:8081"  # Verification API - RESOLVED ✅
+Mint:      "8084:8081"  # (Deprecated mapping)
 DistoDam:  "8082:8082"  # Main API - No change
 ```
 
-**Status**: ✅ RESOLVED - All services can now start
+**Update (Nov 21, 2025)**: Mint verification API unified with main HTTP port `8080` (container and host). Previous dedicated verification port (8084→8081) removed.
+
+**Status**: ✅ RESOLVED & UNIFIED - All services can now start
 
 ---
 
@@ -33,7 +35,7 @@ DistoDam:  "8082:8082"  # Main API - No change
 | **Postgres** | _(internal)_ | 5432 | Database (internal only) | ✅ OK |
 | **Mint** | 50051 | 50051 | gRPC API | ✅ OK |
 | **Mint** | 8080 | 8080 | Main HTTP API | ✅ OK |
-| **Mint** | **8084** | 8081 | **Verification API** | ✅ **RESOLVED** |
+| **Mint** | 8080 | 8080 | Main + Verification HTTP API | ✅ Unified |
 | **Mint** | 9090 | 9090 | Prometheus metrics | ✅ OK |
 | **Digger** | 3030 | 3030 | HTTP API (Rust) | ✅ OK |
 | **Refinery** | 50052 | 50052 | gRPC API | ✅ OK |
@@ -57,7 +59,7 @@ DistoDam:  "8082:8082"  # Main API - No change
 - **8081**: Refinery (HTTP API)
 - **8082**: DistoDam
 - **8083**: Trust
-- **8084**: Mint (verification API)
+<!-- 8084 removed (Mint verification unified on 8080) -->
 - **8222**: NATS (monitoring)
 - **9090**: Mint (metrics)
 - **9091**: Prometheus
@@ -85,8 +87,8 @@ Trust:              8083 (no change)
 
 **Changes Required**:
 - [ ] Update `docker-compose.yaml`: Mint ports section
-- [ ] Update `tests/integration/mint_verification_api.py`: `BASE_URL = "http://localhost:8084"`
-- [ ] Update `tests/e2e/phase5_verification_flow.py`: `VERIFICATION_API = "http://localhost:8084"`
+- [x] Update `tests/integration/mint_verification_api.py`: `BASE_URL = "http://localhost:8080"`
+- [x] Update `tests/e2e/phase5_verification_flow.py`: `VERIFICATION_API = "http://localhost:8080"`
 
 **Impact**: Minimal (only 3 file changes, no other services affected)
 
@@ -174,12 +176,12 @@ HTTP APIs (8080-8089):
 ## 🧪 Test Configuration Dependencies
 
 ### Integration Tests (`tests/integration/mint_verification_api.py`)
-- **Current Config**: `MINT_VERIFICATION_API = "http://localhost:8084"`
+- **Current Config**: `MINT_VERIFICATION_API = "http://localhost:8080"`
 - **Uses**: All 5 verification endpoints
 - **Status**: ✅ 8/8 tests passing
 
 ### E2E Tests (`tests/e2e/phase5_verification_flow.py`)
-- **Current Config**: `MINT_VERIFICATION_API = "http://localhost:8084"`
+- **Current Config**: `MINT_VERIFICATION_API = "http://localhost:8080"`
 - **Uses**: Complete pipeline testing
 - **Status**: ✅ Ready to run (port conflict resolved)
 

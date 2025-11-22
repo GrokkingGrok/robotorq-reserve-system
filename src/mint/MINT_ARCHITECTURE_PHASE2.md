@@ -556,7 +556,7 @@ MINT_LOG_LEVEL=info                  # Log verbosity
 8. Start Phase2IngotReceiver (begin NATS subscription)
 9. Start Phase3RoboTorqUnitAssembler (polling merkle builder)
 10. Start Phase3DistoDamPublisher (polling unit channel)
-11. Start VerificationHandler (HTTP on :8081)
+11. Start VerificationHandler (HTTP on :8080 unified)
 
 ### Graceful Shutdown (on SIGINT/SIGTERM):
 1. Stop Phase2IngotReceiver (close NATS subscription)

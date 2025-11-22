@@ -1679,7 +1679,7 @@ DistoDam distributes certificate to Wallet
 Wallet receives certificate via NATS (wallet.distribution)
   ↓
 Wallet IMMEDIATELY pings Mint verification API
-  ↓ HTTP POST http://mint:8081/verify/certificate
+    ↓ HTTP POST http://mint:8080/verify/certificate
   ↓ Body: { "merkle_root": "abc123...", "unit_id": "RT-20251117-001" }
   ↓
 Mint checks ProofCache (merkle_root exists?)
@@ -1699,7 +1699,7 @@ async fn verify_certificate_with_mint(
     unit_id: &str,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     let mint_verification_url = std::env::var("MINT_VERIFICATION_URL")
-        .unwrap_or_else(|_| "http://mint:8081/verify/certificate".to_string());
+        .unwrap_or_else(|_| "http://mint:8080/verify/certificate".to_string());
 
     let client = reqwest::Client::new();
     let request_body = serde_json::json!({
@@ -1821,7 +1821,7 @@ func (pc *ProofCache) FindByMerkleRoot(merkleRoot string) string {
 # docker-compose.yaml
 wallet:
   environment:
-    - MINT_VERIFICATION_URL=http://mint:8081/verify/certificate
+    - MINT_VERIFICATION_URL=http://mint:8080/verify/certificate
 ```
 
 ### 10.5 Oracle Signature Verification

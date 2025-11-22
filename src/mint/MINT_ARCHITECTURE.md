@@ -796,7 +796,7 @@ func VerifyProof(leafHash string, proof []string, root string, leafIndex int) bo
 
 ### Verification API
 
-**Port**: 8081 (separate from main Mint API)
+**Port**: 8080 (unified with main Mint HTTP API)
 
 **Endpoints**:
 
