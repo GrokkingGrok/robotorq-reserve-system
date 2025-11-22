@@ -3,7 +3,7 @@ name: CI/CD
 
 on:
   push:
-    branches: [ main, v0, feature/*, refactor/* ]
+    branches: [ main, v0, feature/*, refactor/*, release/* ]
   pull_request:
 
 jobs:
