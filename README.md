@@ -1,7 +1,8 @@
 # The RoboTorq Reserve System
 
 ## What is RoboTorq?
-A deterministic, physics-backed reserve currency generated from cryptographically verified robotic labor, without blockchain mining or speculative inflation. Minted digitally, can be redeemed physically from any 3D printer.
+
+A deterministic, physics-backed reserve currency generated from cryptographically verified robotic labor, without blockchain mining or speculative inflation. Minted digitally, it can be redeemed physically from any 3D printer.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://www.docker.com/)
@@ -92,10 +93,28 @@ cd robotorq-reserve-system
 docker compose up -d
 docker compose ps            # all services “Up”
 ```
-Logs (example): `docker compose logs -f mint`.
-Monitoring: Prometheus http://localhost:9090 • Grafana http://localhost:3000 (admin/admin).
 
-Stop:
+**Logs**: 
+```bash
+# docker native log reader, follow stream
+docker compose logs -f mint 
+
+# check scripts/logs folder for helpful python log checkers if you don't want to learn docker logging
+
+# View last 20 lines, no follow
+python scripts/logs/mintlogs.py 
+# View last N lines only, no follow
+python scripts/logs/mintlogs.py --tail 100
+# Follow logs in real-time (skip initial tail, stream continuously)
+python scripts/logs/mintlogs.py -f
+```
+
+**Monitoring**: 
+- Grafana http://localhost:3000 (admin/admin)
+- Grafana/robotorq-complete-pipeline.json (fully configured pipeline viewer definition)
+
+
+**Stop**:
 ```bash
 docker compose down
 docker compose down -v   # full reset
@@ -105,8 +124,9 @@ docker compose down -v   # full reset
 
 ## Prerequisites
 
-- **Docker** (with Docker Compose V2)
-- **Git**
+- **Git** to clone repo
+- **Docker** (with Docker Compose V2) to run nodes
+- **Python** for testing
 
 That's it. Everything runs in containers.
 

@@ -30,3 +30,15 @@ __pycache__/*
 
 # VS Code workspace settings (keep locally, not in git)
 .vscode/
+
+.env                    
+.env.local
+*.log                  
+node_modules/          
+dist/             
+coverage/         
+*.swp 
+*.swo
+.DS_Store
+.db 
+*.orig 
