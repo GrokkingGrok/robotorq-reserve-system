@@ -11,6 +11,7 @@ target
 
 # SQLite database files
 *.db
+*.db-journal
 
 # python cache files
 __pycache__/*
@@ -26,3 +27,6 @@ __pycache__/*
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# VS Code workspace settings (keep locally, not in git)
+.vscode/
