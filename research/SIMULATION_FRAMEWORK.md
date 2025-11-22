@@ -19,6 +19,8 @@
 
 **Result**: 10-year economic simulation in 3.65 days (1000x speedup), parallelizable across 100+ parameter combinations.
 
+**Project Asimov** is the GPL companion simulation configuration of the RoboTorq Reserve System. This doument shows how the two will eventually work together.
+
 ---
 
 ## Core Concept: Reality at Fast-Forward
