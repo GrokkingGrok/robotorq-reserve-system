@@ -5,7 +5,6 @@ use crate::events::subjects;
 use crate::models::{Triple, normalize_triple};
 use tracing::info;
 
-#[derive(Clone)]
 pub struct ShadowStakeVault {
     available_robotorq: AtomicI64,
     available_tokentorq_remainder: AtomicI64,
@@ -52,7 +51,7 @@ impl ShadowStakeVault {
         )
     }
 
-    pub fn allocate(&self, contract_id: &str, r: i64, t: i64, j: i64) -> Result<()> {
+    pub async fn allocate(&self, contract_id: &str, r: i64, t: i64, j: i64) -> Result<()> {
         if r < 0 || t < 0 || j < 0 { return Err(anyhow!("negative allocation not allowed")); }
         let avail = self.available();
         if r > avail.robotorq || t > avail.tokentorq_remainder || j > avail.jouletorq_remainder {
@@ -72,7 +71,7 @@ impl ShadowStakeVault {
             "tokentorq_remainder": t,
             "jouletorq_remainder": j,
         });
-        self.nats.try_publish(subjects::STAKE_ALLOCATED.into(), serde_json::to_vec(&evt)?);
+        self.nats.publish(subjects::STAKE_ALLOCATED, serde_json::to_vec(&evt)?.into()).await?;
         info!(contract_id=%contract_id, r=r, t=t, j=j, "allocation applied");
         Ok(())
     }
@@ -85,7 +84,7 @@ impl ShadowStakeVault {
             "tokentorq_remainder": t,
             "jouletorq_remainder": j,
         });
-        self.nats.publish(subjects::ROBOSTAKE_RETURNED.into(), serde_json::to_vec(&evt)?).await?;
+        self.nats.publish(subjects::ROBOSTAKE_RETURNED, serde_json::to_vec(&evt)?.into()).await?;
         Ok(())
     }
 }
@@ -102,7 +101,7 @@ mod tests {
         let sv = ShadowStakeVault::new(nats);
         sv.increment_available(5, 10, 100);
         assert_eq!(sv.available().robotorq, 5);
-        sv.allocate("contract-1", 2, 0, 0).unwrap();
+        sv.allocate("contract-1", 2, 0, 0).await.unwrap();
         assert_eq!(sv.available().robotorq, 3);
         assert_eq!(sv.deployed().robotorq, 2);
     }

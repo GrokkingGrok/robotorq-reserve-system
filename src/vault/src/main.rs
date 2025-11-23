@@ -1,9 +1,10 @@
 use robotorq_vault::{VaultConfig, ShadowCertVault, ShadowStakeVault};
 use robotorq_vault::nats_client::connect_nats;
 use robotorq_vault::events::subjects;
-use robotorq_vault::models::{RoboTorqBatch, RoboTorqCertificate};
+use robotorq_vault::models::RoboTorqBatch;
 use anyhow::Result;
 use async_nats::Subscriber;
+use futures_util::stream::StreamExt;
 use tracing::{info, error};
 use std::sync::Arc;
 

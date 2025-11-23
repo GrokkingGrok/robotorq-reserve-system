@@ -22,7 +22,7 @@ impl ShadowCertVault {
             "event_type": "cert_stored",
             "cert_id": id,
         });
-        self.nats.publish(subjects::CERT_STORED.into(), serde_json::to_vec(&evt)?).await?;
+        self.nats.publish(subjects::CERT_STORED, serde_json::to_vec(&evt)?.into()).await?;
         info!(cert_id=%id, "certificate stored");
         Ok(())
     }

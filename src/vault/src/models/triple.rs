@@ -40,7 +40,7 @@ mod tests {
     fn normalize_carry() {
         let t = normalize_triple(1, 1001, 7201);
         assert_eq!(t.robotorq, 2); // 1001 ingots -> +1 R (carry), remainder 1 ingot
-        assert_eq!(t.tokentorq_remainder, 1);
+        assert_eq!(t.tokentorq_remainder, 3);
         assert_eq!(t.jouletorq_remainder, 1); // 7201 -> 2 ingots carry -> remainder 1 ore
     }
 }

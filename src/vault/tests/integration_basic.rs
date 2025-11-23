@@ -33,7 +33,7 @@ async fn batch_ingestion_updates_stake() {
     assert_eq!(stake_vault.available().robotorq, 3);
 
     // Allocate 2 RoboTorq
-    stake_vault.allocate("contract-X", 2, 0, 0).unwrap();
+    stake_vault.allocate("contract-X", 2, 0, 0).await.unwrap();
     assert_eq!(stake_vault.available().robotorq, 1);
     assert_eq!(stake_vault.deployed().robotorq, 2);
 
