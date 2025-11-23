@@ -230,7 +230,7 @@ robotorq-reserve-system/
 │   ├── wallet/         # Go: Balance + transaction management
 │   ├── printer/        # Rust: A Mock 3D printer to act as robot's labor for tracking, printers are a special type of robot that will also print RoboTorq
 │   ├── trust/          # Go: Contract Execution
-│   └── vault/          # Architecture docs for reserve system (planned)
+│   └── vault/          # Rust: Vault MVP (CertVault + StakeVault) implemented; full vault (approvals, persistence, demurrage integration) upcoming
 ├── tests/
 │   ├── e2e/            # End-to-end pipeline tests
 │   ├── integration/    # Service integration tests
@@ -267,7 +267,7 @@ See [`BRANCHING.md`](./BRANCHING.md) for the complete development workflow, incl
 - **Proof Chain**: [`docs/PROOF_CHAIN_ARCHITECTURE.md`](./docs/PROOF_CHAIN_ARCHITECTURE.md)
 - **Mint**: [`src/mint/MINT_ARCHITECTURE.md`](./src/mint/MINT_ARCHITECTURE.md)
 - **Refinery**: [`src/refinery/REFINERY_ARCHITECTURE.md`](./src/refinery/REFINERY_ARCHITECTURE.md)
-- **Vault Design**: [`src/vault/Architecture/Final design/VAULT_MVP_FINAL_DESIGN.md`](./src/vault/Architecture/Final%20design/VAULT_MVP_FINAL_DESIGN.md)
+- **Vault Design**: [`src/vault/Architecture/Final design/VAULT_MVP_FINAL_DESIGN.md`](./src/vault/Architecture/Final%20design/VAULT_MVP_FINAL_DESIGN.md) (MVP implemented: CertVault + StakeVault)
 - **Trust Economics**: [`docs/trust-economics.md`](./docs/trust-economics.md)
 
 ---
@@ -319,11 +319,12 @@ This isn't a "flex": the author can't proceed too much further without expert he
 - Merkle tree aggregation at all layers (except physical bearer bond merkles, depends on vault)
 - Persistance of some data
 - Wallet recieves UBD, but cannot spend
+- Vault MVP live (CertVault storing certificates, StakeVault tracking RoboStake balances, metrics + Grafana dashboard)
 
 **In Progress**:
-- In-Flight mint ingot recovery backend implemented, needs integration
-- Vault System fully designed, but not implemented, will be rust
-- DistoDam will be replaced by Vault logic
+- In-Flight mint ingot recovery backend integration
+- Expansion from Vault MVP to full Vault (contract approval, persistent storage, demurrage workflows)
+- Replacement of DistoDam by extended Vault logic
 - Mock-Printer to Real 3D Printer (aka robot)
 - Comprehensive documentation
 - Simulator configuration design
@@ -331,8 +332,8 @@ This isn't a "flex": the author can't proceed too much further without expert he
 
 **Effectively Blocked**:
 - Security audit and hardening (high priority, expert needed)
-- Trust service needs full rewrite, rust preferred (Executes Contracts, needs vault first)
-- BidNet (invest in robotic labor projects, needs vault first) not started, but high-level design known.
+- Trust service needs full rewrite, rust preferred (Executes Contracts, needs full Vault capabilities)
+- BidNet (invest in robotic labor projects, depends on full Vault) not started, but high-level design known.
 - Horizontal scaling (distributed systems experts needed)
 - Build/dependency improvements (experts needed)
 
@@ -358,3 +359,5 @@ Other parts of the repository — including many architecture deep-dive docs, an
 `1 JouleTorq = 1 joule x 1 token / 1 second`
 `1 TokenTorq = 3600 JouleTorq`
 `1 RoboTorq = 1000 Tokentorq = 3.6 million JouleTorq`
+
+**Brief Vault Status**: MVP running (CertVault + StakeVault + metrics); next: approvals, persistence, demurrage integration.
