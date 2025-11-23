@@ -1,15 +1,40 @@
 use robotorq_vault::{VaultConfig, ShadowCertVault, ShadowStakeVault, VaultMetrics};
-use axum::{Router, routing::get, response::IntoResponse, http::StatusCode};
+use axum::{Router, routing::get, http::StatusCode, Json};
+use axum::extract::State;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use robotorq_vault::nats_client::connect_nats;
 use robotorq_vault::events::subjects;
 use robotorq_vault::models::RoboTorqBatch;
 use anyhow::Result;
-use async_nats::Subscriber;
 use futures_util::stream::StreamExt;
 use tracing::{info, error};
 use tokio::task;
+use serde_json::json;
+
+#[derive(Clone)]
+struct AppState {
+    cert_vault: Arc<ShadowCertVault>,
+    stake_vault: Arc<ShadowStakeVault>,
+    metrics: Arc<VaultMetrics>,
+}
+
+async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
+    Json(json!({
+        "certificates": state.cert_vault.total_robotorq(),
+        "available_robostake": state.stake_vault.available_robostake(),
+        "deployed_robostake": state.stake_vault.deployed_robostake(),
+    }))
+}
+
+async fn metrics(State(state): State<AppState>) -> (StatusCode, [(String, String); 1], String) {
+    let body = state.metrics.encode();
+    (
+        StatusCode::OK,
+        [("Content-Type".to_string(), "text/plain; version=0.0.4".to_string())],
+        body,
+    )
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -24,38 +49,40 @@ async fn main() -> Result<()> {
         }
     };
 
-    let metrics = VaultMetrics::new();
-    let cert_vault = Arc::new(ShadowCertVault::new(nats.clone()).with_metrics(metrics.clone()));
-    let stake_vault = Arc::new(ShadowStakeVault::new(nats.clone()).with_metrics(metrics.clone()));
+    let vault_metrics = VaultMetrics::new();
+    let cert_vault = Arc::new(ShadowCertVault::new(nats.clone()).with_metrics(vault_metrics.clone()));
+    let stake_vault = Arc::new(ShadowStakeVault::new(nats.clone()).with_metrics(vault_metrics.clone()));
+    let state = AppState { cert_vault: cert_vault.clone(), stake_vault: stake_vault.clone(), metrics: vault_metrics.clone() };
 
-    // Spawn subscription processing in its own task so HTTP server can start immediately.
-    let cert_vault_sub = cert_vault.clone();
-    let stake_vault_sub = stake_vault.clone();
-    let nats_sub = nats.clone();
-    let sub_task = task::spawn(async move {
-        let mut sub: Subscriber = nats_sub.subscribe(subjects::PHASE3_COMPLETED).await?;
-        info!(subject = subjects::PHASE3_COMPLETED, "vault subscribed");
-        while let Some(msg) = sub.next().await {
-            match serde_json::from_slice::<RoboTorqBatch>(&msg.payload) {
-                Ok(batch) => {
-                    info!(batch_id = %batch.batch_id, cert_count = batch.certificates.len(), "processing batch");
-                    for cert in batch.certificates.iter() {
-                        if let Err(e) = cert_vault_sub.store_certificate(cert.clone()).await {
-                            error!(cert_id=%cert.cert_id, error=%e, "failed to store certificate");
+    // Subscription processing task (detached).
+    let sub_state = state.clone();
+    task::spawn(async move {
+        match nats.subscribe(subjects::PHASE3_COMPLETED).await {
+            Ok(mut sub) => {
+                info!(subject = subjects::PHASE3_COMPLETED, "vault subscribed");
+                while let Some(msg) = sub.next().await {
+                    match serde_json::from_slice::<RoboTorqBatch>(&msg.payload) {
+                        Ok(batch) => {
+                            info!(batch_id = %batch.batch_id, cert_count = batch.certificates.len(), "processing batch");
+                            for cert in batch.certificates.iter() {
+                                if let Err(e) = sub_state.cert_vault.store_certificate(cert.clone()).await {
+                                    error!(cert_id=%cert.cert_id, error=%e, "failed to store certificate");
+                                }
+                            }
+                            let returned = batch.total_robostake;
+                            sub_state.stake_vault.increment_available(returned);
+                            if let Err(e) = sub_state.stake_vault.publish_robostake_return(batch.batch_id.clone(), returned).await {
+                                error!(batch_id=%batch.batch_id, error=%e, "failed publishing robostake.returned");
+                            }
+                        }
+                        Err(e) => {
+                            error!(error=%e, "invalid batch payload");
                         }
                     }
-                    let returned = batch.total_robostake;
-                    stake_vault_sub.increment_available(returned);
-                    if let Err(e) = stake_vault_sub.publish_robostake_return(batch.batch_id.clone(), returned).await {
-                        error!(batch_id=%batch.batch_id, error=%e, "failed publishing robostake.returned");
-                    }
-                }
-                Err(e) => {
-                    error!(error=%e, "invalid batch payload");
                 }
             }
+            Err(e) => error!(error=%e, "failed to subscribe to phase3 completed subject"),
         }
-        Ok::<(), anyhow::Error>(())
     });
 
     // HTTP server for /health and /metrics (async handlers)
@@ -64,32 +91,9 @@ async fn main() -> Result<()> {
     let metrics_arc = metrics.clone();
 
     let app = Router::new()
-        .route("/health", get({
-            let cv = health_cert_vault.clone();
-            let sv = health_stake_vault.clone();
-            move || {
-                let cv = cv.clone();
-                let sv = sv.clone();
-                async move {
-                    let body = serde_json::json!({
-                        "certificates": cv.total_robotorq(),
-                        "available_robostake": sv.available_robostake(),
-                        "deployed_robostake": sv.deployed_robostake(),
-                    });
-                    axum::Json(body)
-                }
-            }
-        }))
-        .route("/metrics", get({
-            let m = metrics_arc.clone();
-            move || {
-                let m = m.clone();
-                async move {
-                    let body = m.encode();
-                    (StatusCode::OK, [("Content-Type", "text/plain; version=0.0.4")], body).into_response()
-                }
-            }
-        }));
+        .route("/health", get(health))
+        .route("/metrics", get(metrics))
+        .with_state(state);
 
     let addr: SocketAddr = "0.0.0.0:8088".parse()?;
     tracing::info!(%addr, "starting vault HTTP server");
@@ -99,11 +103,6 @@ async fn main() -> Result<()> {
         Ok::<(), anyhow::Error>(())
     });
 
-    // Await server (runs indefinitely) and keep subscription task detached.
-    // If subscription ends unexpectedly we log and continue serving metrics.
-    tokio::spawn(async move {
-        if let Err(e) = sub_task.await { error!(error=%e, "subscription task ended unexpectedly"); }
-    });
     server.await??;
     Ok(())
 }
