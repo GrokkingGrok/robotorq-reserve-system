@@ -1,6 +1,8 @@
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Arc;
 use async_nats::Client;
 use anyhow::{Result, anyhow};
+use crate::metrics::VaultMetrics;
 use crate::events::subjects;
 use tracing::info;
 
@@ -23,6 +25,7 @@ pub struct ShadowStakeVault {
     available_robostake: AtomicI64,
     deployed_robostake: AtomicI64,
     nats: Client,
+    metrics: Option<Arc<VaultMetrics>>, // optional metrics injection
 }
 
 impl ShadowStakeVault {
@@ -31,13 +34,23 @@ impl ShadowStakeVault {
             available_robostake: AtomicI64::new(0),
             deployed_robostake: AtomicI64::new(0),
             nats,
+            metrics: None,
         }
+    }
+    
+    pub fn with_metrics(mut self, metrics: Arc<VaultMetrics>) -> Self {
+        self.metrics = Some(metrics);
+        self
     }
 
     /// Increment available stake by whole RoboStake units.
     /// FUTURE: accept (R,T,J) and normalize; for now only whole units are meaningful.
     pub fn increment_available(&self, robostake_units: i64) {
         self.available_robostake.fetch_add(robostake_units, Ordering::SeqCst);
+        if let Some(m) = &self.metrics {
+            m.robostake_returned_total.inc_by(robostake_units as u64);
+            m.available_robostake.set(self.available_robostake.load(Ordering::SeqCst));
+        }
     }
 
     /// Whole available RoboStake.
@@ -58,6 +71,7 @@ impl ShadowStakeVault {
         if robostake_units > avail { return Err(anyhow!("insufficient reserve")); }
         self.available_robostake.fetch_sub(robostake_units, Ordering::SeqCst);
         self.deployed_robostake.fetch_add(robostake_units, Ordering::SeqCst);
+        if let Some(m) = &self.metrics { m.stake_allocated_total.inc_by(robostake_units as u64); m.available_robostake.set(self.available_robostake.load(Ordering::SeqCst)); m.deployed_robostake.set(self.deployed_robostake.load(Ordering::SeqCst)); }
         let evt = serde_json::json!({
             "event_type": "stake_allocated",
             "contract_id": contract_id,

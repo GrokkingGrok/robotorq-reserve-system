@@ -1,4 +1,7 @@
-use robotorq_vault::{VaultConfig, ShadowCertVault, ShadowStakeVault};
+use robotorq_vault::{VaultConfig, ShadowCertVault, ShadowStakeVault, VaultMetrics};
+use axum::{Router, routing::get};
+use std::net::SocketAddr;
+use std::sync::Arc;
 use robotorq_vault::nats_client::connect_nats;
 use robotorq_vault::events::subjects;
 use robotorq_vault::models::RoboTorqBatch;
@@ -6,7 +9,6 @@ use anyhow::Result;
 use async_nats::Subscriber;
 use futures_util::stream::StreamExt;
 use tracing::{info, error};
-use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -14,8 +16,9 @@ async fn main() -> Result<()> {
     let cfg = VaultConfig::from_env();
     let nats = connect_nats(&cfg.nats_url).await?;
 
-    let cert_vault = Arc::new(ShadowCertVault::new(nats.clone()));
-    let stake_vault = Arc::new(ShadowStakeVault::new(nats.clone()));
+    let metrics = VaultMetrics::new();
+    let cert_vault = Arc::new(ShadowCertVault::new(nats.clone()).with_metrics(metrics.clone()));
+    let stake_vault = Arc::new(ShadowStakeVault::new(nats.clone()).with_metrics(metrics.clone()));
 
     // Subscribe to Phase3 completion events
     let mut sub: Subscriber = nats.subscribe(subjects::PHASE3_COMPLETED).await?;
@@ -43,6 +46,34 @@ async fn main() -> Result<()> {
             }
         }
     }
+
+    // HTTP server for /health and /metrics (async handlers)
+    let health_cert_vault = cert_vault.clone();
+    let health_stake_vault = stake_vault.clone();
+    let metrics_arc = metrics.clone();
+
+    let app = Router::new()
+        .route("/health", get(move || {
+            let cv = health_cert_vault.clone();
+            let sv = health_stake_vault.clone();
+            async move {
+                let body = serde_json::json!({
+                    "certificates": cv.total_robotorq(),
+                    "available_robostake": sv.available_robostake(),
+                    "deployed_robostake": sv.deployed_robostake(),
+                });
+                axum::Json(body)
+            }
+        }))
+        .route("/metrics", get(move || {
+            let m = metrics_arc.clone();
+            async move { m.encode() }
+        }));
+
+    let addr: SocketAddr = "0.0.0.0:8088".parse()?;
+    tracing::info!(%addr, "starting vault HTTP server");
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
 
     Ok(())
 }
