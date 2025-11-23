@@ -1,7 +1,7 @@
 # The RoboTorq Reserve System Paper
 *Author*: Jonathan Clark
 
-The RoboTorq Reserve System is an open source, decentralized, Universal Basic Dividend-Paying monetary system.
+The RoboTorq Reserve System is an open source, decentralized, Universal Basic Dividend-paying monetary system.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://www.docker.com/)
@@ -27,7 +27,7 @@ A deterministic, physics-backed reserve currency generated from cryptographicall
 
 The RoboTorq Reserve System circulates a certificate-backed currency in a closed-loop economy. The self-regulating system is designed such that the collateral can, mathematically speaking, never run dry... but only so long as people choose to keep using it.
 
-How? Every atomic investment in robotic labor, the collecitvely paid `RoboStake`, serves as the value basis for minting more RoboTorq, bounded by the laws of physics and smart contracts. The closed loop design + contract approval vault check + demurrage ensures the distributed `StakeVault` never accepts a contract it can't fund.
+How? Every atomic investment in robotic labor, the collectively paid `RoboStake`, serves as the value basis for minting more RoboTorq, bounded by the laws of physics and smart contracts. The closed loop design + contract approval vault check + demurrage ensures the distributed `StakeVault` never accepts a contract it can't fund.
 
 The RoboTorq Reserve System isn't a government. It doesn't have to go into debt to pay a UBI. It simply accepts whatever growth stimulus we choose to give it, that it and we can already afford, and pays UBD based on that input.
 
@@ -78,7 +78,7 @@ RoboTorq uses a lightweight, message-passing network (NATS), vaulted certificate
 - Certificates remain inside distributed vaults
 - All vaulted artifacts are signed, merklized, and linked
 - No mining, no gas, no chain bloat, no global *transaction* ledger (proof ledgers are **tiny** by comparison)
-- Track a large nation-state economy of yearly proofs on several terabytes of distrbuted storage.
+- Track a large nation-state economy of yearly proofs on several terabytes of distributed storage.
 
 The core system is intentionally compact — with each service designed to eventually run on a small cluster of Raspberry Pis + minimal storage if need be — so communities with limited resources could hypothetically operate local reserve system nodes on the same footing as anyone else.
 

@@ -10,28 +10,65 @@
 
 ## Executive Summary
 
-The **Vault System** is a Rust-based concurrent service hosting:
-- **3 Shadow Vaults** (per node): ShadowStakeVault, ShadowCertVault, ShadowDistoVault
-- **User Vaults** (array): ShortVaults (short-term savings; first landing zone)
+The **Vault System** MVP hosts four logical components on a single node:
+1. **ShadowCertVault** – Permanent certificate ledger. Certificates never leave.
+2. **ShadowStakeVault** – Holds unassigned backed currency reserves and produces signed **StakeEvents** allocating existing RoboStake to approved robotic labor contracts. Outbound transfers ONLY occur for robotic labor. Return flows DO NOT use StakeEvents; they arrive indirectly as minted certificate batches from Mint (Phase3) which replenish system value at the CertVault layer.
+3. **ShadowDistoVault** – Does not hold value directly; consumes authorizations and produces signed **IssuanceEvents** (batches of backed currency payments to ShortVaults). CertVault may arrange a transfer from a Disto issuance stream into StakeVault reserve (top‑up) but StakeVault never sends value to DistoVault.
+4. **ShortVaults** – Vector of user landing vaults local to the node (only customers of this node, not global user set).
 
-**MVP Goals**:
-1. ✅ Concurrent vault operations (tokio async)
-2. ✅ RoboStake lifecycle (return from Mint to StakeVault)
-3. ✅ Certificate storage (permanent ledger in CertVault)
-4. ✅ CertVault authorization of Disto streams (based on fully-backed RoboTorqCertificates)
-5. ✅ UBD distribution (equal to all ShortVaults on a **uniform drip schedule**)  
-    - CertVault derives `total_jtu_micro_rt` **from certificates**, not from any collateral multiplier  
-    - DistoVault runs a **time-based UniformDistoStream** instead of one-shot distribution
+### Backed Currency Representation (Hierarchical Triple)
+Backed currency is tracked like time (hours : minutes : seconds) but at economic aggregation layers:
 
-> REFACTOR NOTICE (JTU ATOMIC VALUE): The legacy numeric collateral field `robostake_micro_rt` is being replaced by an explicit vector of atomic distribution certificates (`JouleTorqCertificate`). These JTUs are the spendable monetary artifacts streamed by DistoVault. Backing assets (`RoboTorqCertificate`) remain in CertVault. All future references to returning or distributing "RoboStake" MUST be interpreted as transferring sets of `JouleTorqCertificate` objects rather than a raw micro‑RT integer.
+| Layer | Meaning | Constant | Relationship |
+|-------|---------|----------|--------------|
+| RoboTorq (R) | Fully minted certificates | `INGOTS_PER_ROBOTORQ = 1000` | 1 R = 1000 TokenTorq ingots |
+| TokenTorq (T) | Complete ingots not yet forming a full certificate | `ORE_PER_INGOT = 3600` | 1 T ingot = 3600 JouleTorq ore units |
+| JouleTorq (J) | Atomic ore units (token × joule × second) | — | 1 R = 1000 T = 3,600,000 J |
 
-**Not in MVP** (future phases):
-- ❌ Multi-node consensus (single node for now)
-- ❌ Demurrage rerouting (crisis mode)
-- ❌ Quadratic voting governance
-- ❌ Oracle payments
-- ❌ Bearer bond issuance / redemption (implemented after MVP)
-- ❌ LongVaults / long-term savings (only conceptual, post–bearer bonds)
+We store balances as three fixed‑point integer fields where **TokenTorq and JouleTorq are remainders** relative to the next higher layer:
+- `robotorq_balance: i128` (whole RoboTorq certificates)
+- `tokentorq_remainder: i128` (0 ≤ remainder < 1000)
+- `jouletorq_remainder: i128` (0 ≤ remainder < 3600)
+
+Canonical Total Conversion (for comparisons / signatures):
+
+```
+total_jouletorq = robotorq_balance * 3_600_000
+                + tokentorq_remainder * 3_600
+                + jouletorq_remainder
+```
+
+Invariants:
+```
+0 <= tokentorq_remainder < INGOTS_PER_ROBOTORQ
+0 <= jouletorq_remainder < ORE_PER_INGOT
+```
+
+All arithmetic uses deterministic fixed‑point integers (no floats). A global scaling factor (e.g. MICRO = 1e6) applies uniformly if sub‑micro precision is required; scaling lives in a constants module and is **never embedded inside events**. Remainder normalization occurs after every mutation (allocate / issue / return) ensuring invariants hold and preventing drift.
+
+### Events Instead of Direct Balance Mutation
+- **StakeEvents** move hierarchical value (R,T,J) from the **reserve contract** (special contract with `builder_id = CertVault`) into per‑contract allocation staging.
+- **IssuanceEvents** stream hierarchical value (R,T,J) into ShortVaults; each event lists total (R,T,J) issued this tick plus deterministic membership snapshot for reproducible splits.
+- Certificates never move; events may include `provenance_cert_ids` linking issued or allocated value back to source certificates for audit.
+
+### MVP Goals
+1. ✅ Deterministic fixed‑point accounting (triple balance schema)
+2. ✅ Certificate storage & immutability guarantees (ShadowCertVault)
+3. ✅ Reserve → contract allocation via signed StakeEvents (ShadowStakeVault)
+4. ✅ Authorization from certificates → uniform issuance schedule (CertVault → DistoVault)
+5. ✅ UBD distribution via signed IssuanceEvents (ShadowDistoVault)
+6. ✅ Concurrency & atomicity (tokio + atomics + DashMap)
+
+### Explicit Exclusions (Not in MVP)
+- ❌ ShadowBondVault (BearerBond off‑grid management)
+- ❌ LongVaults (long‑term savings tier)
+- ❌ Multi-node consensus / replication
+- ❌ Demurrage rerouting / crisis mode
+- ❌ Slashing & advanced Trust logic
+- ❌ Oracle payments & quadratic governance
+
+### Terminology Shift
+Legacy `robostake_micro_rt` and JTU vectoring are replaced by the hierarchical triple (R, T remainder, J remainder). Outbound StakeEvents (Reserve → Contract) are ONLY for robotic labor allocations. Value "returns" enter the system exclusively as Phase3 Mint batches (new certificates) — the StakeVault itself does not process Contract → Reserve StakeEvents in MVP. No other outbound destinations (e.g. DistoVault) are permitted.
 
 ---
 
@@ -42,7 +79,7 @@ The **Vault System** is a Rust-based concurrent service hosting:
 3. [Shadow CertVault](#3-shadow-certvault)
 4. [Shadow DistoVault](#4-shadow-distovault)
 5. [User Vaults](#5-user-vaults)
-6. [Atomic Value Refactor: JouleTorq Units & Certificates](#6-atomic-value-refactor-jouletorq-units--certificates)
+6. [Data & Event Schema](#6-data--event-schema)
 7. [Concurrency Model](#7-concurrency-model)
 8. [NATS Integration](#8-nats-integration)
 9. [MVP Implementation Plan](#9-mvp-implementation-plan)
@@ -109,7 +146,7 @@ serde_json = "1.0"
 bincode = "1.3"
 
 # Cryptography (post-quantum)
-oqs = "0.8"                  # liboqs for SPHINCS+, Dilithium
+oqs = "0.8"                  # liboqs for SPHINCS+, Falcon
 sha2 = "0.10"                # SHA-256 for merkle trees
 
 # Error handling
@@ -171,7 +208,7 @@ impl VaultConfig {
 
 ### 2.1 Purpose
 
-Hold network's RoboStake collateral, release on-demand to Trust, receive back from Mint.
+Maintain the node’s backed currency reserve (triple balances) and produce signed **StakeEvents** allocating value to approved robotic labor contracts. All unassigned reserves live under a dedicated **reserve contract** whose `builder_id` is the CertVault (sentinel identity). Contract completion / cancellation does not generate a reverse StakeEvent in MVP; instead any economic output or unspent value manifests upstream as minted certificates delivered in Phase3 batches to the CertVault.
 
 ### 2.2 Rust Implementation
 
@@ -184,17 +221,21 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 use anyhow::Result;
 
-/// Shadow StakeVault: Holds network's RoboStake collateral
+/// Shadow StakeVault: Holds backed currency reserve (hierarchical RoboTorq + remainders)
 #[derive(Debug)]
 pub struct ShadowStakeVault {
-    /// Total RoboStake available (atomic for lock-free reads)
-    available_micro_rt: AtomicI64,
-    
-    /// Currently deployed to contracts
-    deployed_micro_rt: AtomicI64,
-    
-    /// Contract allocations (contractID → deployed amount)
-    allocations: DashMap<String, i64>,
+    /// Available reserve (R, T remainder, J remainder) at rest in reserve contract
+    available_robotorq: AtomicI64,
+    available_tokentorq_remainder: AtomicI64,
+    available_jouletorq_remainder: AtomicI64,
+
+    /// Currently staged (allocated) to active contracts (R, T remainder, J remainder)
+    deployed_robotorq: AtomicI64,
+    deployed_tokentorq_remainder: AtomicI64,
+    deployed_jouletorq_remainder: AtomicI64,
+
+    /// Contract allocations (contract_id → (R, T remainder, J remainder))
+    allocations: DashMap<String, (i64, i64, i64)>,
     
     /// Allocation history (event sourcing)
     history: RwLock<Vec<AllocationEvent>>,
@@ -204,127 +245,51 @@ pub struct ShadowStakeVault {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AllocationEvent {
-    pub event_id: String,
-    pub event_type: AllocationEventType,
+pub struct StakeEvent {
+    pub stake_event_id: String,
     pub contract_id: String,
-    pub amount_micro_rt: i64,
-    pub timestamp: i64,  // Unix nanos
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum AllocationEventType {
-    Requested,
-    Approved,
-    Released,
-    Returned,
-    Slashed,
+    pub robotorq: i64,              // whole RoboTorq units allocated (one-way)
+    pub tokentorq_remainder: i64,   // ingot remainder (<1000)
+    pub jouletorq_remainder: i64,   // ore remainder (<3600)
+    pub provenance_cert_ids: Vec<String>, // optional provenance linkage
+    pub timestamp_nanos: i64,
+    pub signature: Vec<u8>,         // Falcon signature over canonical fields
 }
 
 impl ShadowStakeVault {
     /// Create new vault with genesis allocation
-    pub fn new(genesis_micro_rt: i64, nats_client: async_nats::Client) -> Self {
+    pub fn new(genesis_robotorq: i64, genesis_tokentorq_rem: i64, genesis_jouletorq_rem: i64, nats_client: async_nats::Client) -> Self {
         Self {
-            available_micro_rt: AtomicI64::new(genesis_micro_rt),
-            deployed_micro_rt: AtomicI64::new(0),
+            available_robotorq: AtomicI64::new(genesis_robotorq),
+            available_tokentorq_remainder: AtomicI64::new(genesis_tokentorq_rem),
+            available_jouletorq_remainder: AtomicI64::new(genesis_jouletorq_rem),
+            deployed_robotorq: AtomicI64::new(0),
+            deployed_tokentorq_remainder: AtomicI64::new(0),
+            deployed_jouletorq_remainder: AtomicI64::new(0),
             allocations: DashMap::new(),
             history: RwLock::new(Vec::new()),
             nats_client,
         }
     }
-    
-    /// Trust requests RoboStake allocation for contract
-    pub async fn allocate(&self, contract_id: String, amount_micro_rt: i64) -> Result<()> {
-        // Atomic check-and-subtract
-        let available = self.available_micro_rt.load(Ordering::SeqCst);
-        if available < amount_micro_rt {
-            anyhow::bail!(
-                "Insufficient RoboStake: available={}, requested={}", 
-                available, 
-                amount_micro_rt
-            );
-        }
-        
-        // Subtract from available, add to deployed
-        self.available_micro_rt.fetch_sub(amount_micro_rt, Ordering::SeqCst);
-        self.deployed_micro_rt.fetch_add(amount_micro_rt, Ordering::SeqCst);
-        
-        // Track allocation
-        self.allocations.insert(contract_id.clone(), amount_micro_rt);
-        
-        // Record event
-        let event = AllocationEvent {
-            event_id: Uuid::new_v4().to_string(),
-            event_type: AllocationEventType::Released,
-            contract_id: contract_id.clone(),
-            amount_micro_rt,
-            timestamp: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
-        };
-        
+    // Example allocation function (pseudo – full deterministic fixed-point omitted for brevity)
+    pub async fn allocate(&self, contract_id: String, robotorq: i64, tokentorq_rem: i64, jouletorq_rem: i64) -> Result<()> {
+        // Bounds check on remainders
+        if tokentorq_rem >= 1000 || jouletorq_rem >= 3600 { anyhow::bail!("remainder out of bounds"); }
+        let ar = self.available_robotorq.load(Ordering::SeqCst);
+        let at = self.available_tokentorq_remainder.load(Ordering::SeqCst);
+        let aj = self.available_jouletorq_remainder.load(Ordering::SeqCst);
+        if ar < robotorq || at < tokentorq_rem || aj < jouletorq_rem { anyhow::bail!("insufficient reserve"); }
+        self.available_robotorq.fetch_sub(robotorq, Ordering::SeqCst);
+        self.available_tokentorq_remainder.fetch_sub(tokentorq_rem, Ordering::SeqCst);
+        self.available_jouletorq_remainder.fetch_sub(jouletorq_rem, Ordering::SeqCst);
+        self.deployed_robotorq.fetch_add(robotorq, Ordering::SeqCst);
+        self.deployed_tokentorq_remainder.fetch_add(tokentorq_rem, Ordering::SeqCst);
+        self.deployed_jouletorq_remainder.fetch_add(jouletorq_rem, Ordering::SeqCst);
+        self.allocations.insert(contract_id.clone(), (robotorq, tokentorq_rem, jouletorq_rem));
+        let event = StakeEvent { stake_event_id: Uuid::new_v4().to_string(), contract_id: contract_id.clone(), robotorq, tokentorq_remainder: tokentorq_rem, jouletorq_remainder: jouletorq_rem, provenance_cert_ids: vec![], timestamp_nanos: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0), signature: vec![] };
         self.history.write().await.push(event.clone());
-        
-        // Publish to NATS
-        self.nats_client
-            .publish(
-                "vault.robostake.released",
-                serde_json::to_vec(&event)?.into(),
-            )
-            .await?;
-        
-        tracing::info!(
-            contract_id = %contract_id,
-            amount_micro_rt = amount_micro_rt,
-            available_after = self.available_micro_rt.load(Ordering::SeqCst),
-            "RoboStake allocated"
-        );
-        
+        self.nats_client.publish("vault.stake.event", serde_json::to_vec(&event)?.into()).await?;
         Ok(())
-    }
-    
-    /// Mint returns RoboStake after minting completes
-    pub async fn return_allocation(&self, contract_id: &str, amount_micro_rt: i64) -> Result<()> {
-        // Remove from allocations
-        self.allocations.remove(contract_id);
-        
-        // Add back to available, subtract from deployed
-        self.available_micro_rt.fetch_add(amount_micro_rt, Ordering::SeqCst);
-        self.deployed_micro_rt.fetch_sub(amount_micro_rt, Ordering::SeqCst);
-        
-        // Record event
-        let event = AllocationEvent {
-            event_id: Uuid::new_v4().to_string(),
-            event_type: AllocationEventType::Returned,
-            contract_id: contract_id.to_string(),
-            amount_micro_rt,
-            timestamp: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
-        };
-        
-        self.history.write().await.push(event.clone());
-        
-        // Publish to NATS
-        self.nats_client
-            .publish(
-                "vault.robostake.returned",
-                serde_json::to_vec(&event)?.into(),
-            )
-            .await?;
-        
-        tracing::info!(
-            contract_id = %contract_id,
-            amount_micro_rt = amount_micro_rt,
-            available_after = self.available_micro_rt.load(Ordering::SeqCst),
-            "RoboStake returned from Mint"
-        );
-        
-        Ok(())
-    }
-    
-    /// Get current balances (lock-free)
-    pub fn balances(&self) -> (i64, i64) {
-        (
-            self.available_micro_rt.load(Ordering::SeqCst),
-            self.deployed_micro_rt.load(Ordering::SeqCst),
-        )
     }
 }
 ```
@@ -334,23 +299,40 @@ impl ShadowStakeVault {
 ## 3. Shadow CertVault
 
 ### 3.1 Purpose
+Store RoboTorqCertificates as an immutable ledger. Certificates never leave the CertVault; all allocation and issuance events only reference their IDs for provenance.
 
-Store RoboTorqCertificates (permanent ledger) and, in later stages, issue bearer bonds (physical coins) and track off-grid inventory.
+Each RoboTorqCertificate = 1 whole RoboTorq unit (R). CertVault does not store ingots (TokenTorq) or ore units (JouleTorq); those lower layers have already been aggregated upstream. Thus CertVault is authoritative only for the count of whole RoboTorq units available per contract.
 
-Each RoboTorqCertificate received from Mint implicitly represents exactly 1000
-ingots aggregated upstream (1 RT). Vault never sees individual ingots and does
-not require stake or ingot detail to derive economics—certificate count alone
-drives JTU calculation.
+Hierarchical derivation:
+```
+total_robotorq_for_contract = count(certificates WHERE contract_id ∈ cert.contract_ids)
+// TokenTorq and JouleTorq remainders are always 0 at CertVault layer.
+```
 
-Stake Handling Note: Mint strips RoboStake from ingots and only sends an
-aggregated `robostake_micro_rt` at the top-level of the batch completion
-event. CertVault never expects stake inside certificates or proofs and uses
-certificate count exclusively for economic derivation.
+Economic role in MVP:
+1. Accept Phase3 batches and persist certificates.
+2. For a contract, compute available whole RoboTorq (R) by counting its certificates.
+3. Authorize a distribution schedule by specifying total RoboTorq (R) to issue. (TokenTorq and JouleTorq remainders remain zero at authorization; downstream ticks may result in remainder handling, but CertVault is not involved.)
 
-In the **MVP distostream path**, CertVault is also the **economic source of truth** for the UBD stream:
-- CertVault derives `total_jtu_micro_rt` **from the certificates themselves** (1 RoboTorqCertificate ≡ 1 RoboTorqUnit ≡ 3.6M JTUs for a fully-backed certificate, or via joules → JTUs mapping).
-- Critically: `total_jtu_micro_rt` is **not** taken from any Mint payload field and is **never recomputed** from `robostake_micro_rt × torq_factor` inside the vault.
-- CertVault computes a **uniform drip schedule** and publishes a `vault.distostream.authorized` event consumed by ShadowDistoVault.
+Removed legacy concepts:
+- No `robostake_micro_rt` numeric collateral field.
+- No per‑certificate JTU or derived torq_factor multiplication inside CertVault.
+- No JTU streaming list; IssuanceEvents handle hierarchical (R,T,J) emission.
+
+CertVault publishes `vault.distostream.authorized` events containing:
+```
+{
+    event_type: "distostream_authorized",
+    contract_id: <id>,
+    robotorq_total: <R>,
+    tokentorq_remainder: 0,
+    jouletorq_remainder: 0,
+    duration_seconds: <cfg or payload>,
+    starts_at_nanos: <now>,
+    provenance_cert_ids: [ ... ]
+}
+```
+Downstream, DistoVault converts this whole RoboTorq total into per‑tick IssuanceEvents; any partial ticks that cannot form a whole RoboTorq unit are expressed as TokenTorq / JouleTorq remainders inside the IssuanceEvents, never by mutating CertVault state.
 
 ### 3.2 Rust Implementation
 
@@ -400,7 +382,7 @@ pub struct RegisteredContract {
     pub torq_factor: f64,             // Value multiplier (e.g., 1.5 = 50% bonus)
     pub status: String,               // "active", "paused", "completed", "slashed"
     pub created_at: i64,
-    pub cert_vault_signature: Vec<u8>,  // Dilithium5 signature
+    pub cert_vault_signature: Vec<u8>,  // Falcon signature
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -642,7 +624,7 @@ impl ShadowCertVault {
             wallet_id: wallet_id.clone(),
             cert_count,
             timestamp: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
-            cert_vault_sig: vec![],  // TODO: Sign with Dilithium5
+            cert_vault_sig: vec![],  // TODO: Sign with Falcon
         };
         self.proof_log.write().push(proof);
         
@@ -715,7 +697,7 @@ impl ShadowCertVault {
             wallet_id: bond.downloaded_by_wallet_id.clone(),
             cert_count: bond.cert_count,
             timestamp: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
-            cert_vault_sig: vec![],  // TODO: Sign with Dilithium5
+            cert_vault_sig: vec![],  // TODO: Sign with Falcon
         };
         self.proof_log.write().push(proof);
         
@@ -787,10 +769,7 @@ impl ShadowCertVault {
 
 ### 4.1 Purpose
 
-Produce JTUs (as authorized by CertVault) and distribute them equally to all user ShortVaults (UBD) on a **uniform drip schedule**:
-- DistoVault **does not** decide economic value; it only consumes `vault.distostream.authorized`.
-- For each authorization, it creates an in-memory **UniformDistoStream** and runs a tokio task that ticks every `tick_millis` and distributes `jtu_per_tick` to the **current** ShortVault membership.
-- Late joiners participate in remaining ticks only, matching the final design’s economics.
+Generate **IssuanceEvents** (signed) according to authorization schedules derived from certificates (via CertVault). DistoVault holds no persistent backed currency balance; it computes deterministic splits per tick and credits ShortVaults. Late joiners receive remaining ticks only.
 
 ### 4.2 Rust Implementation
 
@@ -807,12 +786,15 @@ use anyhow::Result;
 pub struct UniformDistoStream {
     pub stream_id: String,
     pub contract_id: String,
-    pub total_jtu_micro_rt: i64,
+    pub total_jouletorq: i64,
+    pub total_tokentorq: i64,
+    pub total_robotorq: i64,
     pub duration_seconds: i64,
-    pub jtu_per_second: i64,
     pub tick_millis: i64,
-    pub remaining_jtu_micro_rt: std::sync::atomic::AtomicI64,
-    pub started_at: i64,
+    pub remaining_jouletorq: std::sync::atomic::AtomicI64,
+    pub remaining_tokentorq: std::sync::atomic::AtomicI64,
+    pub remaining_robotorq: std::sync::atomic::AtomicI64,
+    pub started_at_nanos: i64,
 }
 
 /// Shadow DistoVault: Universal Basic Disto (UBD) distribution
@@ -1153,18 +1135,13 @@ impl ShortVaultRegistry {
 
 ---
 
-## 6. Atomic Value Refactor: JouleTorq Units & Certificates
+## 6. Data & Event Schema
 
 ### 6.1 Motivation
 
-Legacy transport exposed only a numeric `robostake_micro_rt` collateral amount. This obscured the identity of atomic value units and limited fine‑grained audit, revocation, programmable money features, and physical conversion tracking. We introduce:
+Shift from single-field micro representation and JTU streaming to a **triple fixed‑point model** across physics (JouleTorq), throughput (TokenTorq), and monetary aggregate (RoboTorq). This enables deterministic multi-dimensional accounting, programmable allocation constraints, and precise provenance (certificates) without moving ledger objects.
 
-1. `JouleTorqUnit` – raw physics production granule (internal aggregation primitive).
-2. `JouleTorqCertificate` – spendable atomic monetary unit (JTU) streamed by DistoVault; each references a backing `RoboTorqCertificate`.
-
-`RoboTorqCertificate` remains the permanent ledger asset and bearer‑bond backing. JTUs are ephemeral in aggregation semantics (can be combined/burned) but individually addressable.
-
-### 6.2 Data Structures (Canonical)
+### 6.2 Core Structures
 
 ```rust
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -1180,31 +1157,28 @@ pub struct JouleTorqUnit {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct JouleTorqCertificate {
-        pub jtu_id: String,           // Globally unique
-        pub parent_cert_id: String,   // Backing RoboTorqCertificate
-        pub parent_proof_id: String,  // Proof / merkle linkage
-        pub merkle_leaf_hash: String, // Leaf hash for distribution merkle
-        pub created_at_nanos: i64,
-        pub signature: Option<Vec<u8>>,   // OPTIONAL per‑JTU signature
-        pub public_key: Option<Vec<u8>>,  // OPTIONAL verifying key
-        pub status: JTUStatus,            // Circulating | Redeemed | Revoked
+pub struct StakeEvent { /* as above */ }
+pub struct IssuanceEvent {
+    pub issuance_event_id: String,
+    pub stream_id: String,
+    pub contract_id: String,
+    pub jouletorq_amount: i64,
+    pub tokentorq_amount: i64,
+    pub robotorq_amount: i64,
+    pub member_ids: Vec<String>, // membership snapshot for deterministic split
+    pub per_member_robotorq: i64, // derived; may omit physics/throughput per member
+    pub provenance_cert_ids: Vec<String>,
+    pub tick_index: i32,
+    pub timestamp_nanos: i64,
+    pub signature: Vec<u8>,
 }
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum JTUStatus { Circulating, Redeemed, Revoked }
 ```
 
-### 6.3 Signature Strategy (Falcon vs Existing PQC)
+### 6.3 Signature Strategy
 
-Options:
-1. No per‑JTU signature (inherit trust from signed parent RoboTorqCertificate + merkle inclusion). Lowest overhead; fine‑grained revocation requires auxiliary index.
-2. Use existing Dilithium5 / SPHINCS+ for each JTU. Reuses current `oqs` stack; higher bandwidth (SPHINCS+ size) / CPU cost.
-3. Introduce Falcon for compact fast signatures. Adds algorithm & key management complexity; improves streaming efficiency.
+All StakeEvents and IssuanceEvents are signed (Falcon) over a canonical JSON ordering. Individual certificates remain separately signed upstream. Per-member signatures are not required; event-level signature + deterministic split suffices.
 
-MVP Recommendation: Option 1 (no per‑JTU signatures). Leave `signature`/`public_key` optional for future upgrade. Evaluate Falcon after measuring JTU stream volume & latency.
-
-### 6.4 Batch Payload Refactor
+### 6.4 Phase3 Batch Payload (Certificates Only)
 
 Canonical `vault.phase3.completed` payload now uses explicit JTU certificates:
 
@@ -1214,16 +1188,6 @@ Canonical `vault.phase3.completed` payload now uses explicit JTU certificates:
     "batch": {
         "batch_id": "batch-20251121-001",
         "created_at_nanos": 1732212345678900000,
-        "joule_torq_certificates": [
-            {
-                "jtu_id": "jtu-aaa111",
-                "parent_cert_id": "cert-abc123",
-                "parent_proof_id": "proof-xyz789",
-                "merkle_leaf_hash": "f1c2...",
-                "created_at_nanos": 1732212345678900000,
-                "status": "Circulating"
-            }
-        ],
         "certificates": [
             {
                 "cert_id": "cert-abc123",
@@ -1240,23 +1204,23 @@ Canonical `vault.phase3.completed` payload now uses explicit JTU certificates:
 }
 ```
 
-Stake semantics: Numeric collateral field deprecated in transport. Economic derivation & distribution use count and identity of JTUs. Transitional phase may carry both fields; vault ignores numeric once reconciliation passes.
+Stake semantics: Certificates stay resident; StakeEvents move derived triple balances between reserve and contracts referencing certificate provenance. Phase3 payload need not embed backed currency numbers—Vault derives them deterministically.
 
 ### 6.5 Migration Phases
 
-1. Phase A: Mint publishes both `robostake_micro_rt` and `joule_torq_certificates` (dual accounting).
-2. Phase B: StakeVault tracks `available_jtu_count` plus legacy micro‑RT; periodic reconciliation asserts `micro_rt == available_jtu_count * RT_PER_JTU`.
-3. Phase C: Remove `robostake_micro_rt` from code & payload; metrics switch to JTU‑based counters.
-4. Phase D: Optional per‑JTU signing (Dilithium5). Evaluate Falcon adoption.
+1. Phase A: Introduce triple balance schema internally; legacy micro fields still published.
+2. Phase B: Dual publication (legacy + triple) for reconciliation; signatures over both.
+3. Phase C: Remove legacy single-field; rely solely on triple balances & certificate provenance.
+4. Phase D: Optional optimization (aggregate commitments / range proofs) for large issuance streams.
 
 ### 6.6 Required Code Changes (Outline)
 
 - Add model files: `joule_torq_unit.rs`, `joule_torq_certificate.rs`.
-- Mint batch assembler: produce `joule_torq_certificates` vector.
-- Vault NATS handler: deserialize new batch shape; adapt CertVault & DistoVault to stream JTUs.
-- StakeVault: introduce JTU inventory; deprecate numeric collateral.
-- Metrics: replace `refinery_robostake_aggregated_total` with `mint_jtu_cert_issued_total`, `vault_jtu_streamed_total`.
-- Events: add `vault.jtu.streamed` (optional granular event for per‑JTU trace).
+- Mint → Vault: unchanged for certificates; remove JTU list injection.
+- StakeVault: implement triple balances + StakeEvent signing.
+- DistoVault: implement IssuanceEvent generation (signed) with deterministic membership snapshot.
+- Metrics: `vault_stake_events_total`, `vault_issuance_events_total`, `vault_triple_balance_reserve{dimension=..}`.
+- Events: `vault.stake.event`, `vault.issuance.event`, deprecate `vault.robostake.*`.
 
 ## 7. Concurrency Model
 
