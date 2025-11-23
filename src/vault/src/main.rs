@@ -31,10 +31,10 @@ async fn main() -> Result<()> {
                         error!(cert_id=%cert.cert_id, error=%e, "failed to store certificate");
                     }
                 }
-                // Update stake vault reserve (each cert = 1 RoboTorq)
-                let added = batch.certificates.len() as i64;
-                stake_vault.increment_available(added, 0, 0);
-                if let Err(e) = stake_vault.publish_robostake_return(batch.batch_id.clone(), added, 0, 0).await {
+                // Update stake vault reserve using explicit total_robostake from batch (NOT cert_count derived)
+                let returned = batch.total_robostake;
+                stake_vault.increment_available(returned);
+                if let Err(e) = stake_vault.publish_robostake_return(batch.batch_id.clone(), returned).await {
                     error!(batch_id=%batch.batch_id, error=%e, "failed publishing robostake.returned");
                 }
             }

@@ -20,22 +20,23 @@ async fn batch_ingestion_updates_stake() {
         event_type: "robotorqcert_batch_completed".into(),
         batch_id: "batch-01".into(),
         created_at: 0,
-        cert_count: certs.len(),
+        cert_count: certs.len(),          // 3 certificates
+        total_robostake: 5,               // returned stake value differs from cert_count
         canonical_total_jouletorq: (certs.len() as i64) * 3_600_000,
         certificates: certs.clone(),
     };
 
     // Simulate main loop logic directly
     for c in batch.certificates.iter() { cert_vault.store_certificate(c.clone()).await.unwrap(); }
-    stake_vault.increment_available(batch.certificates.len() as i64, 0, 0);
+    stake_vault.increment_available(batch.total_robostake);
 
-    assert_eq!(cert_vault.total_robotorq(), 3);
-    assert_eq!(stake_vault.available().robotorq, 3);
+    assert_eq!(cert_vault.total_robotorq(), 3, "certificate count unaffected by stake value");
+    assert_eq!(stake_vault.available_robostake(), 5, "stake reserve uses total_robostake not cert_count");
 
-    // Allocate 2 RoboTorq
-    stake_vault.allocate("contract-X", 2, 0, 0).await.unwrap();
-    assert_eq!(stake_vault.available().robotorq, 1);
-    assert_eq!(stake_vault.deployed().robotorq, 2);
+    // Allocate 2 RoboTorq from returned stake (5 total -> expect 3 remaining)
+    stake_vault.allocate("contract-X", 2).await.unwrap();
+    assert_eq!(stake_vault.available_robostake(), 3, "available should drop by allocated amount");
+    assert_eq!(stake_vault.deployed_robostake(), 2, "deployed should reflect allocation");
 
     sleep(Duration::from_millis(10)).await;
 }
