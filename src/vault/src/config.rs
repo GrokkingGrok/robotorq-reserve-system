@@ -9,7 +9,10 @@ pub struct VaultConfig {
 
 impl VaultConfig {
     pub fn from_env() -> Self {
-        let nats_url = env::var("VAULT_NATS_URL").unwrap_or_else(|_| "nats://127.0.0.1:4222".to_string());
+        // Prefer explicit vault-specific variable, then generic NATS_URL, then container-network default service name.
+        let nats_url = env::var("VAULT_NATS_URL")
+            .or_else(|_| env::var("NATS_URL"))
+            .unwrap_or_else(|_| "nats://nats:4222".to_string());
         let distostream_default_seconds = env::var("VAULT_DISTOSTREAM_DEFAULT_SECONDS")
             .ok()
             .and_then(|v| v.parse().ok())

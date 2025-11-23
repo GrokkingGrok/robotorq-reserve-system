@@ -15,7 +15,14 @@ use tokio::task;
 async fn main() -> Result<()> {
     tracing_subscriber::fmt().with_env_filter("info").init();
     let cfg = VaultConfig::from_env();
-    let nats = connect_nats(&cfg.nats_url).await?;
+    info!(config=?cfg, "vault configuration loaded");
+    let nats = match connect_nats(&cfg.nats_url).await {
+        Ok(c) => c,
+        Err(e) => {
+            error!(error=%e, nats_url=%cfg.nats_url, "failed to connect to NATS");
+            return Err(e);
+        }
+    };
 
     let metrics = VaultMetrics::new();
     let cert_vault = Arc::new(ShadowCertVault::new(nats.clone()).with_metrics(metrics.clone()));
