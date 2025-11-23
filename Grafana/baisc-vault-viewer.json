@@ -1,0 +1,91 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Basic Vault Viewer",
+    "tags": ["robotorq", "vault"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "type": "row",
+        "title": "Vault Metrics",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+      },
+      {
+        "type": "stat",
+        "title": "Certificates Stored",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "vault_cert_stored_total",
+            "legendFormat": "Certificates"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 8, "x": 0, "y": 1 }
+      },
+      {
+        "type": "stat",
+        "title": "Available RoboStake",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "vault_available_robostake",
+            "legendFormat": "Available"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 8, "x": 8, "y": 1 }
+      },
+      {
+        "type": "stat",
+        "title": "Deployed RoboStake",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "vault_deployed_robostake",
+            "legendFormat": "Deployed"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 8, "x": 16, "y": 1 }
+      },
+      {
+        "type": "graph",
+        "title": "Stake Allocation Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(vault_stake_allocated_total[1m])",
+            "legendFormat": "Allocations/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 }
+      },
+      {
+        "type": "graph",
+        "title": "RoboStake Return Rate",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(vault_robostake_returned_total[1m])",
+            "legendFormat": "Returns/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "5s",
+    "schemaVersion": 27,
+    "version": 0,
+    "links": []
+  }
+}
