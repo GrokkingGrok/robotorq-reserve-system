@@ -4,7 +4,7 @@ Basic Vault Viewer Integration Test
 Watches x batches arrive, separated by y seconds, configurable via command line.
 
 Prerequisites:
-- docker-compose up -d (vault, nats running)
+- docker compose up -d vault nats prometheus grafana
 - python -m pip install nats-py requests (optional for metrics polling)
 
 Usage:
@@ -49,18 +49,22 @@ def _http_get(url: str) -> Tuple[int, str]:
 
 def create_sample_batch(batch_id: str, cert_count: int = 1, total_robostake: int = 3) -> dict:
     """Generate a sample RoboTorqBatch for testing."""
+    import time
+    current_timestamp = int(time.time() * 1000)  # milliseconds since epoch
+
     certificates = [
         {
             "cert_id": f"cert-{batch_id}-{i}",
+            "merkle_root": f"merkle-{batch_id}-{i}",
+            "tree_height": 10,
             "contract_ids": ["test-contract"],
-            "jouletorq_units": 1000,
-            "timestamp": "2025-11-23T00:00:00Z"
+            "minted_at": current_timestamp
         } for i in range(cert_count)
     ]
     return {
-        "event_type": "phase3.completed",
+        "event_type": "robotorqcert_batch_completed",
         "batch_id": batch_id,
-        "created_at": "2025-11-23T00:00:00Z",
+        "created_at": current_timestamp,
         "cert_count": cert_count,
         "total_robostake": total_robostake,
         "canonical_total_jouletorq": cert_count * 1000,
