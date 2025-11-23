@@ -35,26 +35,62 @@ Mint emits a single event on Phase3 completion:
 ```jsonc
 {
   "event_type": "robotorqcert_batch_completed",
-  // NOTE: Legacy numeric robostake field removed; value is re-derived from certificates as whole RoboTorq units (R) with zero remainders at ingress.
-
+  // Phase3 output: Mint produces whole certificates only. Each certificate = 1 RoboTorq (R).
+  // No RoboStake fields here: RoboStake is the PRIOR allocation (labor input) referencing existing certificates, not a precursor to new ones.
   "batch": {
     "batch_id": "batch-0001",
     "created_at": 1732224000000000000,
+    "cert_count": 12,
+    "canonical_total_jouletorq": 43200000,      // cert_count * 3_600_000 (derived convenience field)
     "certificates": [
       {
-        "unit_id": "RT-20251121-123456.000000",
+        "cert_id": "RT-20251121-123456.000000",
         "merkle_root": "abcdef1234...64chars...",
         "tree_height": 10,
-        "robo_stake_total": 1000000.0,
         "contract_ids": ["printer-coin-42"],
         "merkle_proof_api": "/verify/proof/RT-20251121-123456.000000",
         "minted_at": 1732224000000000000
       }
-      // ... N many RoboTorqCerts in the batch
+      // ... N many RoboTorqCertificates in the batch
     ]
   }
 }
 ```
+
+Clarification:
+- Certificates are minted from ore → ingots → merklized ingot batches. RoboStake does NOT create certificates; it AUTHORIZES the labor that yields the ore that becomes ingots/certs.
+- A RoboStake return DOES occur alongside the certificate batch: the allocated stake for the labor cycle is recycled back into the StakeVault as a hierarchical triple (R,T,J) at the moment certificates are accepted. The certificates themselves remain in CertVault; the returned RoboStake triple refreshes allocation capacity.
+- Returned RoboStake triple MAY contain non‑zero remainders (T,J) representing partial progress toward the NEXT certificate not yet complete in this batch.
+- This dual arrival (cert batch + stake return) does NOT inflate supply: StakeVault’s available reserve and CertVault’s backing refer to the same conserved physics value in different lifecycle states (allocated vs minted). Invariant: canonical_total_jouletorq(backing certificates) ≥ canonical_total_jouletorq(available_reserve + deployed + pending) to prevent double counting.
+
+### RoboStake Return Event (recycled labor input)
+
+Subject: `vault.robostake.returned`
+
+```jsonc
+{
+  "event_type": "robostake_returned",
+  "batch_id": "batch-0001",                     // Correlates with cert batch
+  "contract_ids": ["printer-coin-42"],          // Contracts whose labor completed in this batch
+  "robotorq": 3,                                 // Whole RoboTorq units recycled to reserve
+  "tokentorq_remainder": 217,                    // Partial ingots toward next certificate
+  "jouletorq_remainder": 1452,                   // Remaining ore units
+  "canonical_total_jouletorq": 10800000 + 781200 + 1452,
+  "provenance_cert_ids": ["RT-20251121-123456.000000","RT-20251121-123457.000000"],
+  "timestamp_nanos": 1732224005000000000,
+  "signature": "falcon-base64-sig"
+}
+```
+
+StakeVault actions on receipt:
+1. Verify invariants (0 ≤ T < 1000, 0 ≤ J < 3600).
+2. Atomically add (R,T,J) to `available_*` triple.
+3. Emit `vault.stake.reserve.updated` reflecting new reserve totals.
+
+Issuance/Allocation Relationship:
+- Allocations reduce `available_*` and increase `deployed_*`.
+- Completion → Mint Phase3 → cert batch + stake return resets deployed portion back into available (via return event) while backing supply increases by new certificates.
+- The system never mints certificates directly out of the returned stake; certificates are already formed upstream from ore. The stake return is bookkeeping for allocation lifecycle, not an additional mint source.
 
 Notes:
 - Mint sends a single `RoboTorqBatch` containing N `RoboTorqCertificate`s. Vault extracts all certificates and stores them in CertVault.

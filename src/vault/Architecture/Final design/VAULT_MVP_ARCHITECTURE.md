@@ -482,51 +482,40 @@ impl ShadowCertVault {
         Ok(())
     }
 
-    /// Compute total JTUs for a given contract from certificates
-    /// NOTE: This is the **only** supported way to derive `total_jtu_micro_rt` for UBD.
-    /// - 1 RoboTorqCertificate ≡ 1 RoboTorqUnit ≡ 3.6M JTUs (for fully-backed certs)
-    /// - Alternatively, joules can be mapped to JTUs using the physics rule
-    pub async fn compute_total_jtu_for_contract(&self, contract_id: &str) -> i64 {
-        // Simple placeholder rule: count certs that include this contract_id
-        // in their contract_ids list and multiply by 3.6M JTUs. Implementation
-        // can be refined, but **MUST NOT** use `robostake_micro_rt × torq_factor`
-        // inside the vault.
-        let cert_count = self
+    /// Compute hierarchical total (R,T,J) for a given contract from certificates.
+    /// - 1 RoboTorqCertificate = 1 RoboTorq (R)
+    /// - TokenTorq & JouleTorq remainders derived here are zero because certificates are whole units.
+    pub async fn compute_triple_for_contract(&self, contract_id: &str) -> (i64, i64, i64) {
+        let robotorq_count = self
             .certificates
             .iter()
             .filter(|entry| entry.value().contract_ids.iter().any(|c| c == contract_id))
             .count() as i64;
-
-        const JTUS_PER_CERT: i64 = 3_600_000; // 3.6M JTUs per fully-backed cert
-        cert_count * JTUS_PER_CERT
+        // Remainders zero at this layer.
+        (robotorq_count, 0, 0)
     }
 
-    /// Authorize a uniform distostream for a contract
-    /// - Derives `total_jtu_micro_rt` from certificates
-    /// - Chooses `duration_seconds` based on config or contract
-    /// - Publishes `vault.distostream.authorized` for DistoVault to consume
+    /// Authorize a uniform distostream for a contract using hierarchical triple.
+    /// Publishes `vault.distostream.authorized` with (robotorq_total, tokentorq_remainder, jouletorq_remainder).
+    /// NOTE: tokentorq_remainder & jouletorq_remainder from certificates are zero; non-zero remainders appear only in RoboStake lifecycle or partial allocation contexts.
     pub async fn authorize_disto_stream(
         &self,
         contract_id: &str,
         default_duration_seconds: i64,
     ) -> Result<()> {
-        let total_jtu_micro_rt = self.compute_total_jtu_for_contract(contract_id).await;
+        let (robotorq_total, tokentorq_remainder, jouletorq_remainder) =
+            self.compute_triple_for_contract(contract_id).await;
 
-        // For MVP, use default duration; future versions may override per contract
         let duration_seconds = default_duration_seconds;
-        let jtu_per_second = if duration_seconds > 0 {
-            total_jtu_micro_rt / duration_seconds
-        } else {
-            total_jtu_micro_rt
-        };
-
         let event = serde_json::json!({
             "event_type": "distostream_authorized",
             "contract_id": contract_id,
-            "total_jtu_micro_rt": total_jtu_micro_rt,
+            "robotorq_total": robotorq_total,
+            "tokentorq_remainder": tokentorq_remainder,
+            "jouletorq_remainder": jouletorq_remainder,
             "duration_seconds": duration_seconds,
-            "jtu_per_second": jtu_per_second,
-            "timestamp": chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+            "schedule_type": "uniform",
+            "timestamp_nanos": chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
         });
 
         self.nats_client
@@ -538,12 +527,47 @@ impl ShadowCertVault {
 
         tracing::info!(
             contract_id = %contract_id,
-            total_jtu_micro_rt = total_jtu_micro_rt,
+            robotorq_total = robotorq_total,
             duration_seconds = duration_seconds,
-            jtu_per_second = jtu_per_second,
-            "Disto stream authorized by CertVault",
+            "Disto stream authorized by CertVault (hierarchical triple; cert layer whole R)",
         );
 
+        Ok(())
+    }
+
+    /// Publish a RoboStake return event correlated with a cert batch.
+    /// Certificates are already minted upstream; this return recycles allocated stake capacity.
+    pub async fn publish_robostake_return(
+        &self,
+        batch_id: &str,
+        contract_ids: Vec<String>,
+        robotorq: i64,
+        tokentorq_remainder: i64,
+        jouletorq_remainder: i64,
+        provenance_cert_ids: Vec<String>,
+    ) -> Result<()> {
+        if tokentorq_remainder >= 1000 || jouletorq_remainder >= 3600 {
+            anyhow::bail!("remainder out of bounds for RoboStake return");
+        }
+        let canonical_total_jouletorq = robotorq * 3_600_000 + tokentorq_remainder * 3_600 + jouletorq_remainder;
+        let event = serde_json::json!({
+            "event_type": "robostake_returned",
+            "batch_id": batch_id,
+            "contract_ids": contract_ids,
+            "robotorq": robotorq,
+            "tokentorq_remainder": tokentorq_remainder,
+            "jouletorq_remainder": jouletorq_remainder,
+            "canonical_total_jouletorq": canonical_total_jouletorq,
+            "provenance_cert_ids": provenance_cert_ids,
+            "timestamp_nanos": chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+        });
+        self.nats_client
+            .publish(
+                "vault.robostake.returned",
+                serde_json::to_vec(&event)?.into(),
+            )
+            .await?;
+        tracing::info!(batch_id=%batch_id, robotorq=robotorq, tokentorq_remainder=tokentorq_remainder, jouletorq_remainder=jouletorq_remainder, "RoboStake recycled to reserve (cert batch correlated)");
         Ok(())
     }
     
