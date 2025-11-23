@@ -1,5 +1,5 @@
 use robotorq_vault::{VaultConfig, ShadowCertVault, ShadowStakeVault, VaultMetrics};
-use axum::{Router, routing::get, response::IntoResponse};
+use axum::{Router, routing::get, response::IntoResponse, http::StatusCode};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use robotorq_vault::nats_client::connect_nats;
@@ -64,21 +64,31 @@ async fn main() -> Result<()> {
     let metrics_arc = metrics.clone();
 
     let app = Router::new()
-        .route("/health", get(move || {
+        .route("/health", get({
             let cv = health_cert_vault.clone();
             let sv = health_stake_vault.clone();
-            async move {
-                let body = serde_json::json!({
-                    "certificates": cv.total_robotorq(),
-                    "available_robostake": sv.available_robostake(),
-                    "deployed_robostake": sv.deployed_robostake(),
-                });
-                axum::Json(body)
+            move || {
+                let cv = cv.clone();
+                let sv = sv.clone();
+                async move {
+                    let body = serde_json::json!({
+                        "certificates": cv.total_robotorq(),
+                        "available_robostake": sv.available_robostake(),
+                        "deployed_robostake": sv.deployed_robostake(),
+                    });
+                    axum::Json(body)
+                }
             }
         }))
-        .route("/metrics", get(move || {
+        .route("/metrics", get({
             let m = metrics_arc.clone();
-            async move { ([("Content-Type", "text/plain; version=0.0.4")], m.encode()).into_response() }
+            move || {
+                let m = m.clone();
+                async move {
+                    let body = m.encode();
+                    (StatusCode::OK, [("Content-Type", "text/plain; version=0.0.4")], body).into_response()
+                }
+            }
         }));
 
     let addr: SocketAddr = "0.0.0.0:8088".parse()?;
@@ -89,10 +99,11 @@ async fn main() -> Result<()> {
         Ok::<(), anyhow::Error>(())
     });
 
-    // Wait for either task to error (server normally runs indefinitely).
-    tokio::select! {
-        r = server => { r??; }
-        r = sub_task => { r??; }
-    }
+    // Await server (runs indefinitely) and keep subscription task detached.
+    // If subscription ends unexpectedly we log and continue serving metrics.
+    tokio::spawn(async move {
+        if let Err(e) = sub_task.await { error!(error=%e, "subscription task ended unexpectedly"); }
+    });
+    server.await??;
     Ok(())
 }

@@ -3,7 +3,7 @@
 # Dev build uses Debian slim for faster linking (glibc). Switch to Alpine + musl if you need a smaller image later.
 
 # ---------- Build Stage ----------
-FROM rust:1.71-slim-bookworm AS builder
+FROM rust:1.91-slim-bookworm AS builder
 
 # Install build dependencies (add others if future crypto libs required)
 RUN apt-get update && apt-get install -y \
@@ -16,15 +16,15 @@ WORKDIR /app
 
 # Copy manifest first for dependency caching
 COPY Cargo.toml Cargo.lock ./
-# Create an empty src tree to satisfy cargo, then build deps
+
+# Pre-fetch dependencies (uses dummy main, skips building our code)
 RUN mkdir src && echo "fn main(){}" > src/main.rs && \
-    cargo build --release || true
+    cargo fetch && rm -rf src
 
-# Remove placeholder and copy real source
-RUN rm -rf src
-COPY src ./src
+# Copy full crate (include test_publisher.rs, Architecture docs etc.)
+COPY . .
 
-# Build release binary
+# Build release binary (fail build if binary missing)
 RUN cargo build --release --bin vault
 
 # ---------- Runtime Stage ----------
