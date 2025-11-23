@@ -9,7 +9,7 @@
 ## 🎯 The Big Picture (30 seconds)
 
 **What is RoboTorq?**
-> A currency where **1 RT = 1 hour of verified robotic work**
+> A currency where **1 RT = 1 hour of *ideal* robotic work (think *1 hour of thermodynamically ideal work*)**
 
 **Why does it matter?**
 > It's the first currency backed by **physics** (measurable energy + computation), not:
