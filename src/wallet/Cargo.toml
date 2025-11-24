@@ -1,35 +1,46 @@
 [package]
-name = "wallet"
+name = "robotorq-wallet"
 version = "0.1.0"
 edition = "2024"
-authors = ["RoboTorq Project"]
-description = "RoboTorq Wallet Service - Tracks RoboTorq unit balances"
+license = "MIT OR Apache-2.0"
+authors = ["RoboTorq"]
 
 [[bin]]
 name = "wallet"
 path = "src/main.rs"
 
 [dependencies]
+# Core async runtime
+tokio = { version = "1.35", features = ["macros", "rt-multi-thread", "sync", "time"] }
+
 # HTTP Server
-axum = "0.8.7"
-tokio = { version = "1", features = ["full"] }
-tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+axum = { version = "0.8.7", features = ["macros"] }
+
+# HTTP middleware
+tower-http = { version = "0.6", features = ["trace"] }
 
 # NATS Client
 async-nats = "0.45.0"
 futures-util = "0.3"
 
+# Database
+tokio-postgres = { version = "0.7", features = ["with-uuid-0_8"] }
+deadpool-postgres = "0.14"
+
 # Serialization
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0.17"
 
 # Metrics
 prometheus = "0.14"
 
 # Logging
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 
 # Configuration
 dotenvy = "0.15"
@@ -38,10 +49,28 @@ dotenvy = "0.15"
 chrono = { version = "0.4", features = ["serde"] }
 
 # UUID
-uuid = { version = "1.11", features = ["v4", "serde"] }
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
 
 # HTTP Client for Mint verification
 reqwest = { version = "0.12", features = ["json"] }
+
+# Hashing
+sha256 = "1.5"
+
+# Bytes for NATS
+bytes = "1.0"
+
+# Crypto (optional)
+pqcrypto-falcon = { version = "0.4", optional = true }
+openssl = { version = "0.10", features=["vendored"], optional=true }
+
+[features]
+default = []
+crypto = ["dep:openssl", "dep:pqcrypto-falcon"]
+simulation = []
+
+[dev-dependencies]
+criterion = "0.5"
 
 [profile.release]
 opt-level = 3
