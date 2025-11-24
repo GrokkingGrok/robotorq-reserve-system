@@ -16,7 +16,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let cfg = Arc::new(TrustConfig::from_env()?);
-    tracing::info!("trust starting" , nats_url = %cfg.nats_url);
+    tracing::info!(nats_url = %cfg.nats_url, "trust starting");
 
     let store = Arc::new(ContractStore::new());
     store.load_genesis(&cfg.genesis_contract_path)?;
