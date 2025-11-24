@@ -1,31 +1,36 @@
 #[cfg(feature = "crypto")]
 pub mod crypto {
-    use pqcrypto_falcon::falcon1024;
-    use sha256::{digest, Sha256};
+    use common::crypto::{parse_kind, new_algorithm, SignatureAlgorithm};
+    use sha2::{Sha256, Digest};
 
     /// Cryptographic signing and verification operations
-    pub struct CryptoOps;
+    pub struct CryptoOps {
+        algo: Box<dyn SignatureAlgorithm + Send + Sync>,
+    }
 
     impl CryptoOps {
-        /// Generate a new Falcon-1024 keypair for signing
-        pub fn generate_falcon_keypair() -> (falcon1024::PublicKey, falcon1024::SecretKey) {
-            falcon1024::keypair()
+        pub fn new(algorithm: &str) -> anyhow::Result<Self> {
+            let kind = parse_kind(algorithm)?;
+            let algo = new_algorithm(kind)?;
+            Ok(Self { algo })
         }
 
-        /// Sign data with Falcon-1024
-        pub fn sign_falcon(secret_key: &falcon1024::SecretKey, data: &[u8]) -> falcon1024::SignedMessage {
-            falcon1024::sign(data, secret_key)
+        pub fn public_key(&self) -> &[u8] { self.algo.public_key() }
+
+        pub fn sign_hash(&self, message_hash_hex: &str) -> anyhow::Result<Vec<u8>> {
+            let bytes = hex::decode(message_hash_hex)?;
+            Ok(self.algo.sign(&bytes)?)
         }
 
-        /// Verify Falcon-1024 signature
-        pub fn verify_falcon(public_key: &falcon1024::PublicKey, signed_message: &falcon1024::SignedMessage) -> Result<(), &'static str> {
-            falcon1024::verify(signed_message, public_key)
-                .map_err(|_| "Falcon signature verification failed")
+        pub fn verify_hash(&self, message_hash_hex: &str, signature: &[u8]) -> anyhow::Result<bool> {
+            let bytes = hex::decode(message_hash_hex)?;
+            Ok(self.algo.verify(&bytes, signature))
         }
 
-        /// Compute SHA256 hash of data
         pub fn sha256_hash(data: &[u8]) -> String {
-            format!("{:x}", Sha256::digest(data))
+            let mut h = Sha256::new();
+            h.update(data);
+            format!("{:x}", h.finalize())
         }
     }
 
@@ -35,74 +40,62 @@ pub mod crypto {
         use crate::models::{UBDDistributionPackage, DemurrageReleasePackage, PackageConfirmation};
 
         impl UBDDistributionPackage {
-            /// Sign a UBD package with Falcon-1024
-            pub fn sign(&mut self, secret_key: &falcon1024::SecretKey) {
-                let data_to_sign = format!("{}:{}:{}", self.user_id, self.amount_canonical_jouletorq, self.certificates.len());
-                let signature = CryptoOps::sign_falcon(secret_key, data_to_sign.as_bytes());
-                self.vault_signature = Some(hex::encode(signature.as_bytes()));
-            }
-
-            /// Verify a UBD package signature
-            pub fn verify_signature(&self, public_key: &falcon1024::PublicKey) -> Result<(), &'static str> {
-                if let Some(ref sig_hex) = self.vault_signature {
-                    let data_to_verify = format!("{}:{}:{}", self.user_id, self.amount_canonical_jouletorq, self.certificates.len());
-                    let signature_bytes = hex::decode(sig_hex)
-                        .map_err(|_| "Invalid signature hex encoding")?;
-                    let signed_message = falcon1024::SignedMessage::from_bytes(&signature_bytes)
-                        .map_err(|_| "Invalid signature format")?;
-
-                    CryptoOps::verify_falcon(public_key, &signed_message)
-                } else {
-                    Err("No signature present")
+            pub fn sign_with(&mut self, ops: &CryptoOps) {
+                let payload = format!("{}:{}:{}", self.user_id, self.amount_canonical_jouletorq, self.certificates.len());
+                let hash = CryptoOps::sha256_hash(payload.as_bytes());
+                if let Ok(sig) = ops.sign_hash(&hash) {
+                    self.vault_signature = Some(hex::encode(sig));
                 }
+            }
+            pub fn verify_with(&self, ops: &CryptoOps) -> bool {
+                if let Some(sig_hex) = &self.vault_signature {
+                    let payload = format!("{}:{}:{}", self.user_id, self.amount_canonical_jouletorq, self.certificates.len());
+                    let hash = CryptoOps::sha256_hash(payload.as_bytes());
+                    if let Ok(sig_bytes) = hex::decode(sig_hex) {
+                        return ops.verify_hash(&hash, &sig_bytes).unwrap_or(false);
+                    }
+                }
+                false
             }
         }
 
         impl DemurrageReleasePackage {
-            /// Sign a demurrage package
-            pub fn sign(&mut self, secret_key: &falcon1024::SecretKey) {
-                let data_to_sign = format!("{}:{}", self.user_id, self.amount_canonical_jouletorq);
-                let signature = CryptoOps::sign_falcon(secret_key, data_to_sign.as_bytes());
-                self.vault_signature = Some(hex::encode(signature.as_bytes()));
-            }
-
-            /// Verify a demurrage package signature
-            pub fn verify_signature(&self, public_key: &falcon1024::PublicKey) -> Result<(), &'static str> {
-                if let Some(ref sig_hex) = self.vault_signature {
-                    let data_to_verify = format!("{}:{}", self.user_id, self.amount_canonical_jouletorq);
-                    let signature_bytes = hex::decode(sig_hex)
-                        .map_err(|_| "Invalid signature hex encoding")?;
-                    let signed_message = falcon1024::SignedMessage::from_bytes(&signature_bytes)
-                        .map_err(|_| "Invalid signature format")?;
-
-                    CryptoOps::verify_falcon(public_key, &signed_message)
-                } else {
-                    Err("No signature present")
+            pub fn sign_with(&mut self, ops: &CryptoOps) {
+                let payload = format!("{}:{}", self.user_id, self.amount_canonical_jouletorq);
+                let hash = CryptoOps::sha256_hash(payload.as_bytes());
+                if let Ok(sig) = ops.sign_hash(&hash) {
+                    self.vault_signature = Some(hex::encode(sig));
                 }
+            }
+            pub fn verify_with(&self, ops: &CryptoOps) -> bool {
+                if let Some(sig_hex) = &self.vault_signature {
+                    let payload = format!("{}:{}", self.user_id, self.amount_canonical_jouletorq);
+                    let hash = CryptoOps::sha256_hash(payload.as_bytes());
+                    if let Ok(sig_bytes) = hex::decode(sig_hex) {
+                        return ops.verify_hash(&hash, &sig_bytes).unwrap_or(false);
+                    }
+                }
+                false
             }
         }
 
         impl PackageConfirmation {
-            /// Sign a package confirmation
-            pub fn sign(&mut self, secret_key: &falcon1024::SecretKey) {
-                let data_to_sign = format!("{}:{}:{}:{}", self.package_id, self.user_id, self.received_amount, self.package_hash);
-                let signature = CryptoOps::sign_falcon(secret_key, data_to_sign.as_bytes());
-                self.wallet_signature = Some(hex::encode(signature.as_bytes()));
-            }
-
-            /// Verify a package confirmation signature
-            pub fn verify_signature(&self, public_key: &falcon1024::PublicKey) -> Result<(), &'static str> {
-                if let Some(ref sig_hex) = self.wallet_signature {
-                    let data_to_verify = format!("{}:{}:{}:{}", self.package_id, self.user_id, self.received_amount, self.package_hash);
-                    let signature_bytes = hex::decode(sig_hex)
-                        .map_err(|_| "Invalid signature hex encoding")?;
-                    let signed_message = falcon1024::SignedMessage::from_bytes(&signature_bytes)
-                        .map_err(|_| "Invalid signature format")?;
-
-                    CryptoOps::verify_falcon(public_key, &signed_message)
-                } else {
-                    Err("No signature present")
+            pub fn sign_with(&mut self, ops: &CryptoOps) {
+                let payload = format!("{}:{}:{}:{}", self.package_id, self.user_id, self.received_amount, self.package_hash);
+                let hash = CryptoOps::sha256_hash(payload.as_bytes());
+                if let Ok(sig) = ops.sign_hash(&hash) {
+                    self.wallet_signature = Some(hex::encode(sig));
                 }
+            }
+            pub fn verify_with(&self, ops: &CryptoOps) -> bool {
+                if let Some(sig_hex) = &self.wallet_signature {
+                    let payload = format!("{}:{}:{}:{}", self.package_id, self.user_id, self.received_amount, self.package_hash);
+                    let hash = CryptoOps::sha256_hash(payload.as_bytes());
+                    if let Ok(sig_bytes) = hex::decode(sig_hex) {
+                        return ops.verify_hash(&hash, &sig_bytes).unwrap_or(false);
+                    }
+                }
+                false
             }
         }
     }

@@ -63,6 +63,7 @@ bytes = "1.0"
 # Crypto (optional)
 pqcrypto-falcon = { version = "0.4", optional = true }
 openssl = { version = "0.10", features=["vendored"], optional=true }
+common = { path = "../common" }
 
 [features]
 default = []

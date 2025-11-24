@@ -38,6 +38,7 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 openssl = { version = "0.10", features=["vendored"], optional=true }
 sha256 = "1.5"
 pqcrypto-falcon = { version = "0.4", optional = true }
+common = { path = "../common" }
 
 [features]
 default = []

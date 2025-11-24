@@ -3,41 +3,35 @@
 //! Provides optional cryptographic features with conditional compilation.
 
 #[cfg(feature = "crypto")]
-use anyhow::Result;
+use common::crypto::{parse_kind, new_algorithm, SignatureAlgorithm};
 #[cfg(feature = "crypto")]
-use pqcrypto_falcon::falcon512;
+use sha2::{Sha256, Digest};
 #[cfg(feature = "crypto")]
 use sha256;
 
 /// Cryptographic utilities
 #[cfg(feature = "crypto")]
-pub struct Crypto;
+pub struct Crypto {
+    algo: Box<dyn SignatureAlgorithm + Send + Sync>,
+}
 
 #[cfg(feature = "crypto")]
 impl Crypto {
     /// Generate a new Falcon keypair
-    pub fn generate_keypair() -> Result<(Vec<u8>, Vec<u8>)> {
-        let (pk, sk) = falcon512::keypair();
-        Ok((pk, sk))
+    pub fn new(algorithm: &str) -> anyhow::Result<Self> {
+        let kind = parse_kind(algorithm)?;
+        let algo = new_algorithm(kind)?;
+        Ok(Self { algo })
     }
-
-    /// Sign data with Falcon private key
-    pub fn sign(data: &[u8], secret_key: &[u8]) -> Result<Vec<u8>> {
-        let sk = falcon512::SecretKey::from_bytes(secret_key)?;
-        let signature = falcon512::sign(data, &sk);
-        Ok(signature)
-    }
-
-    /// Verify Falcon signature
-    pub fn verify(data: &[u8], signature: &[u8], public_key: &[u8]) -> Result<bool> {
-        let pk = falcon512::PublicKey::from_bytes(public_key)?;
-        let is_valid = falcon512::verify(data, signature, &pk).is_ok();
-        Ok(is_valid)
-    }
-
-    /// Hash data with SHA256
+    pub fn public_key(&self) -> &[u8] { self.algo.public_key() }
     pub fn hash(data: &[u8]) -> String {
-        sha256::digest(data)
+        let mut h = Sha256::new(); h.update(data); format!("{:x}", h.finalize())
+    }
+    pub fn sign_hash(&self, message_hash_hex: &str) -> anyhow::Result<Vec<u8>> {
+        let bytes = hex::decode(message_hash_hex)?; Ok(self.algo.sign(&bytes)?)
+    }
+    pub fn verify_hash(&self, message_hash_hex: &str, signature: &[u8]) -> anyhow::Result<bool> {
+        let bytes = hex::decode(message_hash_hex)?; Ok(self.algo.verify(&bytes, signature))
     }
 }
 
