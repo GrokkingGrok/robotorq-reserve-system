@@ -1,7 +1,6 @@
 use crate::config::TrustConfig;
 use crate::store::contract_store::ContractStore;
 use anyhow::Result;
-use async_nats::Client;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -51,8 +50,12 @@ impl NatsHandler {
                 Err(e) => serde_json::to_vec(&ErrorReply { error: format!("bad_request: {}", e) }).unwrap(),
             };
 
-            if let Err(e) = msg.respond(resp.into()).await {
-                tracing::error!("failed to respond to contract request: {}", e);
+            if let Some(reply_to) = msg.reply {
+                if let Err(e) = client.publish(reply_to, resp.into()).await {
+                    tracing::error!("failed to publish reply to {}: {}", %reply_to, %e);
+                }
+            } else {
+                tracing::warn!("contract request had no reply subject");
             }
         }
 
