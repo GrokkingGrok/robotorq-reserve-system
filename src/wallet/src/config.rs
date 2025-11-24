@@ -173,8 +173,10 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_config_load_from_env() {
         // Set environment variables
         unsafe {
@@ -252,6 +254,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_config_load_partial_env() {
         // Clean up any existing environment variables first
         unsafe {
