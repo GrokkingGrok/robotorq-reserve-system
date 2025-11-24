@@ -4,6 +4,8 @@
 **Last Updated**: November 15, 2025  
 **Status**: ✅ Production Ready
 
+> NOTE (Merke Migration – Nov 24 2025): Merkle tree construction logic has been centralized in the shared Rust crate `common::merkle` (sequential for ≤32 leaves, parallel via rayon otherwise). Any legacy references in this document to local merkle hashing (simple concatenation) describe Phase 1 behavior and are retained for historical context only.
+
 ---
 
 ## 🎯 Mission
@@ -233,7 +235,7 @@ FLUSH_INTERVAL=60s      # Max wait before flush
 - Create RoboTorqBatch structure
 - Pass to DistoDamClient
 
-**Merkle Tree Construction**:
+**Merkle Tree Construction (Phase 1 – Legacy)**:
 ```go
 type MintEngine struct {
     hasher       BatchHasher
@@ -291,6 +293,21 @@ func (h *SimpleBatchHasher) HashBatch(ingotHashes []string) string {
 - Batch totals accuracy
 - Empty batch handling
 - DistoDam integration
+
+**Phase 2+/Current Merkle Implementation**:
+Implemented in `src/common/src/merkle/mod.rs` and consumed by the Rust proof engine (`proof_engine.rs`). The shared module ensures:
+1. Deterministic root formation across services.
+2. Automatic selection of sequential vs parallel strategy.
+3. Unified odd-leaf duplication semantics (`hash_pair(last, last)`).
+4. Single audited hashing path (SHA256 over left||right concatenation).
+
+Example (Rust):
+```rust
+use common::merkle::build_merkle_root;
+let root = build_merkle_root(&ingot_hashes);
+```
+
+Legacy Go MintEngine hash concatenation has been deprecated; future economic or trust validations must rely on the shared merkle module.
 
 ---
 
