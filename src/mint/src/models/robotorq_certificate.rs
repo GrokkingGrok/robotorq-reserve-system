@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+// Legacy constant retained for historical reference; mark unused to silence warnings.
+#[allow(dead_code)]
 pub const INGOTS_PER_CERT: usize = 1000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

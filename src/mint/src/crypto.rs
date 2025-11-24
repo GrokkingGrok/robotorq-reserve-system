@@ -24,8 +24,8 @@ impl MintCrypto {
         Ok((vec![1, 2, 3], vec![4, 5, 6]))
     }
 
-    pub fn sign(&self, data: &[u8], secret_key: &[u8]) -> Result<Vec<u8>> {
-        // Stub implementation
+    pub fn sign(&self, data: &[u8], _secret_key: &[u8]) -> Result<Vec<u8>> {
+        // Stub implementation (secret key unused in stub)
         Ok(data.to_vec())
     }
 
