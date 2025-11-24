@@ -371,3 +371,80 @@ async fn main() -> Result<()> {
 - **Maintainability**: Clear code structure with comprehensive tests
 
 This rewrite will modernize the Refinery service with Rust's performance and safety guarantees while maintaining full compatibility with the existing RoboTorq pipeline.
+
+---
+
+## Build & Deployment (mirror of Rust Mint)
+
+We will mirror the Rust Mint multi-stage Docker build and runtime pattern so developers and CI have a consistent build/deploy experience.
+
+- Use a multi-stage Dockerfile similar to `src/mint/Dockerfile.rust`:
+  - Build stage: `rust:1.91-alpine` (or equivalent), install `musl-dev` and necessary build deps, copy `src/common` and `src/refinery`, run `cargo build --release`.
+  - Runtime stage: small non-root runtime image (distroless or slim) copying the release binary.
+  - Expose the metrics/health port (default `8081`) and bind on `0.0.0.0`.
+  - Keep build args for `--features` such as `simulation` to enable test builds.
+
+Example (high level):
+```
+FROM rust:1.91-alpine AS build
+WORKDIR /app
+RUN apk add --no-cache musl-dev openssl-dev pkgconfig
+COPY src/common ./src/common
+COPY src/refinery ./src/refinery
+WORKDIR /app/src/refinery
+RUN cargo build --release --bin refinery
+
+FROM gcr.io/distroless/cc-debian12:nonroot
+WORKDIR /app
+COPY --from=build /app/src/refinery/target/release/refinery ./refinery
+EXPOSE 8081
+USER nonroot
+ENTRYPOINT ["/app/refinery"]
+```
+
+This mirrors the Mint build and ensures consistent static linking, feature gating, and small runtime images.
+
+## Fixed-point math: Triples crate
+
+The repo already contains a `common/triples` crate intended for deterministic fixed-point math. The refinery Rust implementation MUST use the Triples/fixed-point types for any monetary or RoboStake arithmetic to avoid floating-point rounding errors.
+
+Guidance:
+- Use `common::triples` types where amounts are stored as integer micro-units (e.g., micro-RT) or fixed-point wrappers the crate provides.
+- Avoid `f64` for stake accounting. Use `i64`/`i128` integers or the crate's fixed-point types for intermediate accumulation and merkle metadata.
+- When serializing to JSON for NATS/HTTP payloads, expose canonical integer fields (e.g., `total_robostake_micro_rt`) and include explicit docs that the field is in micro-RT.
+- Add unit tests that fuzz large stake totals and validate no precision loss when aggregating 3600 units into an ingot and when generating batch totals.
+
+## Robostake handling & Mint integration
+
+The refinery must preserve and aggregate RoboStake data per ingot, and publish it in a canonical format the Mint expects. The following plan describes how to handle stake data and plug into the Mint service:
+
+1. Inbound hash batches: Each `HashEntry` received from Diggers must include an explicit `robo_stake_paid` field as an integer micro-unit (or Triples fixed-point type). The Go implementation stores `RoboStakePaid float64` in the queue — convert this to fixed-point on ingestion.
+
+2. Aggregation: When assembling a `TokenTorqIngot` (3600 hashes), compute `robo_stake_total` by summing the integer micro-units. Store the total as an integer (`i128` if needed) inside the ingot model.
+
+3. Canonical serialization: Publish ingots with explicit integer stake fields:
+    - `robo_stake_total_micro_rt`: integer (micro-RT)
+    - `canonical_total_jouletorq`: integer (if needed)
+    - Do not use floating-point fields for economic values in published messages.
+
+4. Mint validation: The Mint should accept and validate integer stake fields. If integrating with the Rust Mint (side-by-side), use the same `common` types and message schema. If the Mint is still Go, ensure the Go code parses integer fields correctly (adjust serialization tests accordingly).
+
+5. Invariants & checks:
+    - Maintain checksum invariants: sum of ingot stake totals in a certificate must equal the `certificate.robo_stake_total_micro_rt` computed by the Mint batcher.
+    - Add unit tests and an integration test that creates example ingots with edge-case stakes (large values, zero, min stake) and confirms Mint acceptance.
+
+6. Telemetry & alerts:
+    - Metric `refinery_robostake_aggregated_total` (counter) should be exported in micro-RT units (or expose separate gauge for human-friendly RT if desired).
+    - Add alerts for abnormal stake distribution (e.g., ingots with zero stake or per-ingot stake exceeding an expected threshold).
+
+7. Backward compatibility:
+    - When publishing to existing Go Mint, include both integer and human-readable floating fields (e.g., `robo_stake_total_micro_rt` and `robo_stake_total_rt`) during the migration period, but mark the float field as deprecated.
+
+## Tests & Validation
+
+- Add unit tests matching the Mint's configuration tests for simulation and stake serialization.
+- Add integration tests that publish ingots to a test Mint subject (`mint.ingots.test`) and verify ingestion and ledger reconciliation.
+- Add fuzz tests for stake aggregation to ensure no overflow and correct rounding semantics.
+
+---
+Updated the plan to explicitly reflect build parity with Mint, Triples usage, and a clear robostake integration/serialization approach.
