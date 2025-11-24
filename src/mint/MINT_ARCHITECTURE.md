@@ -4,6 +4,8 @@
 **Last Updated**: November 15, 2025  
 **Status**: ✅ Production Ready
 
+> NOTE (Merke Migration – Nov 24 2025): Merkle tree construction logic has been centralized in the shared Rust crate `common::merkle` (sequential for ≤32 leaves, parallel via rayon otherwise). Any legacy references in this document to local merkle hashing (simple concatenation) describe Phase 1 behavior and are retained for historical context only.
+
 ---
 
 ## 🎯 Mission
@@ -233,7 +235,7 @@ FLUSH_INTERVAL=60s      # Max wait before flush
 - Create RoboTorqBatch structure
 - Pass to DistoDamClient
 
-**Merkle Tree Construction**:
+**Merkle Tree Construction (Phase 1 – Legacy)**:
 ```go
 type MintEngine struct {
     hasher       BatchHasher
@@ -291,6 +293,21 @@ func (h *SimpleBatchHasher) HashBatch(ingotHashes []string) string {
 - Batch totals accuracy
 - Empty batch handling
 - DistoDam integration
+
+**Phase 2+/Current Merkle Implementation**:
+Implemented in `src/common/src/merkle/mod.rs` and consumed by the Rust proof engine (`proof_engine.rs`). The shared module ensures:
+1. Deterministic root formation across services.
+2. Automatic selection of sequential vs parallel strategy.
+3. Unified odd-leaf duplication semantics (`hash_pair(last, last)`).
+4. Single audited hashing path (SHA256 over left||right concatenation).
+
+Example (Rust):
+```rust
+use common::merkle::build_merkle_root;
+let root = build_merkle_root(&ingot_hashes);
+```
+
+Legacy Go MintEngine hash concatenation has been deprecated; future economic or trust validations must rely on the shared merkle module.
 
 ---
 
@@ -793,6 +810,57 @@ func VerifyProof(leafHash string, proof []string, root string, leafIndex int) bo
 - **Tamper-evident**: Any change to ingot invalidates root
 
 ---
+
+### Rust ProofEngine Rewrite (Falcon Signatures)
+
+The original Go mint service has an ongoing Rust rewrite introducing a unified `ProofEngine` and a common crypto abstraction (`common/src/crypto/mod.rs`). This modernization adds:
+
+- Runtime algorithm selection (`MINT_SIGNATURE_ALGORITHM=falcon1024`).
+- Optional persistent key storage (`MINT_KEY_STORAGE_PATH=/data/mint/keys/falcon_key`).
+- Hash–then–sign flow (`message_hash = SHA256(canonical_payload)`).
+- Public key fingerprinting (`key_fingerprint = SHA256(public_key)`).
+
+Updated Rust `ProofSignature` structure:
+```rust
+pub struct ProofSignature {
+    pub signer_id: String,        // "mint-service"
+    pub algorithm: String,        // "falcon1024"
+    pub signature: Vec<u8>,       // detached signature over message_hash bytes
+    pub message_hash: String,     // 64-char hex SHA256 of canonical payload
+    pub key_fingerprint: String,  // 64-char hex SHA256(public_key)
+    pub public_key: Vec<u8>,      // raw public key bytes
+    pub timestamp: SystemTime,
+}
+```
+
+Canonical payload (before hashing) combines certificate + proof identifiers and timing fields; downstream services recompute and verify:
+```text
+payload := cert_id || cert_merkle_root || proof_id || proof_merkle_root || cert_timestamp_nanos
+message_hash := SHA256(payload)
+valid := algo.verify(message_hash.bytes(), signature, public_key)
+```
+
+Environment variables (Rust):
+```text
+MINT_ENABLE_CRYPTO=true
+MINT_SIGNATURE_ALGORITHM=falcon1024
+MINT_KEY_STORAGE_PATH=/data/mint/keys/falcon_key
+```
+
+Falcon‑1024 integration notes:
+- Keypair persisted as `<base>.pub` and `<base>.sec` if path supplied.
+- Abstraction allows future Dilithium / SPHINCS+ support by extending `CryptoKind`.
+- Detached signature approach reduces payload surface and enables multi‑signer aggregation later.
+
+Planned enhancements:
+- Encrypt secret key file at rest.
+- Multi‑party signature sets (Mint + Refinery cooperative proofs).
+- Detached Falcon API usage when library exposes optimized interface.
+
+Source references:
+- `src/mint/src/engine/proof_engine.rs`
+- `src/common/src/crypto/mod.rs`
+
 
 ### Verification API
 

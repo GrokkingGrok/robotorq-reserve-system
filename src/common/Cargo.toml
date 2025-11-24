@@ -1,0 +1,16 @@
+[package]
+name = "common"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+# Algorithms/features can be expanded later
+falcon = ["dep:pqcrypto-falcon"]
+default = ["falcon"]
+
+[dependencies]
+anyhow = "1.0"
+sha2 = "0.10.9"
+pqcrypto-falcon = { version = "0.4.1", optional = true }
+pqcrypto-traits = "0.3.5"
+rayon = "1.11.0"
