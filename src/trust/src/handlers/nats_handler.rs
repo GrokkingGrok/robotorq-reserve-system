@@ -43,7 +43,7 @@ impl NatsHandler {
                     match self.store.get(&req.contract_id) {
                         Some(contract) => match serde_json::to_vec(&contract) {
                             Ok(b) => b,
-                            Err(e) => serde_json::to_vec(&ErrorReply { error: format!("serialize_error: {}", e) }).unwrap_or_else(|_| b"{\"error\":\"serialize_failed\"}\".to_vec()),
+                            Err(e) => serde_json::to_vec(&ErrorReply { error: format!("serialize_error: {}", e) }).unwrap_or_else(|_| b"{\"error\":\"serialize_failed\"}".to_vec()),
                         },
                         None => serde_json::to_vec(&ErrorReply { error: "not_found".to_string() }).unwrap(),
                     }
