@@ -1,0 +1,420 @@
+{
+  "id": null,
+  "uid": "wallet-vault-integration",
+  "title": "Wallet-Vault Integration Dashboard",
+  "tags": ["robotorq", "wallet", "vault", "integration"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 0,
+  "refresh": "5s",
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Integration Overview",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Wallet Transactions",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "wallet_transactions_total",
+          "legendFormat": "Transactions"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 }
+    },
+    {
+      "type": "stat",
+      "title": "Vault Contracts Received",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "vault_contracts_received_total",
+          "legendFormat": "Contracts"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 1 }
+    },
+    {
+      "type": "stat",
+      "title": "Vault Contracts Approved",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "vault_contracts_approved_total",
+          "legendFormat": "Approved"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 1, "color": "green" }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 1 }
+    },
+    {
+      "type": "stat",
+      "title": "Wallet-Vault Transfers",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "vault_wallet_transfers_total",
+          "legendFormat": "Transfers"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 1 }
+    },
+    {
+      "type": "row",
+      "title": "Wallet Metrics",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 }
+    },
+    {
+      "type": "graph",
+      "title": "Wallet UBD Balance",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "wallet_ubd_balance",
+          "legendFormat": "UBD Balance"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "JouleTorq Units"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+    },
+    {
+      "type": "graph",
+      "title": "Wallet UBD Received Rate",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "rate(wallet_ubd_received_total[1m])",
+          "legendFormat": "UBD/sec"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ops",
+          "label": "Rate (per second)"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+    },
+    {
+      "type": "row",
+      "title": "Vault Metrics",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 }
+    },
+    {
+      "type": "graph",
+      "title": "Vault Short Balance",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "vault_short_vault_balance_total",
+          "legendFormat": "Short Balance"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "JouleTorq Units"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 }
+    },
+    {
+      "type": "graph",
+      "title": "Vault Contract Processing",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "rate(vault_contracts_received_total[1m])",
+          "legendFormat": "Received/sec"
+        },
+        {
+          "expr": "rate(vault_contracts_approved_total[1m])",
+          "legendFormat": "Approved/sec"
+        },
+        {
+          "expr": "rate(vault_contracts_completed_total[1m])",
+          "legendFormat": "Completed/sec"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ops",
+          "label": "Rate (per second)"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 }
+    },
+    {
+      "type": "row",
+      "title": "Integration Flow",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 }
+    },
+    {
+      "type": "graph",
+      "title": "Wallet-Vault Transfer Flow",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "rate(vault_wallet_transfers_total[1m])",
+          "legendFormat": "Transfers to Wallet"
+        },
+        {
+          "expr": "rate(wallet_ubd_received_total[1m])",
+          "legendFormat": "UBD Received by Wallet"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ops",
+          "label": "Rate (per second)"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 26 }
+    },
+    {
+      "type": "row",
+      "title": "Drip Processing",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 }
+    },
+    {
+      "type": "stat",
+      "title": "Active Drips",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "vault_active_drips_total",
+          "legendFormat": "Active"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 35 }
+    },
+    {
+      "type": "stat",
+      "title": "Drips Completed",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "vault_drips_completed_total",
+          "legendFormat": "Completed"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "blue" },
+              { "value": 1, "color": "green" }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 35 }
+    },
+    {
+      "type": "stat",
+      "title": "Drips Failed",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "vault_drips_failed_total",
+          "legendFormat": "Failed"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 1, "color": "red" }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 35 }
+    },
+    {
+      "type": "row",
+      "title": "System Health",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 }
+    },
+    {
+      "type": "table",
+      "title": "Service Health Status",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "up{job=~\"wallet|vault\"}",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 1, "color": "green" }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 42 }
+    },
+    {
+      "type": "graph",
+      "title": "Demurrage Applied",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ff50x8bfhp7nke"
+      },
+      "targets": [
+        {
+          "expr": "rate(vault_demurrage_applied_total[1m])",
+          "legendFormat": "Demurrage/sec"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ops",
+          "label": "Rate (per second)"
+        }
+      ],
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 42 }
+    }
+  ]
+}
