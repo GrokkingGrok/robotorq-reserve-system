@@ -2,8 +2,10 @@ use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 use tokio::sync::mpsc;
 use crate::models::{token_torq_ingot::TokenTorqIngot, robotorq_certificate::RoboTorqCertificate, robo_torq_proof::RoboTorqProof};
+use common::triples::{Triple, add_triples, jouletorq_to_triple, triple_to_jouletorq};
 use crate::metrics::MintMetrics;
 use crate::engine::proof_engine::ProofEngine;
+use crate::archive::MintArchive;
 
 /// IngotProcessor: Buffers ingots and creates certificates when 1000 are received.
 pub struct IngotProcessor {
@@ -11,6 +13,8 @@ pub struct IngotProcessor {
     certificate_sender: mpsc::Sender<RoboTorqCertificate>,
     proof_engine: Arc<ProofEngine>,
     metrics: Arc<MintMetrics>,
+    triple_balance: Mutex<Triple>,
+    archive: Arc<MintArchive>,
 }
 
 impl IngotProcessor {
@@ -18,12 +22,15 @@ impl IngotProcessor {
         certificate_sender: mpsc::Sender<RoboTorqCertificate>,
         proof_engine: Arc<ProofEngine>,
         metrics: Arc<MintMetrics>,
+        archive: Arc<MintArchive>,
     ) -> Self {
         Self {
-            ingot_buffer: Mutex::new(VecDeque::with_capacity(1024)), // Pre-allocate capacity
+            ingot_buffer: Mutex::new(VecDeque::with_capacity(1024)),
             certificate_sender,
             proof_engine,
             metrics,
+            triple_balance: Mutex::new(Triple::zero()),
+            archive,
         }
     }
 
@@ -33,6 +40,12 @@ impl IngotProcessor {
         let should_create_cert = {
             let mut buffer = self.ingot_buffer.lock().unwrap();
             buffer.push_back(ingot);
+
+            // Update aggregate Triple balance (sum of joules) after push
+            if let Some(last) = buffer.back() {
+                let mut tb = self.triple_balance.lock().unwrap();
+                *tb = add_triples(*tb, jouletorq_to_triple(last.joules_total));
+            }
 
             // Check if we have enough ingots for a certificate
             let len = buffer.len();
@@ -54,30 +67,28 @@ impl IngotProcessor {
             let mut buffer = self.ingot_buffer.lock().unwrap();
             buffer.push_back(ingot);
 
-            // Check if we have enough ingots for a certificate
+            if let Some(last) = buffer.back() {
+                let mut tb = self.triple_balance.lock().unwrap();
+                *tb = add_triples(*tb, jouletorq_to_triple(last.joules_total));
+            }
+
             let len = buffer.len();
             self.metrics.set_ingot_buffer_size(len as i64);
-
             len >= 1000
         };
 
         if should_create_cert {
-            // For sync version, we still use try_send but log if it fails
             let ingots = {
                 let mut buffer = self.ingot_buffer.lock().unwrap();
-                if buffer.len() < 1000 {
-                    return Ok(()); // Not enough ingots
-                }
-                // Extract exactly 1000 ingots
+                if buffer.len() < 1000 { return Ok(()); }
                 let ingots: Vec<TokenTorqIngot> = (0..1000).filter_map(|_| buffer.pop_front()).collect();
                 self.metrics.set_ingot_buffer_size(buffer.len() as i64);
                 ingots
             };
-
-            let (certificate, _proof) = self.create_certificate_sync(ingots)?;
+            let (certificate, proof) = self.create_certificate_sync(ingots)?;
+            self.archive.store(&certificate, &proof);
             self.certificate_sender.try_send(certificate).map_err(|e| format!("Failed to send certificate: {}", e))?;
         }
-
         Ok(())
     }
 
@@ -96,9 +107,8 @@ impl IngotProcessor {
         };
 
         // Create certificate outside the lock
-        let (certificate, _proof) = self.create_certificate_async(ingots).await?;
-
-        // Send certificate asynchronously
+        let (certificate, proof) = self.create_certificate_async(ingots).await?;
+        self.archive.store(&certificate, &proof);
         self.certificate_sender.send(certificate).await?;
 
         Ok(())
@@ -121,6 +131,11 @@ impl IngotProcessor {
         // Use proof engine to create certificate and proof synchronously
         self.proof_engine.create_certificate_and_proof_sync(ingots)
     }
+
+    /// Snapshot of current accumulated Triple balance (thread-safe).
+    pub fn current_triple_balance(&self) -> Triple {
+        *self.triple_balance.lock().unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -132,14 +147,15 @@ mod tests {
     use crate::config::MintConfig;
 
     fn create_test_ingot(id: &str, contract: &str) -> TokenTorqIngot {
+        // Provide 64-char merkle root and skip heavy unit_hashes population for tests.
         TokenTorqIngot {
             ingot_id: id.to_string(),
             contract_id: contract.to_string(),
-            joules_total: 1000.0,
-            robostake_total_micro_rt: 50000,
+            joules_total: 3600, // integer joule units per ingot
+            robostake_total_jouletorq: 50000,
             unit_count: 3600,
-            merkle_root: "test_root".to_string(),
-            unit_hashes: vec!["hash1".to_string(), "hash2".to_string()],
+            merkle_root: "a".repeat(64),
+            unit_hashes: vec![],
             timestamp: SystemTime::now(),
             signature: vec![1, 2, 3],
         }
@@ -151,7 +167,8 @@ mod tests {
         let metrics = Arc::new(MintMetrics::new());
         let config = Arc::new(MintConfig::default());
         let proof_engine = Arc::new(ProofEngine::new(config, Arc::clone(&metrics)));
-        let processor = IngotProcessor::new(tx, proof_engine, Arc::clone(&metrics));
+        let archive = MintArchive::new(true);
+        let processor = IngotProcessor::new(tx, proof_engine, Arc::clone(&metrics), archive);
 
         // Add 999 ingots (under threshold)
         for i in 0..999 {
@@ -164,6 +181,9 @@ mod tests {
 
         // Check buffer size metric
         assert_eq!(metrics.ingot_buffer_size.get(), 999);
+        // Triple balance should equal accumulated joules (999 ingots × 3600)
+        let tb = processor.current_triple_balance();
+        assert_eq!(triple_to_jouletorq(tb), 999 * 3600);
     }
 
     #[test]
@@ -172,7 +192,8 @@ mod tests {
         let metrics = Arc::new(MintMetrics::new());
         let config = Arc::new(MintConfig::default());
         let proof_engine = Arc::new(ProofEngine::new(config, Arc::clone(&metrics)));
-        let processor = IngotProcessor::new(tx, proof_engine, Arc::clone(&metrics));
+        let archive = MintArchive::new(true);
+        let processor = IngotProcessor::new(tx, proof_engine, Arc::clone(&metrics), archive);
 
         // Add exactly 1000 ingots
         for i in 0..1000 {
@@ -191,6 +212,8 @@ mod tests {
         // Check metrics
         assert_eq!(metrics.certificates_created_total.get(), 1);
         assert_eq!(metrics.ingot_buffer_size.get(), 0); // Buffer should be cleared
+        let tb = processor.current_triple_balance();
+        assert_eq!(triple_to_jouletorq(tb), 1000 * 3600);
     }
 
     #[test]
@@ -199,7 +222,8 @@ mod tests {
         let metrics = Arc::new(MintMetrics::new());
         let config = Arc::new(MintConfig::default());
         let proof_engine = Arc::new(ProofEngine::new(config, Arc::clone(&metrics)));
-        let processor = IngotProcessor::new(tx, proof_engine, Arc::clone(&metrics));
+        let archive = MintArchive::new(true);
+        let processor = IngotProcessor::new(tx, proof_engine, Arc::clone(&metrics), archive);
 
         // Add ingots from multiple contracts
         for i in 0..500 {
@@ -218,6 +242,8 @@ mod tests {
         assert_eq!(cert.contract_ids.len(), 2);
         assert!(cert.contract_ids.contains(&"contract-a".to_string()));
         assert!(cert.contract_ids.contains(&"contract-b".to_string()));
+        let tb = processor.current_triple_balance();
+        assert_eq!(triple_to_jouletorq(tb), 1000 * 3600);
     }
 
     #[test]
@@ -226,7 +252,8 @@ mod tests {
         let metrics = Arc::new(MintMetrics::new());
         let config = Arc::new(MintConfig::default());
         let proof_engine = Arc::new(ProofEngine::new(config, Arc::clone(&metrics)));
-        let processor = IngotProcessor::new(tx, proof_engine, Arc::clone(&metrics));
+        let archive = MintArchive::new(true);
+        let processor = IngotProcessor::new(tx, proof_engine, Arc::clone(&metrics), archive);
 
         // Add 2000 ingots (should create 2 certificates)
         for i in 0..2000 {
@@ -243,5 +270,7 @@ mod tests {
         // Check metrics
         assert_eq!(metrics.certificates_created_total.get(), 2);
         assert_eq!(metrics.ingot_buffer_size.get(), 0);
+        let tb = processor.current_triple_balance();
+        assert_eq!(triple_to_jouletorq(tb), 2000 * 3600);
     }
 }

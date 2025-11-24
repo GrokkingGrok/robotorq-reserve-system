@@ -9,6 +9,7 @@ mod metrics;
 mod models;
 mod engine;
 mod handlers;
+mod archive;
 // Crypto now supplied by common crate (trait-based); no direct use here
 
 #[tokio::main]
@@ -37,34 +38,57 @@ async fn main() -> Result<()> {
 
     info!("Connected to NATS at {}", config.nats_url);
 
-    // Start metrics server
+    // Start metrics & health server (simple manual HTTP parsing; upgrade later to axum if needed)
     let metrics_clone = Arc::clone(&metrics);
     tokio::spawn(async move {
         use tokio::net::TcpListener;
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use std::time::{SystemTime, UNIX_EPOCH};
 
         let listener = TcpListener::bind("0.0.0.0:8080").await.unwrap();
-        info!("Metrics server listening on 0.0.0.0:8080");
+        info!("Metrics/Health server listening on 0.0.0.0:8080");
+
+        // Uptime ticker: increment metric every second
+        let metrics_uptime = Arc::clone(&metrics_clone);
+        tokio::spawn(async move {
+            loop {
+                metrics_uptime.inc_uptime();
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        });
 
         loop {
             let (mut socket, _) = listener.accept().await.unwrap();
             let metrics = Arc::clone(&metrics_clone);
-
             tokio::spawn(async move {
-                let mut buf = [0; 1024];
-                let n = socket.read(&mut buf).await.unwrap();
+                let mut buf = [0; 2048];
+                let n = match socket.read(&mut buf).await { Ok(n) => n, Err(_) => return };
                 let request = String::from_utf8_lossy(&buf[..n]);
 
-                let response = if request.contains("GET /metrics") {
-                    let body = metrics.encode();
-                    format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)
-                } else if request.contains("GET /health") {
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nOK".to_string()
-                } else {
-                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_string()
-                };
+                let method_line = request.lines().next().unwrap_or("");
+                let is_get = method_line.starts_with("GET ");
+                let path = if is_get { method_line.split_whitespace().nth(1).unwrap_or("/") } else { "/" };
 
-                socket.write_all(response.as_bytes()).await.unwrap();
+                let response = match path {
+                    "/metrics" => {
+                        let body = metrics.encode();
+                        format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain; version=0.0.4\r\nContent-Length: {}\r\nCache-Control: no-cache\r\n\r\n{}", body.len(), body)
+                    }
+                    "/health" => {
+                        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                        let body = serde_json::json!({
+                            "status": "ok",
+                            "timestamp": now,
+                            "uptime_seconds": metrics.service_uptime_seconds.get() as u64,
+                            "last_batch_stake": metrics.batch_last_stake.get(),
+                            "last_batch_jouletorq": metrics.batch_last_jouletorq.get(),
+                            "certificate_queue_size": metrics.certificate_queue_size.get(),
+                        }).to_string();
+                        format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nCache-Control: no-cache\r\n\r\n{}", body.len(), body)
+                    }
+                    _ => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_string(),
+                };
+                let _ = socket.write_all(response.as_bytes()).await;
             });
         }
     });
@@ -73,11 +97,16 @@ async fn main() -> Result<()> {
     let (certificate_sender, _certificate_receiver) = mpsc::channel::<models::robotorq_certificate::RoboTorqCertificate>(100);
     let (batch_sender, batch_receiver) = mpsc::channel::<models::robotorq_batch::RoboTorqBatch>(10);
 
+    // Create archive (in-memory) if enabled
+    use crate::archive::MintArchive;
+    let archive = MintArchive::new(config.enable_archive);
+
     // Create processing components
     let ingot_processor = Arc::new(engine::ingot_processor::IngotProcessor::new(
         certificate_sender,
         Arc::clone(&proof_engine),
         Arc::clone(&metrics),
+        Arc::clone(&archive),
     ));
 
     let batcher = Arc::new(engine::batcher::Batcher::new(

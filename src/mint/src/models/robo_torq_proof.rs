@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use common::triples::{Triple, jouletorq_to_triple};
 use std::time::SystemTime;
 
 /// RoboTorqProof: Complete proof chain for a certificate.
@@ -14,8 +15,10 @@ pub struct RoboTorqProof {
     /// Merkle root of all ingot hashes in this certificate
     pub merkle_root: String,
 
-    /// Full merkle tree for verification
-    pub merkle_tree: Vec<String>,
+    /// Full merkle tree levels for verification (level 0 = leaves).
+    /// Each level is a vector of node hashes. This allows reconstruction of
+    /// inclusion proofs without recomputation. Empty if only root provided.
+    pub merkle_tree: Vec<Vec<String>>,
 
     /// Individual ingot hashes (1000 for one certificate)
     pub ingot_hashes: Vec<String>,
@@ -28,6 +31,10 @@ pub struct RoboTorqProof {
 
     /// Proof hash for integrity
     pub proof_hash: String,
+    /// Total joule-torq represented (duplicated from certificate for integrity checking)
+    pub total_jouletorq: i64,
+    /// Triple decomposition for auditing
+    pub total_triple: Triple,
 }
 
 /// Individual signature in the proof
@@ -53,4 +60,11 @@ pub struct ProofSignature {
 
     /// Timestamp of signing
     pub timestamp: SystemTime,
+}
+
+impl RoboTorqProof {
+    pub fn set_totals(&mut self, joule_total: i64) {
+        self.total_jouletorq = joule_total;
+        self.total_triple = jouletorq_to_triple(joule_total);
+    }
 }

@@ -6,6 +6,7 @@ use crate::metrics::MintMetrics;
 use crate::config::MintConfig;
 use std::time::SystemTime;
 use sha2::{Sha256, Digest};
+use common::triples::jouletorq_to_triple;
 
 /// Helper function for SHA256 hashing
 fn sha256_hash(data: &[u8]) -> String {
@@ -81,32 +82,31 @@ impl ProofEngine {
     }
 
     /// Create a proof for a certificate with cryptographic signing
-    pub async fn create_proof(&self, certificate: &RoboTorqCertificate, ingot_hashes: Vec<String>) -> Result<RoboTorqProof, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn create_proof(&self, certificate: &RoboTorqCertificate, ingot_hashes: Vec<String>, total_joules: i64) -> Result<RoboTorqProof, Box<dyn std::error::Error + Send + Sync>> {
         let proof_id = format!("proof-{}", certificate.cert_id);
 
-        // Build merkle tree from ingot hashes
-        let merkle_root = if ingot_hashes.len() > 1 {
-            build_merkle_root(&ingot_hashes)
-        } else if ingot_hashes.len() == 1 {
-            ingot_hashes[0].clone()
-        } else {
-            "".to_string()
-        };
+        // Build full merkle tree levels from ingot hashes for retention
+        let (merkle_root, merkle_levels) = Self::build_full_merkle(&ingot_hashes);
 
         // Create initial proof structure
         let mut proof = RoboTorqProof {
             proof_id: proof_id.clone(),
             certificate_id: certificate.cert_id.clone(),
             merkle_root: merkle_root.clone(),
-            merkle_tree: vec![], // TODO: Store full merkle tree for verification
+            merkle_tree: merkle_levels,
             ingot_hashes,
             signatures: vec![],
             timestamp: SystemTime::now(),
             proof_hash: "".to_string(),
+            total_jouletorq: 0,
+            total_triple: common::triples::Triple::zero(),
         };
 
+        // Set total joule-torq & triple decomposition
+        proof.set_totals(total_joules);
+
         // Add cryptographic signature if enabled
-        if self.crypto_enabled() { self.add_signatures_sync(&mut proof, certificate)?; }
+        if self.crypto_enabled() { self.add_signatures_sync(&mut proof, certificate)?; } else { self.add_placeholder_signature(&mut proof); }
 
         // Create proof hash for integrity
         proof.proof_hash = self.compute_proof_hash(&proof)?;
@@ -128,7 +128,14 @@ impl ProofEngine {
         // Generate certificate ID
         let cert_id = format!("cert-{}", SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos());
 
-        // Collect ingot hashes for merkle tree
+        // Validate ingot structural invariants before proceeding
+        // Lightweight structural validation (strict unit hash count deferred to upstream)
+        for ingot in &ingots {
+            if ingot.unit_count != 3600 { return Err(format!("invalid ingot {}: unit_count {} != 3600", ingot.ingot_id, ingot.unit_count).into()); }
+            if ingot.joules_total != ingot.unit_count as i64 { return Err(format!("invalid ingot {}: joules_total {} != unit_count {}", ingot.ingot_id, ingot.joules_total, ingot.unit_count).into()); }
+            if ingot.merkle_root.len() != 64 { return Err(format!("invalid ingot {}: merkle_root length {} != 64", ingot.ingot_id, ingot.merkle_root.len()).into()); }
+        }
+        // Collect ingot hashes for merkle tree (using ingot_id as leaf proxy now)
         let ingot_hashes: Vec<String> = ingots.iter().map(|i| i.ingot_id.clone()).collect();
 
         // Build merkle tree
@@ -147,12 +154,15 @@ impl ProofEngine {
             .into_iter()
             .collect();
 
-        // Calculate totals
-        let total_joules: f64 = ingots.iter().map(|i| i.joules_total).sum();
-        let _total_stake: i64 = ingots.iter().map(|i| i.robostake_total_micro_rt).sum();
+        // Calculate totals with overflow-safe intermediate for stake
+        let total_joules_i64: i64 = ingots.iter().map(|i| i.joules_total).sum();
+        let stake_sum_i128: i128 = ingots.iter().map(|i| i.robostake_total_jouletorq as i128).sum();
+        if stake_sum_i128 < 0 { return Err("negative stake total".into()); }
+        if stake_sum_i128 > i64::MAX as i128 { return Err("stake overflow".into()); }
+        let total_stake_jouletorq: i64 = stake_sum_i128 as i64;
 
         // Create certificate
-        let certificate = RoboTorqCertificate {
+        let mut certificate = RoboTorqCertificate {
             cert_id: cert_id.clone(),
             robotorq_proof_id: format!("proof-{}", cert_id),
             merkle_root: merkle_root.clone(),
@@ -161,19 +171,37 @@ impl ProofEngine {
             hash: "".to_string(), // Will be computed after creation
             status: crate::models::robotorq_certificate::CertStatus::Digital,
             bearer_bond_id: None,
+            total_jouletorq: total_joules_i64,
+            total_stake_jouletorq: total_stake_jouletorq,
+            total_triple: common::triples::Triple::zero(),
         };
 
+        certificate.derive_triple();
+        // Invariant check (Option A): triple must reconstruct total_jouletorq exactly.
+        // We intentionally DO NOT include jouletorq_remainder in the hash because
+        // total_jouletorq + (robotorq, tokentorq_remainder) already fully determine it.
+        // This keeps hash payload lean while preventing silent drift via explicit check.
+        let expected_triple = jouletorq_to_triple(certificate.total_jouletorq);
+        if expected_triple.robotorq != certificate.total_triple.robotorq
+            || expected_triple.tokentorq_remainder != certificate.total_triple.tokentorq_remainder
+            || expected_triple.jouletorq_remainder != certificate.total_triple.jouletorq_remainder {
+            return Err("triple invariant mismatch (async path)".into());
+        }
+
         // Create proof
-        let proof = self.create_proof(&certificate, ingot_hashes).await?;
+        let proof = self.create_proof(&certificate, ingot_hashes, total_joules_i64).await?;
 
         // Compute certificate hash
+        // Hash payload (Option A): omit jouletorq_remainder as it is implied by total_jouletorq & higher-order buckets.
         let cert_hash_data = format!(
-            "{}{}{}{}{}",
+            "{}{}{}{}{}{}{}",
             certificate.cert_id,
             certificate.merkle_root,
             certificate.contract_ids.len(),
             certificate.timestamp_nanos,
-            total_joules
+            certificate.total_jouletorq,
+            certificate.total_triple.robotorq,
+            certificate.total_triple.tokentorq_remainder
         );
         let cert_hash = sha256_hash(cert_hash_data.as_bytes());
 
@@ -192,17 +220,15 @@ impl ProofEngine {
         // Generate certificate ID
         let cert_id = format!("cert-{}", SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos());
 
-        // Collect ingot hashes for merkle tree
+        for ingot in &ingots {
+            if ingot.unit_count != 3600 { return Err(format!("invalid ingot {}: unit_count {} != 3600", ingot.ingot_id, ingot.unit_count).into()); }
+            if ingot.joules_total != ingot.unit_count as i64 { return Err(format!("invalid ingot {}: joules_total {} != unit_count {}", ingot.ingot_id, ingot.joules_total, ingot.unit_count).into()); }
+            if ingot.merkle_root.len() != 64 { return Err(format!("invalid ingot {}: merkle_root length {} != 64", ingot.ingot_id, ingot.merkle_root.len()).into()); }
+        }
         let ingot_hashes: Vec<String> = ingots.iter().map(|i| i.ingot_id.clone()).collect();
 
         // Build merkle tree
-        let merkle_root = if ingot_hashes.len() > 1 {
-            build_merkle_root(&ingot_hashes)
-        } else if ingot_hashes.len() == 1 {
-            ingot_hashes[0].clone()
-        } else {
-            "".to_string()
-        };
+        let (merkle_root, merkle_levels) = Self::build_full_merkle(&ingot_hashes);
 
         // Collect contract IDs
         let contract_ids: Vec<String> = ingots.iter()
@@ -211,12 +237,15 @@ impl ProofEngine {
             .into_iter()
             .collect();
 
-        // Calculate totals
-        let total_joules: f64 = ingots.iter().map(|i| i.joules_total).sum();
-        let _total_stake: i64 = ingots.iter().map(|i| i.robostake_total_micro_rt).sum();
+        // Calculate totals with overflow-safe intermediate for stake
+        let total_joules_i64: i64 = ingots.iter().map(|i| i.joules_total).sum();
+        let stake_sum_i128: i128 = ingots.iter().map(|i| i.robostake_total_jouletorq as i128).sum();
+        if stake_sum_i128 < 0 { return Err("negative stake total".into()); }
+        if stake_sum_i128 > i64::MAX as i128 { return Err("stake overflow".into()); }
+        let total_stake_jouletorq: i64 = stake_sum_i128 as i64;
 
         // Create certificate
-        let certificate = RoboTorqCertificate {
+        let mut certificate = RoboTorqCertificate {
             cert_id: cert_id.clone(),
             robotorq_proof_id: format!("proof-{}", cert_id),
             merkle_root: merkle_root.clone(),
@@ -225,22 +254,38 @@ impl ProofEngine {
             hash: "".to_string(), // Will be computed after creation
             status: crate::models::robotorq_certificate::CertStatus::Digital,
             bearer_bond_id: None,
+            total_jouletorq: total_joules_i64,
+            total_stake_jouletorq: total_stake_jouletorq,
+            total_triple: common::triples::Triple::zero(),
         };
+
+        certificate.derive_triple();
+        // Invariant check (sync path)
+        let expected_triple = jouletorq_to_triple(certificate.total_jouletorq);
+        if expected_triple.robotorq != certificate.total_triple.robotorq
+            || expected_triple.tokentorq_remainder != certificate.total_triple.tokentorq_remainder
+            || expected_triple.jouletorq_remainder != certificate.total_triple.jouletorq_remainder {
+            return Err("triple invariant mismatch (sync path)".into());
+        }
 
         // Create proof synchronously
         let mut proof = RoboTorqProof {
             proof_id: format!("proof-{}", cert_id),
             certificate_id: certificate.cert_id.clone(),
             merkle_root: merkle_root.clone(),
-            merkle_tree: vec![], // TODO: Store full merkle tree for verification
+            merkle_tree: merkle_levels,
             ingot_hashes,
             signatures: vec![],
             timestamp: SystemTime::now(),
             proof_hash: "".to_string(),
+            total_jouletorq: 0,
+            total_triple: common::triples::Triple::zero(),
         };
 
+        proof.set_totals(total_joules_i64);
+
         // Add cryptographic signature if enabled (sync path)
-        if self.crypto_enabled() { self.add_signatures_sync(&mut proof, &certificate)?; }
+        if self.crypto_enabled() { self.add_signatures_sync(&mut proof, &certificate)?; } else { self.add_placeholder_signature(&mut proof); }
 
         // Create proof hash for integrity
         proof.proof_hash = self.compute_proof_hash(&proof)?;
@@ -253,13 +298,16 @@ impl ProofEngine {
         }
 
         // Compute certificate hash
+        // Hash payload (Option A) - see async path comment.
         let cert_hash_data = format!(
-            "{}{}{}{}{}",
+            "{}{}{}{}{}{}{}",
             certificate.cert_id,
             certificate.merkle_root,
             certificate.contract_ids.len(),
             certificate.timestamp_nanos,
-            total_joules
+            certificate.total_jouletorq,
+            certificate.total_triple.robotorq,
+            certificate.total_triple.tokentorq_remainder
         );
         let cert_hash = sha256_hash(cert_hash_data.as_bytes());
 
@@ -297,6 +345,46 @@ impl ProofEngine {
         proof.signatures.push(proof_signature);
 
         Ok(())
+    }
+
+    /// Add deterministic placeholder signature metadata when crypto disabled, enabling pipeline consumers
+    /// to rely on uniform structure (algorithm="none", fingerprint=sha256(cert_id||proof_id)).
+    fn add_placeholder_signature(&self, proof: &mut RoboTorqProof) {
+        use sha2::{Sha256, Digest};
+        let payload = format!("{}{}", proof.certificate_id, proof.proof_id);
+        let mut h = Sha256::new();
+        h.update(payload.as_bytes());
+        let fp = format!("{:x}", h.finalize());
+        proof.signatures.push(ProofSignature {
+            signer_id: "mint-service".into(),
+            algorithm: "none".into(),
+            signature: vec![],
+            message_hash: fp.clone(),
+            key_fingerprint: fp,
+            public_key: vec![],
+            timestamp: SystemTime::now(),
+        });
+    }
+
+    /// Build full merkle tree levels (Vec<Vec<String>>) from leaves; returns (root, levels).
+    fn build_full_merkle(leaves: &[String]) -> (String, Vec<Vec<String>>) {
+        if leaves.is_empty() { return (String::new(), vec![]); }
+        let mut levels: Vec<Vec<String>> = Vec::new();
+        levels.push(leaves.to_vec());
+        let mut current = leaves.to_vec();
+        while current.len() > 1 {
+            let mut next: Vec<String> = Vec::with_capacity((current.len()+1)/2);
+            for i in (0..current.len()).step_by(2) {
+                let left = &current[i];
+                let right = if i+1 < current.len() { &current[i+1] } else { left }; // duplicate last if odd
+                let combined = format!("{}{}", left, right);
+                next.push(sha256_hash(combined.as_bytes()));
+            }
+            levels.push(next.clone());
+            current = next;
+        }
+        let root = current[0].clone();
+        (root, levels)
     }
 
     /// Add cryptographic signatures to the proof (synchronous version) - stub when crypto disabled
@@ -361,7 +449,7 @@ mod tests {
     use crate::models::robotorq_certificate::CertStatus;
 
     fn create_test_certificate(id: &str) -> RoboTorqCertificate {
-        RoboTorqCertificate {
+        let mut c = RoboTorqCertificate {
             cert_id: id.to_string(),
             robotorq_proof_id: format!("proof-{}", id),
             merkle_root: "test_root".to_string(),
@@ -370,7 +458,12 @@ mod tests {
             hash: "test_hash".to_string(),
             status: CertStatus::Digital,
             bearer_bond_id: None,
-        }
+            total_jouletorq: 3600 * 1000, // simulate one certificate worth of joules
+            total_stake_jouletorq: 3600 * 500, // simulate stake amount
+            total_triple: common::triples::Triple::zero(),
+        };
+        c.derive_triple();
+        c
     }
 
     #[test]
@@ -387,6 +480,7 @@ mod tests {
             signature_algorithm: "dilithium5".to_string(),
             min_stake_micro_rt: 50000,
             key_storage_path: None,
+            enable_archive: true,
         });
 
         let metrics = Arc::new(MintMetrics::new());
@@ -410,6 +504,7 @@ mod tests {
             signature_algorithm: "dilithium5".to_string(),
             min_stake_micro_rt: 50000,
             key_storage_path: None,
+            enable_archive: true,
         });
 
         let metrics = Arc::new(MintMetrics::new());
@@ -418,10 +513,11 @@ mod tests {
         let certificate = create_test_certificate("cert-1");
         let ingot_hashes = vec!["hash1".to_string(), "hash2".to_string()];
 
-        let proof = engine.create_proof(&certificate, ingot_hashes).await.unwrap();
-
+        let proof = engine.create_proof(&certificate, ingot_hashes, certificate.total_jouletorq).await.unwrap();
         assert_eq!(proof.certificate_id, "cert-1");
-        assert_eq!(proof.signatures.len(), 0); // No crypto = no signatures
+        // Placeholder signature present when crypto disabled
+        assert_eq!(proof.signatures.len(), 1, "expected placeholder signature when crypto disabled");
+        assert_eq!(proof.signatures[0].algorithm, "none");
         assert!(!proof.proof_hash.is_empty());
     }
 
@@ -439,6 +535,7 @@ mod tests {
             signature_algorithm: "dilithium5".to_string(),
             min_stake_micro_rt: 50000,
             key_storage_path: None,
+            enable_archive: true,
         });
 
         let metrics = Arc::new(MintMetrics::new());
@@ -467,6 +564,7 @@ mod tests {
             signature_algorithm: "falcon1024".to_string(),
             min_stake_micro_rt: 50000,
             key_storage_path: None,
+            enable_archive: true,
         });
 
         let metrics = Arc::new(MintMetrics::new());
@@ -477,7 +575,7 @@ mod tests {
         let certificate = create_test_certificate("cert-1");
         let ingot_hashes = vec!["hash1".to_string(), "hash2".to_string()];
 
-        let proof = engine.create_proof(&certificate, ingot_hashes).await.unwrap();
+        let proof = engine.create_proof(&certificate, ingot_hashes, certificate.total_jouletorq).await.unwrap();
 
         assert_eq!(proof.certificate_id, "cert-1");
         assert_eq!(proof.signatures.len(), 1, "expected one signature when crypto enabled");
@@ -515,11 +613,12 @@ mod tests {
             signature_algorithm: "falcon1024".to_string(),
             min_stake_micro_rt: 50000,
             key_storage_path: Some(base_str.clone()),
+            enable_archive: true,
         });
         let metrics = Arc::new(MintMetrics::new());
         let engine1 = ProofEngine::new(Arc::clone(&config1), Arc::clone(&metrics));
         let cert1 = create_test_certificate("cert-a");
-        let proof1 = engine1.create_proof(&cert1, vec!["hash1".to_string()]).await.unwrap();
+        let proof1 = engine1.create_proof(&cert1, vec!["hash1".to_string()], cert1.total_jouletorq).await.unwrap();
         let sig1 = &proof1.signatures[0];
         let pub1 = sig1.public_key.clone();
         let fp1 = sig1.key_fingerprint.clone();
@@ -528,7 +627,7 @@ mod tests {
         let config2 = Arc::new(MintConfig { key_storage_path: Some(base_str.clone()), ..(*config1).clone() });
         let engine2 = ProofEngine::new(Arc::clone(&config2), Arc::clone(&metrics));
         let cert2 = create_test_certificate("cert-b");
-        let proof2 = engine2.create_proof(&cert2, vec!["hash2".to_string()]).await.unwrap();
+        let proof2 = engine2.create_proof(&cert2, vec!["hash2".to_string()], cert2.total_jouletorq).await.unwrap();
         let sig2 = &proof2.signatures[0];
         let pub2 = sig2.public_key.clone();
         let fp2 = sig2.key_fingerprint.clone();
@@ -551,11 +650,12 @@ mod tests {
             signature_algorithm: "falcon1024".to_string(),
             min_stake_micro_rt: 50000,
             key_storage_path: None,
+            enable_archive: true,
         });
         let metrics = Arc::new(MintMetrics::new());
         let engine = ProofEngine::new(config, Arc::clone(&metrics));
         let certificate = create_test_certificate("cert-neg");
-        let proof = engine.create_proof(&certificate, vec!["hashX".to_string()]).await.unwrap();
+        let proof = engine.create_proof(&certificate, vec!["hashX".to_string()], certificate.total_jouletorq).await.unwrap();
         let sig = &proof.signatures[0];
         use common::crypto::{parse_kind, new_algorithm};
         let algo = new_algorithm(parse_kind(&sig.algorithm).unwrap());

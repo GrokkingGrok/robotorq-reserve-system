@@ -13,6 +13,9 @@ pub struct MintMetrics {
     pub stake_accumulated_total: IntGauge,
     pub ingot_buffer_size: IntGauge,
     pub certificate_queue_size: IntGauge,
+    pub batch_last_stake: IntGauge,
+    pub batch_last_jouletorq: IntGauge,
+    pub service_uptime_seconds: IntCounter,
     #[allow(dead_code)]
     pub batch_processing_time: Histogram,
     #[allow(dead_code)]
@@ -35,6 +38,9 @@ impl MintMetrics {
         let stake_accumulated_total = IntGauge::new("mint_stake_accumulated_total", "Current total stake accumulated for batching").unwrap();
         let ingot_buffer_size = IntGauge::new("mint_ingot_buffer_size", "Current number of ingots in buffer").unwrap();
         let certificate_queue_size = IntGauge::new("mint_certificate_queue_size", "Current number of certificates queued for batching").unwrap();
+        let batch_last_stake = IntGauge::new("mint_batch_last_stake", "Stake total of the most recently published batch").unwrap();
+        let batch_last_jouletorq = IntGauge::new("mint_batch_last_jouletorq", "JouleTorq total of the most recently published batch").unwrap();
+        let service_uptime_seconds = IntCounter::new("mint_service_uptime_seconds", "Service uptime seconds (incremented periodically)").unwrap();
         let batch_processing_time = Histogram::with_opts(HistogramOpts::new("mint_batch_processing_time_seconds", "Time spent processing batches")).unwrap();
         let proof_creation_time = Histogram::with_opts(HistogramOpts::new("mint_proof_creation_time_seconds", "Time spent creating proofs")).unwrap();
         let merkle_operations_total = IntCounter::new("mint_merkle_operations_total", "Total merkle tree operations performed").unwrap();
@@ -49,6 +55,9 @@ impl MintMetrics {
         registry.register(Box::new(stake_accumulated_total.clone())).unwrap();
         registry.register(Box::new(ingot_buffer_size.clone())).unwrap();
         registry.register(Box::new(certificate_queue_size.clone())).unwrap();
+        registry.register(Box::new(batch_last_stake.clone())).unwrap();
+        registry.register(Box::new(batch_last_jouletorq.clone())).unwrap();
+        registry.register(Box::new(service_uptime_seconds.clone())).unwrap();
         registry.register(Box::new(batch_processing_time.clone())).unwrap();
         registry.register(Box::new(proof_creation_time.clone())).unwrap();
         registry.register(Box::new(merkle_operations_total.clone())).unwrap();
@@ -65,6 +74,9 @@ impl MintMetrics {
             stake_accumulated_total,
             ingot_buffer_size,
             certificate_queue_size,
+            batch_last_stake,
+            batch_last_jouletorq,
+            service_uptime_seconds,
             batch_processing_time,
             proof_creation_time,
             merkle_operations_total,
@@ -90,6 +102,8 @@ impl MintMetrics {
     pub fn set_stake_accumulated(&self, val: i64) { self.stake_accumulated_total.set(val); }
     pub fn set_ingot_buffer_size(&self, val: i64) { self.ingot_buffer_size.set(val); }
     pub fn set_certificate_queue_size(&self, val: i64) { self.certificate_queue_size.set(val); }
+    pub fn set_last_batch(&self, stake: i64, jouletorq: i64) { self.batch_last_stake.set(stake); self.batch_last_jouletorq.set(jouletorq); }
+    pub fn inc_uptime(&self) { self.service_uptime_seconds.inc(); }
     #[allow(dead_code)]
     pub fn observe_batch_processing_time(&self, duration: f64) { self.batch_processing_time.observe(duration); }
     #[allow(dead_code)]

@@ -5,6 +5,7 @@ pub mod models;
 pub mod engine;
 pub mod handlers;
 pub mod metrics;
+pub mod archive;
 
 #[cfg(feature = "simulation")]
 #[cfg(test)]

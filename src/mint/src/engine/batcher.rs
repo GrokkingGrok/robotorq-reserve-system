@@ -3,6 +3,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 use tokio::time;
 use crate::models::{robotorq_certificate::RoboTorqCertificate, robotorq_batch::RoboTorqBatch};
+// Removed jouletorq_to_triple import; test helper builds triple directly.
 use crate::metrics::MintMetrics;
 
 /// Batcher: Collects certificates into batches and publishes them.
@@ -85,16 +86,23 @@ impl Batcher {
 
     pub async fn create_batch(&self, certificates: Vec<RoboTorqCertificate>) -> Result<RoboTorqBatch, Box<dyn std::error::Error + Send + Sync>> {
         let batch_id = format!("batch-{}", SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos());
-
+        let stake_sum_i128: i128 = certificates.iter().map(|c| c.total_stake_jouletorq as i128).sum();
+        let joule_sum_i128: i128 = certificates.iter().map(|c| c.total_jouletorq as i128).sum();
+        if stake_sum_i128 < 0 || joule_sum_i128 < 0 { return Err("negative economic totals".into()); }
+        if stake_sum_i128 > i64::MAX as i128 || joule_sum_i128 > i64::MAX as i128 { return Err("economic total overflow".into()); }
+        let created_at_nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos() as i64;
         let batch = RoboTorqBatch {
+            event_type: "robotorqcert_batch_completed".to_string(),
             batch_id,
-            created_at_nanos: SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos() as i64,
+            created_at_nanos,
+            cert_count: certificates.len(),
+            total_robostake: stake_sum_i128 as i64,
+            canonical_total_jouletorq: joule_sum_i128 as i64,
             certificates,
         };
-
-        // Update metrics
+        batch.validate().map_err(|e| format!("batch validation failed: {}", e))?;
         self.metrics.inc_batches_published();
-
+        self.metrics.set_last_batch(batch.total_robostake, batch.canonical_total_jouletorq);
         Ok(batch)
     }
 }
@@ -106,7 +114,7 @@ mod tests {
     use std::time::SystemTime;
 
     fn create_test_certificate(id: &str, contract: &str) -> RoboTorqCertificate {
-        RoboTorqCertificate {
+        let c = RoboTorqCertificate {
             cert_id: id.to_string(),
             robotorq_proof_id: format!("proof-{}", id),
             merkle_root: "test_root".to_string(),
@@ -115,7 +123,11 @@ mod tests {
             hash: "test_hash".to_string(),
             status: crate::models::robotorq_certificate::CertStatus::Digital,
             bearer_bond_id: None,
-        }
+            total_jouletorq: 3600 * 1000,
+            total_stake_jouletorq: 3600 * 500,
+            total_triple: common::triples::jouletorq_to_triple(3600 * 1000),
+        };
+        c
     }
 
     #[tokio::test]
@@ -146,7 +158,11 @@ mod tests {
 
         assert!(batch.batch_id.starts_with("batch-"));
         assert_eq!(batch.certificates.len(), 2);
-        // Note: We can't easily check the metric here due to Arc cloning
+        assert_eq!(batch.cert_count, 2);
+        let stake_sum: i64 = batch.certificates.iter().map(|c| c.total_stake_jouletorq).sum();
+        assert_eq!(stake_sum, batch.total_robostake);
+        let joule_sum: i64 = batch.certificates.iter().map(|c| c.total_jouletorq).sum();
+        assert_eq!(joule_sum, batch.canonical_total_jouletorq);
     }
 
     #[test]

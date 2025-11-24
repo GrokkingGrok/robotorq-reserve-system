@@ -17,6 +17,8 @@ pub struct MintConfig {
     pub signature_algorithm: String, // "dilithium5", "sphincs+", "none"
     pub min_stake_micro_rt: i64, // Minimum stake required (in micro-RT units)
     pub key_storage_path: Option<String>, // Path to store cryptographic keys
+    // Archive configuration
+    pub enable_archive: bool, // Enable in-memory archival of certificates & proofs
     // Simulation configuration (only available when simulation feature is enabled)
     #[cfg(feature = "simulation")]
     pub simulation_mode: bool,           // Enable simulation-specific behaviors
@@ -73,6 +75,10 @@ impl MintConfig {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(50000), // 0.05 RT minimum stake
             key_storage_path: env::var("MINT_KEY_STORAGE_PATH").ok(),
+            enable_archive: env::var("MINT_ENABLE_ARCHIVE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(true),
             #[cfg(feature = "simulation")]
             simulation_mode: env::var("SIMULATION_MODE")
                 .ok()
@@ -118,6 +124,7 @@ impl Default for MintConfig {
             signature_algorithm: "dilithium5".to_string(),
             min_stake_micro_rt: 50000,
             key_storage_path: None,
+            enable_archive: true,
             #[cfg(feature = "simulation")]
             simulation_mode: false,
             #[cfg(feature = "simulation")]
