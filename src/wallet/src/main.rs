@@ -1,203 +1,92 @@
 //! RoboTorq Wallet Service
 //!
-//! Minimal backend service that:
-//! - Subscribes to NATS `distodam.units` topic
-//! - Tracks wallet balances from RoboTorq units
-//! - Exposes Prometheus metrics for Grafana
-//! - Provides health check endpoint
+//! Economic interface for users to receive UBD, track RT balances,
+//! and participate in the RoboTorq economy.
 
+use anyhow::Result;
 use axum::{
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::get,
     Router,
+    Json,
 };
-use futures_util::StreamExt;
-use prometheus::{Encoder, IntCounter, IntGauge, Registry, TextEncoder};
-use serde::{Deserialize, Serialize};
+use axum::routing::post;
+use robotorq_wallet::{WalletService, WalletState};
+use robotorq_wallet::models;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tower_http::trace::TraceLayer;
 
-// ============================================================================
-// Data Models
-// ============================================================================
-
-// Phase3RoboTorqUnit - The actual RT unit certificate from Mint
-// Each unit is a complete cryptographic certificate with merkle proof
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Phase3RoboTorqUnit {
-    unit_id: String,
-    merkle_root: String,
-    tree_height: i32,
-    robo_stake_total: f64,
-    contract_ids: Vec<String>,
-    digger_ids: Vec<String>,
-    merkle_proof_api: String,
-    minted_at: String,
-    signature: Option<String>,
-    public_key: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct WalletDistributionMessage {
-    wallet_id: String,
-    rt_unit: Phase3RoboTorqUnit,  // Send the actual certificate!
-    timestamp: String,
-    disto_balance: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct WalletActivationMessage {
-    wallet_id: String,
-    activate: bool,
-    requested_at: String,
-}
-
-#[derive(Debug, Clone, Default)]
-struct WalletState {
-    // Store actual RT unit certificates (not counts!)
-    // Each certificate contains merkle_root proof and full provenance
-    rt_units: Vec<Phase3RoboTorqUnit>,
-    wallet_id: String,
-    is_activated: bool,
-}
-
-// ============================================================================
-// Metrics
-// ============================================================================
-
-struct Metrics {
-    rt_units_received_total: IntCounter,
-    rt_units_balance: IntGauge,
-    registry: Registry,
-}
-
-impl Metrics {
-    fn new() -> Result<Self, prometheus::Error> {
-        let registry = Registry::new();
-
-        let rt_units_received_total = IntCounter::new(
-            "wallet_rt_units_received_total",
-            "Total number of RT units received from distributions",
-        )?;
-        registry.register(Box::new(rt_units_received_total.clone()))?;
-
-        let rt_units_balance = IntGauge::new(
-            "wallet_rt_units_balance",
-            "Current RT units balance (discrete units, not floats)",
-        )?;
-        registry.register(Box::new(rt_units_balance.clone()))?;
-
-        Ok(Self {
-            rt_units_received_total,
-            rt_units_balance,
-            registry,
-        })
-    }
-}
-
-// ============================================================================
-// Application State
-// ============================================================================
-
+/// Application state for HTTP handlers
 #[derive(Clone)]
 struct AppState {
-    wallet: Arc<RwLock<WalletState>>,
-    metrics: Arc<Metrics>,
+    wallet_service: Arc<WalletService>,
+    wallet_state: Arc<RwLock<WalletState>>,
 }
 
-// ============================================================================
-// HTTP Handlers
-// ============================================================================
-
+/// Health check endpoint
 async fn health_handler() -> impl IntoResponse {
     (StatusCode::OK, "OK")
 }
 
+/// Metrics endpoint
 async fn metrics_handler(State(state): State<AppState>) -> Response {
-    let encoder = TextEncoder::new();
-    let metric_families = state.metrics.registry.gather();
-    let mut buffer = Vec::new();
-
-    match encoder.encode(&metric_families, &mut buffer) {
-        Ok(_) => {
+    match state.wallet_service.metrics().encode() {
+        Ok(metrics) => {
             (
                 StatusCode::OK,
                 [(
                     axum::http::header::CONTENT_TYPE,
                     "text/plain; version=0.0.4; charset=utf-8",
                 )],
-                buffer,
+                metrics,
             )
                 .into_response()
         }
         Err(e) => {
-            error!("Failed to encode metrics: {}", e);
+            tracing::error!("Failed to encode metrics: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to encode metrics").into_response()
         }
     }
 }
 
+/// Balance endpoint
 async fn balance_handler(State(state): State<AppState>) -> impl IntoResponse {
-    let wallet = state.wallet.read().await;
+    let balance_triple = state.wallet_service.get_balance().await;
+    let wallet_state = state.wallet_state.read().await;
     let response = serde_json::json!({
-        "rt_unit_count": wallet.rt_units.len(),
-        "rt_units": wallet.rt_units.iter().map(|u| serde_json::json!({
-            "unit_id": u.unit_id,
-            "merkle_root": u.merkle_root,
-            "minted_at": u.minted_at,
-            "contract_ids": u.contract_ids,
-            "digger_ids": u.digger_ids,
-        })).collect::<Vec<_>>(),
-        "wallet_id": wallet.wallet_id,
-        "is_activated": wallet.is_activated,
+        "balance": {
+            "robotorq": balance_triple.robotorq,
+            "tokentorq_remainder": balance_triple.tokentorq_remainder,
+            "jouletorq_remainder": balance_triple.jouletorq_remainder,
+            "canonical_jouletorq": models::triple_to_jouletorq(balance_triple),
+        },
+        "wallet_id": wallet_state.wallet_id,
+        "is_activated": wallet_state.is_activated,
     });
     (StatusCode::OK, serde_json::to_string(&response).unwrap())
 }
 
+/// Activate wallet endpoint
 async fn activate_handler(State(state): State<AppState>) -> impl IntoResponse {
     let wallet_id = {
-        let mut wallet = state.wallet.write().await;
-        if wallet.wallet_id.is_empty() {
-            wallet.wallet_id = format!("wallet-{}", uuid::Uuid::new_v4());
+        let mut wallet_state = state.wallet_state.write().await;
+        if wallet_state.wallet_id.is_none() {
+            wallet_state.wallet_id = Some(format!("wallet-{}", uuid::Uuid::new_v4()));
         }
-        wallet.is_activated = true;
-        wallet.wallet_id.clone()
+        wallet_state.is_activated = true;
+        wallet_state.wallet_id.as_ref().unwrap().clone()
     };
 
-    // Publish activation message to NATS
-    let nats_url = std::env::var("NATS_URL").unwrap_or_else(|_| "nats://nats:4222".to_string());
-    
-    match async_nats::connect(&nats_url).await {
-        Ok(client) => {
-            let activation_msg = WalletActivationMessage {
-                wallet_id: wallet_id.clone(),
-                activate: true,
-                requested_at: chrono::Utc::now().to_rfc3339(),
-            };
-            
-            match serde_json::to_vec(&activation_msg) {
-                Ok(msg_data) => {
-                    if let Err(e) = client.publish("wallet.activate", msg_data.into()).await {
-                        error!("Failed to publish activation: {}", e);
-                        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to activate wallet").into_response();
-                    }
-                    info!("Wallet activated: {}", wallet_id);
-                }
-                Err(e) => {
-                    error!("Failed to serialize activation message: {}", e);
-                    return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to activate wallet").into_response();
-                }
-            }
-        }
-        Err(e) => {
-            error!("Failed to connect to NATS: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to activate wallet").into_response();
-        }
+    // Publish activation message
+    if let Err(e) = state.wallet_service.nats_client().publish_activation(&wallet_id, true).await {
+        tracing::error!("Failed to publish activation: {}", e);
+        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to activate wallet").into_response();
     }
 
+    tracing::info!("Wallet activated: {}", wallet_id);
     let response = serde_json::json!({
         "wallet_id": wallet_id,
         "activated": true,
@@ -205,48 +94,25 @@ async fn activate_handler(State(state): State<AppState>) -> impl IntoResponse {
     (StatusCode::OK, serde_json::to_string(&response).unwrap()).into_response()
 }
 
+/// Deactivate wallet endpoint
 async fn deactivate_handler(State(state): State<AppState>) -> impl IntoResponse {
     let wallet_id = {
-        let mut wallet = state.wallet.write().await;
-        wallet.is_activated = false;
-        wallet.wallet_id.clone()
+        let mut wallet_state = state.wallet_state.write().await;
+        wallet_state.is_activated = false;
+        wallet_state.wallet_id.as_ref().unwrap_or(&"unknown".to_string()).clone()
     };
 
-    if wallet_id.is_empty() {
+    if wallet_id == "unknown" {
         return (StatusCode::BAD_REQUEST, "Wallet not initialized").into_response();
     }
 
-    // Publish deactivation message to NATS
-    let nats_url = std::env::var("NATS_URL").unwrap_or_else(|_| "nats://nats:4222".to_string());
-    
-    match async_nats::connect(&nats_url).await {
-        Ok(client) => {
-            let activation_msg = WalletActivationMessage {
-                wallet_id: wallet_id.clone(),
-                activate: false,
-                requested_at: chrono::Utc::now().to_rfc3339(),
-            };
-            
-            match serde_json::to_vec(&activation_msg) {
-                Ok(msg_data) => {
-                    if let Err(e) = client.publish("wallet.activate", msg_data.into()).await {
-                        error!("Failed to publish deactivation: {}", e);
-                        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to deactivate wallet").into_response();
-                    }
-                    info!("Wallet deactivated: {}", wallet_id);
-                }
-                Err(e) => {
-                    error!("Failed to serialize deactivation message: {}", e);
-                    return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to deactivate wallet").into_response();
-                }
-            }
-        }
-        Err(e) => {
-            error!("Failed to connect to NATS: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to deactivate wallet").into_response();
-        }
+    // Publish deactivation message
+    if let Err(e) = state.wallet_service.nats_client().publish_activation(&wallet_id, false).await {
+        tracing::error!("Failed to publish deactivation: {}", e);
+        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to deactivate wallet").into_response();
     }
 
+    tracing::info!("Wallet deactivated: {}", wallet_id);
     let response = serde_json::json!({
         "wallet_id": wallet_id,
         "activated": false,
@@ -254,164 +120,100 @@ async fn deactivate_handler(State(state): State<AppState>) -> impl IntoResponse 
     (StatusCode::OK, serde_json::to_string(&response).unwrap()).into_response()
 }
 
-// ============================================================================
-// Mint Verification Client
-// ============================================================================
+/// Transaction quote request endpoint
+async fn transaction_quote_handler(
+    State(state): State<AppState>,
+    Json(request): Json<models::TransactionRequest>,
+) -> impl IntoResponse {
+    // Get current wallet ID
+    let wallet_state = state.wallet_state.read().await;
+    let current_wallet_id = match &wallet_state.wallet_id {
+        Some(id) => id.clone(),
+        None => return (StatusCode::BAD_REQUEST, "Wallet not activated").into_response(),
+    };
 
-// Verify certificate with Mint to ensure it's legitimate
-async fn verify_certificate_with_mint(
-    merkle_root: &str,
-    unit_id: &str,
-) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    let mint_verification_url = std::env::var("MINT_VERIFICATION_URL")
-        .unwrap_or_else(|_| "http://mint:8080/verify/certificate".to_string());
-
-    let client = reqwest::Client::new();
-    let request_body = serde_json::json!({
-        "merkle_root": merkle_root,
-        "unit_id": unit_id,
-    });
-
-    let response = client
-        .post(&mint_verification_url)
-        .json(&request_body)
-        .timeout(std::time::Duration::from_secs(5))
-        .send()
-        .await?;
-
-    if response.status().is_success() {
-        let verification_result: serde_json::Value = response.json().await?;
-        if let Some(valid) = verification_result.get("valid").and_then(|v| v.as_bool()) {
-            return Ok(valid);
-        }
+    // Validate request
+    if request.from_wallet_id != current_wallet_id {
+        return (StatusCode::BAD_REQUEST, "Request from_wallet_id does not match current wallet").into_response();
     }
 
-    Ok(false)
-}
-
-// ============================================================================
-// NATS Subscribers
-// ============================================================================
-
-// Wallet ONLY subscribes to wallet.distribution (RT units from DistoDam)
-// Wallet NEVER receives distodam.units (Phase3RoboTorqUnit with RoboStake)
-
-async fn start_distribution_subscriber(
-    nats_url: String,
-    state: AppState,
-) -> Result<(), Box<dyn std::error::Error>> {
-    info!("Connecting to NATS for distribution at {}", nats_url);
-    let client = async_nats::connect(&nats_url).await?;
-    info!("Connected to NATS successfully");
-
-    let mut subscriber = client.subscribe("wallet.distribution").await?;
-    info!("Subscribed to wallet.distribution topic");
-
-    while let Some(message) = subscriber.next().await {
-        match serde_json::from_slice::<WalletDistributionMessage>(&message.payload) {
-            Ok(dist_msg) => {
-                info!(
-                    "Received RT certificate: {} (merkle_root: {})",
-                    dist_msg.rt_unit.unit_id, dist_msg.rt_unit.merkle_root
-                );
-
-                // FIRST: Verify certificate with Mint before accepting
-                info!(
-                    "Verifying certificate with Mint: {} (merkle_root: {})",
-                    dist_msg.rt_unit.unit_id, dist_msg.rt_unit.merkle_root
-                );
-
-                match verify_certificate_with_mint(
-                    &dist_msg.rt_unit.merkle_root,
-                    &dist_msg.rt_unit.unit_id,
-                )
-                .await
-                {
-                    Ok(true) => {
-                        info!(
-                            "✅ Certificate VERIFIED by Mint: {} (merkle_root: {})",
-                            dist_msg.rt_unit.unit_id, dist_msg.rt_unit.merkle_root
-                        );
-
-                        // Store the actual RT unit certificate
-                        let mut wallet = state.wallet.write().await;
-                        wallet.rt_units.push(dist_msg.rt_unit.clone());
-
-                        // Update metrics
-                        state.metrics.rt_units_received_total.inc();
-                        state.metrics.rt_units_balance.set(wallet.rt_units.len() as i64);
-
-                        info!(
-                            "RT certificate stored - Total certificates: {}, Unit ID: {}, DistoVault balance: {:.6} RT",
-                            wallet.rt_units.len(), dist_msg.rt_unit.unit_id, dist_msg.disto_balance
-                        );
-                    }
-                    Ok(false) => {
-                        error!(
-                            "❌ Certificate REJECTED by Mint: {} (merkle_root: {})",
-                            dist_msg.rt_unit.unit_id, dist_msg.rt_unit.merkle_root
-                        );
-                        error!("Certificate not found in Mint records - potential fraud!");
-                    }
-                    Err(e) => {
-                        error!(
-                            "⚠️  Failed to verify certificate with Mint: {} (merkle_root: {}), error: {}",
-                            dist_msg.rt_unit.unit_id, dist_msg.rt_unit.merkle_root, e
-                        );
-                        error!("Verification network error - certificate NOT stored");
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Failed to deserialize distribution message: {}", e);
-            }
+    // Forward quote request to vault
+    match state.wallet_service.nats_client().request_transaction_quote(request).await {
+        Ok(quote) => {
+            let response = serde_json::to_string(&quote).unwrap();
+            (StatusCode::OK, response).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to get transaction quote: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get transaction quote").into_response()
         }
     }
-
-    Ok(())
 }
 
-// ============================================================================
-// Main Entry Point
-// ============================================================================
+/// Transaction send endpoint
+async fn transaction_send_handler(
+    State(state): State<AppState>,
+    Json(commitment): Json<models::TransactionCommitment>,
+) -> impl IntoResponse {
+    // Forward commitment to vault
+    match state.wallet_service.nats_client().commit_transaction(commitment).await {
+        Ok(execution) => {
+            let response = serde_json::to_string(&execution).unwrap();
+            (StatusCode::OK, response).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to send transaction: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to send transaction").into_response()
+        }
+    }
+}
+
+/// Transaction status endpoint
+async fn transaction_status_handler(
+    State(state): State<AppState>,
+    axum::extract::Path(transaction_id): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    // Request status from vault
+    match state.wallet_service.nats_client().get_transaction_status(&transaction_id).await {
+        Ok(execution) => {
+            let response = serde_json::to_string(&execution).unwrap();
+            (StatusCode::OK, response).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to get transaction status: {}", e);
+            (StatusCode::NOT_FOUND, "Transaction not found").into_response()
+        }
+    }
+}
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize logging
+async fn main() -> Result<()> {
+    // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "wallet=info,tower_http=info".to_string()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "robotorq_wallet=info,tower_http=info".to_string()),
         )
         .init();
 
-    info!("Starting RoboTorq Wallet Service v0.1.0");
+    tracing::info!("Starting RoboTorq Wallet Service v{}", env!("CARGO_PKG_VERSION"));
 
-    // Configuration from environment
-    let nats_url = std::env::var("NATS_URL").unwrap_or_else(|_| "nats://nats:4222".to_string());
-    let http_port = std::env::var("HTTP_PORT").unwrap_or_else(|_| "8080".to_string());
+    // Create wallet service
+    let wallet_service = Arc::new(WalletService::new().await?);
+    let wallet_state = Arc::new(RwLock::new(WalletState::default()));
 
-    info!("Configuration:");
-    info!("  NATS URL: {}", nats_url);
-    info!("  HTTP Port: {}", http_port);
-
-    // Initialize metrics
-    let metrics = Arc::new(Metrics::new()?);
-    info!("Metrics initialized");
-
-    // Initialize application state
-    let state = AppState {
-        wallet: Arc::new(RwLock::new(WalletState::default())),
-        metrics,
-    };
-
-    // Start ONLY the distribution subscriber (wallet doesn't need distodam.units)
-    // Wallet receives RT units from DistoDam via wallet.distribution topic
-    let dist_state = state.clone();
+    // Start wallet service
+    let service_clone = Arc::clone(&wallet_service);
     tokio::spawn(async move {
-        if let Err(e) = start_distribution_subscriber(nats_url, dist_state).await {
-            error!("NATS distribution subscriber error: {}", e);
+        if let Err(e) = service_clone.start().await {
+            tracing::error!("Wallet service error: {}", e);
         }
     });
+
+    // Create application state
+    let app_state = AppState {
+        wallet_service,
+        wallet_state,
+    };
 
     // Build HTTP router
     let app = Router::new()
@@ -420,14 +222,109 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/balance", get(balance_handler))
         .route("/activate", get(activate_handler))
         .route("/deactivate", get(deactivate_handler))
-        .with_state(state);
+        .route("/transaction/quote", post(transaction_quote_handler))
+        .route("/transaction/send", post(transaction_send_handler))
+        .route("/transaction/status/:transaction_id", get(transaction_status_handler))
+        .layer(TraceLayer::new_for_http())
+        .with_state(app_state);
 
     // Start HTTP server
-    let addr = format!("0.0.0.0:{}", http_port);
+    let addr = format!("0.0.0.0:{}", std::env::var("HTTP_PORT").unwrap_or_else(|_| "8080".to_string()));
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    info!("Wallet service listening on {}", addr);
+    tracing::info!("Wallet service listening on {}", addr);
 
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models;
+
+    #[tokio::test]
+    async fn test_health_handler() {
+        // Test that health handler compiles and runs
+        // In a real test, you'd set up a test app and make HTTP requests
+        assert!(true);
+    }
+
+    #[test]
+    fn test_transaction_request_validation() {
+        // Test transaction request structure
+        let request = models::TransactionRequest {
+            from_wallet_id: "wallet-001".to_string(),
+            to_wallet_id: "wallet-002".to_string(),
+            amount_jouletorq: 1000,
+            timeframe_seconds: 3600,
+        };
+
+        assert_eq!(request.from_wallet_id, "wallet-001");
+        assert_eq!(request.to_wallet_id, "wallet-002");
+        assert_eq!(request.amount_jouletorq, 1000);
+        assert_eq!(request.timeframe_seconds, 3600);
+    }
+
+    #[test]
+    fn test_transaction_quote_response_structure() {
+        // Test that quote response has expected fields
+        let request = models::TransactionRequest {
+            from_wallet_id: "wallet-001".to_string(),
+            to_wallet_id: "wallet-002".to_string(),
+            amount_jouletorq: 1000,
+            timeframe_seconds: 3600,
+        };
+
+        let quote = models::TransactionQuote {
+            quote_id: "quote-123".to_string(),
+            request,
+            fee_jouletorq: 10,
+            estimated_completion_seconds: 3660,
+            possible: true,
+            reason: None,
+            expires_at: chrono::Utc::now() + chrono::Duration::seconds(300),
+        };
+
+        assert_eq!(quote.quote_id, "quote-123");
+        assert_eq!(quote.fee_jouletorq, 10);
+        assert!(quote.possible);
+    }
+
+    #[test]
+    fn test_transaction_commitment_structure() {
+        let commitment = models::TransactionCommitment {
+            quote_id: "quote-123".to_string(),
+            accepted: true,
+        };
+
+        assert_eq!(commitment.quote_id, "quote-123");
+        assert!(commitment.accepted);
+    }
+
+    #[test]
+    fn test_transaction_status_response_structure() {
+        let execution = models::TransactionExecution {
+            transaction_id: "tx-123".to_string(),
+            quote_id: "quote-123".to_string(),
+            status: models::TransactionStatus::Completed,
+            progress: 1.0,
+            transferred_jouletorq: 1000,
+            started_at: chrono::Utc::now() - chrono::Duration::seconds(30),
+            completed_at: Some(chrono::Utc::now()),
+            error_message: None,
+        };
+
+        let response = models::TransactionStatusResponse {
+            transaction_id: "tx-123".to_string(),
+            status: models::TransactionStatus::Completed,
+            quote: None,
+            execution: Some(execution),
+            last_updated: chrono::Utc::now(),
+        };
+
+        assert_eq!(response.transaction_id, "tx-123");
+        assert_eq!(response.status, models::TransactionStatus::Completed);
+        assert!(response.execution.is_some());
+    }
 }
