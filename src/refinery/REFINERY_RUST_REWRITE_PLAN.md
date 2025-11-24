@@ -2,19 +2,19 @@
 
 ## Overview
 
-This document outlines the plan for rewriting the RoboTorq Refinery service from Go to Rust, following the architectural patterns established in the Rust Mint implementation. The Refinery is responsible for aggregating JouleTorqUnit (JTU) hashes into TokenTorqIngots and managing the Phase 2 hash-only processing pipeline.
+This document outlines the plan for rewriting the RoboTorq Refinery service from Go to Rust, following the architectural patterns established in the Rust Mint implementation. The Refinery is responsible for aggregating JouleTorqUnit (JTU) hashes into TokenTorqIngots and managing the Phase 2 hash processing pipeline.
 
 ## Current Go Refinery Architecture
 
 - ### Core Components
 - **QueueManager**: Thread-safe hash-based FIFO queue with blocking retrieval
-- **Hash-only Ingot Assembler**: Aggregates 3600 hashes into ingots with merkle trees
+- **Ingot Assembler**: Aggregates 3600 hashes into ingots with merkle trees
 - **NatsSubscriber**: Receives hash batches from Digger service
 - **MintClient**: Sends completed ingots to Mint service
 - **Merkle Tree Builder**: Constructs merkle roots from hash collections
 
 ### Key Responsibilities
-1. Receive hash batches from Digger (Phase 2: hash-only, not full JTUs)
+1. Receive hash batches from Digger (Phase 2: hash-based processing, not full JTUs)
 2. Buffer hashes in thread-safe queue with capacity limits
 3. Aggregate 3600 hashes into ingots with merkle root calculation
 4. Sign ingots with Falcon-1024 (post-assembly signing)
@@ -152,7 +152,7 @@ pub struct TokenTorqIngot {
 }
 ```
 
-### Core Engine Components (hash-only flow)
+### Core Engine Components
 
 #### 3.1 Queue Manager
 ```rust
@@ -187,7 +187,7 @@ impl MerkleBuilder {
 }
 ```
 
-#### 3.3 Ingot Assembler (hash-only)
+#### 3.3 Ingot Assembler
 ```rust
 // src/engine/ingot_assembler.rs
 pub struct IngotAssembler {
