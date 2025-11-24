@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     let nats = NatsHandler::new(cfg.clone(), store.clone());
     let nats_task = tokio::spawn(async move {
         if let Err(e) = nats.start().await {
-            tracing::error!("NATS handler failed: {}", %e);
+            tracing::error!(error = %e, "NATS handler failed");
         }
     });
 
