@@ -1,10 +1,15 @@
 [package]
-name = "triples"
-version = "0.1.0"
+name = "triples-deprecated"
+version = "0.0.0"
 edition = "2021"
+publish = false
+
+[package.metadata]
+deprecated = true
+reason = "Use common crate: common::triples"
+
+[lib]
+path = "src/lib.rs"
 
 [dependencies]
-# Add any dependencies if needed, but start minimal
-
-[dev-dependencies]
-# For testing
+# No dependencies; crate is deprecated stub.
