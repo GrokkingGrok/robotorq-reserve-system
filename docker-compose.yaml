@@ -182,6 +182,7 @@ services:
     environment:
       - NATS_URL=nats://nats:4222
       - HTTP_PORT=8080
+      - DATABASE_URL=host=postgres user=torq password=torqpass dbname=roboTorq
       - RUST_LOG=wallet=info,tower_http=info
       - MINT_VERIFICATION_URL=http://mint:8080/verify/certificate
     depends_on:
@@ -256,11 +257,15 @@ services:
     environment:
       - NATS_URL=nats://nats:4222
       - RUST_LOG=vault=info
+      - VAULT_DB_URL=host=postgres user=torq password=torqpass dbname=roboTorq
+      - VAULT_DISTOSTREAM_TICK_MILLIS=2000
     depends_on:
       nats:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8088/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
       interval: 30s
       timeout: 3s
       retries: 3
