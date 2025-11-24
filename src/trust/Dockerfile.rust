@@ -1,0 +1,22 @@
+# Dockerfile.rust - Rust trust service (side-by-side Rust implementation)
+# Multi-stage build: compile in Rust image, run in distroless for minimal surface.
+
+FROM rust:1.91-alpine AS build
+WORKDIR /app
+RUN apk add --no-cache musl-dev openssl-dev pkgconfig
+
+# Copy common + trust crates (context: repo root)
+COPY src/common ./src/common
+COPY src/trust ./src/trust
+
+WORKDIR /app/src/trust
+# Build release binary
+RUN cargo build --release --bin rust-trust
+
+# Final runtime stage
+FROM gcr.io/distroless/cc-debian12:nonroot
+WORKDIR /app
+COPY --from=build /app/src/trust/target/release/rust-trust ./rust-trust
+EXPOSE 8082
+USER nonroot
+ENTRYPOINT ["/app/rust-trust"]

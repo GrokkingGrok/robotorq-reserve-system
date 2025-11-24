@@ -1,14 +1,3 @@
-FROM rust:1.73 as builder
-WORKDIR /usr/src/trust
-COPY Cargo.toml Cargo.lock ./
-COPY src ./src
-RUN cargo build --release || true
-
-FROM debian:bookworm-slim
-WORKDIR /app
-COPY --from=builder /usr/src/trust/target/release/rust-trust ./rust-trust
-EXPOSE 8082
-CMD ["/app/rust-trust"]
 # -------------------------------
 # Stage 1: Build the Go binary
 # -------------------------------
