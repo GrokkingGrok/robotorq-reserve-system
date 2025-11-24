@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use crate::models::{robotorq_certificate::RoboTorqCertificate, robo_torq_proof::{RoboTorqProof, ProofSignature}};
 use common::crypto::{SignatureAlgorithm, parse_kind, new_algorithm};
+use common::merkle::build_merkle_root;
 use crate::metrics::MintMetrics;
 use crate::config::MintConfig;
 use std::time::SystemTime;
@@ -85,7 +86,7 @@ impl ProofEngine {
 
         // Build merkle tree from ingot hashes
         let merkle_root = if ingot_hashes.len() > 1 {
-            crate::engine::merkle::build_merkle_root(&ingot_hashes)?
+            build_merkle_root(&ingot_hashes)
         } else if ingot_hashes.len() == 1 {
             ingot_hashes[0].clone()
         } else {
@@ -132,7 +133,7 @@ impl ProofEngine {
 
         // Build merkle tree
         let merkle_root = if ingot_hashes.len() > 1 {
-            crate::engine::merkle::build_merkle_root(&ingot_hashes)?
+            build_merkle_root(&ingot_hashes)
         } else if ingot_hashes.len() == 1 {
             ingot_hashes[0].clone()
         } else {
@@ -196,7 +197,7 @@ impl ProofEngine {
 
         // Build merkle tree
         let merkle_root = if ingot_hashes.len() > 1 {
-            crate::engine::merkle::build_merkle_root(&ingot_hashes)?
+            build_merkle_root(&ingot_hashes)
         } else if ingot_hashes.len() == 1 {
             ingot_hashes[0].clone()
         } else {
