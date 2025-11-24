@@ -16,6 +16,59 @@ The **Mint** is the final assembly point in the RoboTorq currency creation pipel
 
 ---
 
+## 🧮 Rust Mint Economic Field Extensions (Triple Integration – Nov 24 2025)
+
+The ongoing Rust rewrite of the Mint introduces deterministic integer accounting and a canonical Triple decomposition directly into the certificate & proof artifacts to eliminate floating point drift and simplify downstream validation.
+
+### New Fields (Rust)
+`RoboTorqCertificate`:
+```
+pub total_jouletorq: i64        // Aggregate joule-torq across included ingots (integer base unit)
+pub total_triple: Triple        // Decomposition: { robotorq, tokentorq_remainder, jouletorq_remainder }
+```
+
+`RoboTorqProof` mirrors these two fields for detached verification.
+
+### Triple Invariants
+Given constants:
+```
+JOULETORQ_PER_ROBOTORQ = 3_600_000
+TOKENTORQ_PER_ROBOTORQ = 1000      // implied: 1 token = 3600 joule-torq
+```
+Then for any certificate:
+```
+total_jouletorq = (total_triple.robotorq * JOULETORQ_PER_ROBOTORQ)
+                + (total_triple.tokentorq_remainder * 3600)
+                +  total_triple.jouletorq_remainder
+
+0 <= total_triple.tokentorq_remainder < TOKENTORQ_PER_ROBOTORQ
+0 <= total_triple.jouletorq_remainder < 3600
+```
+
+### Hashing Update
+The Rust certificate hash now concatenates:
+```
+cert_id || merkle_root || contract_ids_count || timestamp_nanos || total_jouletorq || total_triple.robotorq || total_triple.tokentorq_remainder
+```
+(`jouletorq_remainder` may be added later if fractional precision auditing requires full inclusion; current exclusion keeps hash width stable while higher-order components suffice for mint reconciliation.)
+
+### Ledger Consistency Checks (Planned Tests)
+1. Sum of `ingot.joules_total` across batch == `certificate.total_jouletorq`.
+2. Reconstructed joule total from `total_triple` == `total_jouletorq`.
+3. `robotorq_equivalent` (floating readout) derived solely from integer fields.
+
+### Rationale
+- Removes floating point accumulation error in large batch aggregation.
+- Facilitates cross-service cryptographic validation without decoding floats.
+- Encodes economic state in boundary objects to avoid implicit recomputation.
+
+### Migration Notes
+Legacy Go fields `TotalJoules` / `TotalRoboStake` remain until full Rust switchover; they should be treated as derived/read-only and eventually replaced by integer + triple representation.
+
+---
+
+---
+
 ## 📊 Data Flow
 
 ```

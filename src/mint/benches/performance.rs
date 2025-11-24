@@ -34,6 +34,9 @@ fn create_test_certificate(id: &str, contract: &str) -> RoboTorqCertificate {
         hash: "test_hash".to_string(),
         status: mint::models::robotorq_certificate::CertStatus::Digital,
         bearer_bond_id: None,
+        total_jouletorq: 3600 * 1000,
+        total_stake_jouletorq: 3600 * 500,
+        total_triple: common::triples::jouletorq_to_triple(3600 * 1000),
     }
 }
 
