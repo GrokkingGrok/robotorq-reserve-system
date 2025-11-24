@@ -51,8 +51,8 @@ impl NatsHandler {
             };
 
             if let Some(reply_to) = msg.reply {
-                if let Err(e) = client.publish(reply_to, resp.into()).await {
-                    tracing::error!("failed to publish reply to {}: {}", %reply_to, %e);
+                if let Err(e) = client.publish(reply_to.clone(), resp.into()).await {
+                    tracing::error!(reply = %reply_to, error = %e, "failed to publish reply to subscriber");
                 }
             } else {
                 tracing::warn!("contract request had no reply subject");
