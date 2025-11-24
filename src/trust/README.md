@@ -1,3 +1,10 @@
+# rust-trust
+
+Minimal scaffold for the Rust `trust` service (MVP).
+
+This crate serves the Genesis contract and replies to contract requests from Diggers over NATS.
+
+See `RUST_TRUST_MVP_PLAN.md` and `RUST_TRUST_CONFIG.md` in the repo for design and configuration.
 # Trust Service
 
 The Trust service is a decentralized contract orchestration system that evaluates opportunities, creates contracts, and executes them through the Digger network.
