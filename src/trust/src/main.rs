@@ -24,9 +24,13 @@ async fn main() -> Result<()> {
     // Start HTTP (health/metrics) task
     tokio::spawn(http::health_metrics::start_http_server(cfg.metrics_host.clone(), cfg.metrics_port));
 
-    // Start NATS handler
+    // Start NATS handler in background
     let nats = NatsHandler::new(cfg.clone(), store.clone());
-    nats.start().await?;
+    let nats_task = tokio::spawn(async move {
+        if let Err(e) = nats.start().await {
+            tracing::error!("NATS handler failed: {}", %e);
+        }
+    });
 
     // Block until shutdown
     tokio::signal::ctrl_c().await?;
