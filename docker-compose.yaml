@@ -80,6 +80,40 @@ services:
       - torqnet
 
   # -----------------------------
+  # Rust Mint Service (side-by-side for migration)
+  # -----------------------------
+  rust-mint:
+    build:
+      context: .
+      dockerfile: ./src/mint/Dockerfile.rust
+    profiles: ["rust"]
+    ports:
+      - "8180:8080" # Health + Metrics (single port)
+    environment:
+      - MINT_NATS_URL=nats://nats:4222
+      - NATS_URL=nats://nats:4222
+      - MINT_INGOTS_PER_CERT=1000
+      - MINT_BATCH_THRESHOLD_COUNT=10
+      - MINT_BATCH_THRESHOLD_SECONDS=60
+      - MINT_PROOF_INTERVAL_COUNT=100
+      - MINT_PROOF_INTERVAL_SECONDS=300
+      - MINT_MERKLE_TREE_DEPTH=16
+      - MINT_ENABLE_CRYPTO=false
+      - MINT_SIGNATURE_ALGORITHM=dilithium5
+      - MINT_MIN_STAKE_MICRO_RT=50000
+      - MINT_ENABLE_ARCHIVE=true
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks:
+      - torqnet
+
+  # -----------------------------
   # Digger Service (Rust - Falcon-1024 Crypto)
   # -----------------------------
   digger:

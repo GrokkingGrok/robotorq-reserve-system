@@ -45,6 +45,15 @@ scrape_configs:
       - targets: ['vault:8088']
     metrics_path: /metrics
 
+  # ─── Scrape Rust Mint (side-by-side) ────────────
+  - job_name: 'rust_mint'
+    static_configs:
+      - targets: ['rust-mint:8080']
+        labels:
+          service: 'rust-mint'
+          impl: 'rust'
+    metrics_path: /metrics
+
   # ─── Scrape Prometheus itself ───────────────────
   - job_name: 'prometheus'
     static_configs:

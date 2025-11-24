@@ -1,0 +1,23 @@
+# Dockerfile.rust - Side-by-side Rust Mint service
+# Multi-stage build: compile in Rust image, run in distroless for minimal surface.
+# NOTE: Uses musl for static-ish build; adjust if you need glibc specific tooling.
+
+FROM rust:1.91-alpine AS build
+WORKDIR /app
+RUN apk add --no-cache musl-dev openssl-dev pkgconfig
+
+# Copy common + mint crates (context is repo root now)
+COPY src/common ./src/common
+COPY src/mint ./src/mint
+
+WORKDIR /app/src/mint
+# Build release binary (allow lock generation if missing)
+RUN cargo build --release --bin mint
+
+# Final runtime stage
+FROM gcr.io/distroless/cc-debian12:nonroot
+WORKDIR /app
+COPY --from=build /app/src/mint/target/release/mint ./mint
+EXPOSE 8080
+USER nonroot
+ENTRYPOINT ["/app/mint"]
