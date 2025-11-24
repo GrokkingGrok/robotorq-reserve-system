@@ -6,9 +6,9 @@ This document outlines the plan for rewriting the RoboTorq Refinery service from
 
 ## Current Go Refinery Architecture
 
-### Core Components
+- ### Core Components
 - **QueueManager**: Thread-safe hash-based FIFO queue with blocking retrieval
-- **Phase2IngotAssembler**: Aggregates 3600 hashes into ingots with merkle trees
+- **Hash-only Ingot Assembler**: Aggregates 3600 hashes into ingots with merkle trees
 - **NatsSubscriber**: Receives hash batches from Digger service
 - **MintClient**: Sends completed ingots to Mint service
 - **Merkle Tree Builder**: Constructs merkle roots from hash collections
@@ -17,7 +17,7 @@ This document outlines the plan for rewriting the RoboTorq Refinery service from
 1. Receive hash batches from Digger (Phase 2: hash-only, not full JTUs)
 2. Buffer hashes in thread-safe queue with capacity limits
 3. Aggregate 3600 hashes into ingots with merkle root calculation
-4. Sign ingots with Falcon-1024 (Phase 5)
+4. Sign ingots with Falcon-1024 (post-assembly signing)
 5. Send signed ingots to Mint service
 6. Provide health/metrics endpoints
 
@@ -152,7 +152,7 @@ pub struct TokenTorqIngot {
 }
 ```
 
-### Phase 3: Core Engine Components
+### Core Engine Components (hash-only flow)
 
 #### 3.1 Queue Manager
 ```rust
@@ -187,7 +187,7 @@ impl MerkleBuilder {
 }
 ```
 
-#### 3.3 Ingot Assembler
+#### 3.3 Ingot Assembler (hash-only)
 ```rust
 // src/engine/ingot_assembler.rs
 pub struct IngotAssembler {
@@ -202,7 +202,7 @@ impl IngotAssembler {
         loop {
             // Get 3600 hashes from queue
             // Build merkle tree
-            // Create signed ingot
+            // Create signed ingot (if enabled)
             // Send to Mint
         }
     }
