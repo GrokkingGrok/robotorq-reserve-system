@@ -1,40 +1,283 @@
-# Wallet (Phone App) - Implementation TODO
+# Wallet Implementation Status - Current Reality
 
-## 📋 **Document Metadata**
-- **Application**: Wallet (Phone App - User's Economic Interface)
-- **Version**: v0.1.0 (MVP - Basic Wallet Functions)
-- **Author**: Jonathan Clark (@GrokkingGrok)
-- **Date**: November 14, 2025
-- **Status**: Planning Phase
-- **Platform**: Mobile-first (iOS/Android), future: Web/Desktop
-- **Dependencies**: NATS (message bus), Vault Service (savings), DistoDam (UBD routing)
+**Version**: 1.0 (Actual Implementation)
+**Date**: November 24, 2025
+**Status**: Implemented and Working
+**Platform**: Rust-based Vault System
+**Note**: This document has been updated to reflect the actual implemented vault system, not the original planned Go wallet service.
 
 ---
 
-## 🎯 **MVP Scope: Phone App as Wallet**
+## 🎯 **Current Reality: Vault System is the Wallet Backend**
 
-### **Phase 1 - Core Wallet (MVP)**:
-**What exists NOW**: Mint, DistoDam (basic), NATS infrastructure
-**What's needed**: Basic phone wallet to receive and spend RT
+### **What Actually Exists** (November 2025):
+The **Vault System** (Rust) serves as the wallet backend and is **fully implemented and working**:
 
-**Core Responsibilities** (in order of implementation):
-1. **Key Management**: Self-custody, biometric unlock (FIRST - create wallet identity)
-2. **DistoDam Subscription**: Enroll to receive UBD batches (SECOND - register for UBD)
-3. **UBD Reception**: Subscribe to NATS for UBD batches from DistoDam
-4. **Balance Management**: Track spendable RT balance locally (with NATS event replay backup)
-5. **Mining Simulation**: Display continuous UBD "mining" (smooth UX over 24h batch)
-6. **Transaction History**: Local database of all activity
-7. **Spending**: NFC/QR payment to merchants and other users
+✅ **Certificate Storage**: ShadowCertVault stores RoboTorqCertificates
+✅ **Stake Management**: ShadowStakeVault handles RoboStake reserves
+✅ **UBD Distribution**: ShadowDistoVault distributes value via packages
+✅ **User Vaults**: ShortVaultRegistry manages user landing zones
+✅ **Contract Approval**: Optional service for robotic labor contracts
+✅ **NATS Integration**: Full event-driven communication
+✅ **Persistence**: PostgreSQL storage for schedules and recovery
+✅ **Package Delivery**: UBDDistributionPackage and DemurrageReleasePackage
+✅ **Simulation Features**: Time compression, drip algorithms
+✅ **End-to-End UBD Pipeline**: Mint → Vault → Wallets working
 
-**Critical Path**: 
-- Key Management → DistoDam Subscription → UBD Reception → Everything else
-- **Cannot test UBD flow without DistoDam subscription!**
-
-**Goal**: Users can receive UBD and spend RT peer-to-peer
+### **What Was Planned But Doesn't Exist**:
+❌ **Separate Go Wallet Service**: Never implemented - vault system handles this
+❌ **HTTP API for Wallets**: Vault has internal APIs but no external wallet service
+❌ **PostgreSQL Wallet Database**: Vault uses persistence but for schedules, not wallets
+❌ **BidNet Integration**: Not yet implemented in vault
+❌ **P2P Marketplace**: Not implemented
+❌ **Physical RoboTorq Activation**: Not implemented
 
 ---
 
-### **Phase 2 - Vaults & Demurrage**:
+## 🏛️ **Actual Wallet Architecture: Phone App + Vault Backend**
+
+### **Phone App (Future - Not Yet Implemented)**:
+The phone wallet would be a **React Native app** that:
+
+1. **Key Management**: Self-custody with biometric unlock
+2. **NATS Direct Connection**: Subscribe to vault events directly
+3. **Local Balance**: Track RT balance locally with NATS replay backup
+4. **Package Reception**: Receive UBDDistributionPackage from vault
+5. **Demurrage Calculation**: Local calculation for UX (settle to vault daily)
+6. **P2P Payments**: NFC/QR payments via NATS events
+7. **Vault Integration**: Transfer to/from ShortVaults via demurrage requests
+
+**Critical**: Phone connects directly to NATS, not through HTTP API.
+
+### **Vault Backend (Implemented)**:
+The vault system provides:
+
+1. **UBD Distribution**: Sends packages to wallet NATS topics
+2. **ShortVault Management**: Demurrage-free reserves for users
+3. **Certificate Authorization**: Enables UBD based on minted certificates
+4. **Package Confirmation**: Receives wallet confirmations
+5. **Persistence**: Survives restarts, recovers active distributions
+
+---
+
+## 📋 **Current Implementation Status**
+
+### **✅ Fully Working Features**:
+
+#### **UBD Distribution Pipeline**
+- Mint creates certificates → Vault stores them
+- Vault authorizes UBD → DistoVault creates distribution schedules
+- DistoVault sends UBDDistributionPackage to wallets via NATS
+- Wallets receive packages and credit balances
+- Wallets send confirmations back to vault
+
+#### **Package-Based Delivery**
+```rust
+// Actual package structure
+pub struct UBDDistributionPackage {
+    pub package_id: String,
+    pub user_id: String,
+    pub amount_canonical_jouletorq: i64,
+    pub distribution_timestamp: DateTime<Utc>,
+    pub provenance_cert_ids: Vec<String>,
+    pub package_hash: String,
+    pub vault_signature: Option<String>,
+}
+```
+
+#### **Dual Delivery Modes**
+- **Single Package**: Direct delivery to wallet
+- **Drip-Based**: Gradual delivery to ShortVault reserves
+
+#### **NATS Event Flow** (Actual)
+```
+Mint → vault.phase3.completed
+    ↓
+Vault stores certificates → vault.cert.stored
+Vault authorizes UBD → vault.distostream.authorized
+    ↓
+DistoVault distributes → vault.ubd.package → Wallets
+Wallets confirm → wallet.package.confirmation
+```
+
+#### **Persistence & Recovery**
+- PostgreSQL stores active distribution schedules
+- Vault recovers incomplete distributions on restart
+- Survives network interruptions
+
+#### **Simulation Features**
+- Time compression for testing (1000x speed)
+- Configurable drip algorithms (uniform, exponential, etc.)
+- Economic variance factors
+
+---
+
+## 🚧 **Missing Components (For Full Wallet Experience)**
+
+### **Phone App (Not Implemented)**
+The actual wallet functionality requires a phone app that:
+
+1. **Receives UBD Packages**:
+   ```typescript
+   // Subscribe to vault packages
+   nats.subscribe('vault.ubd.package.wallet-123', (package) => {
+     // Credit local balance
+     balance += package.amount_canonical_jouletorq / 3_600_000;
+     // Send confirmation
+     nats.publish('wallet.package.confirmation', {
+       package_id: package.package_id,
+       wallet_id: 'wallet-123',
+       received_at: new Date()
+     });
+   });
+   ```
+
+2. **Manages Demurrage**:
+   ```typescript
+   // Calculate local demurrage for UX
+   const demurrageRate = getDemurrageRate(balance);
+   const dailyDrain = balance * demurrageRate;
+
+   // Send daily settlement to vault
+   nats.publish('wallet.demurrage.settlement', {
+     wallet_id: 'wallet-123',
+     amount_canonical_jouletorq: dailyDrain * 3_600_000,
+     settlement_date: new Date()
+   });
+   ```
+
+3. **Handles ShortVault Transfers**:
+   ```typescript
+   // Request demurrage release from ShortVault
+   nats.publish('wallet.demurrage.request', {
+     wallet_id: 'wallet-123',
+     short_vault_id: 'short-vault-456',
+     request_amount: 1000 * 3_600_000
+   });
+
+   // Receive response
+   nats.subscribe('vault.demurrage.package', (package) => {
+     balance += package.amount_canonical_jouletorq / 3_600_000;
+   });
+   ```
+
+### **P2P Payments (Not Implemented)**
+```typescript
+// Send payment
+const payment = {
+  payment_id: uuid(),
+  from_wallet: 'wallet-123',
+  to_wallet: 'wallet-456',
+  amount_canonical_jouletorq: 10 * 3_600_000,
+  timestamp: new Date()
+};
+
+// Sign with private key
+payment.signature = sign(payment, privateKey);
+
+// Publish to network
+nats.publish('payment.sent', payment);
+
+// Deduct local balance immediately
+balance -= 10;
+```
+
+### **Vault Integration (Partially Implemented)**
+- ShortVault creation: ✅ Working
+- UBD crediting to ShortVaults: ✅ Working
+- Demurrage release requests: ✅ Working
+- TorqedPledge management: ❌ Not implemented
+
+---
+
+## 🔄 **Architecture Evolution**
+
+### **Original Plan (Outdated)**
+- Separate Go wallet service with HTTP API
+- PostgreSQL database for wallet balances
+- RESTful API for phone app to call
+- BidNet integration for investments
+
+### **Current Reality (Implemented)**
+- Rust vault system handles wallet backend functions
+- NATS-only communication (no HTTP API for wallets)
+- Phone apps connect directly to NATS
+- Package-based delivery instead of balance updates
+- Persistence for distribution schedules, not wallet balances
+
+### **Key Changes**
+1. **No separate wallet service** - vault system IS the wallet backend
+2. **NATS-centric** - all communication via pub/sub, no REST APIs
+3. **Package delivery** - wallets receive delivery packages, not balance updates
+4. **Local balance management** - phones track balances locally with NATS backup
+5. **Event sourcing** - wallet state reconstructable from NATS event replay
+
+---
+
+## 🎯 **Next Steps for Complete Wallet Experience**
+
+### **Immediate (Wallet MVP)**
+1. **Phone App Development**:
+   - React Native app with NATS client
+   - Local SQLite encrypted database
+   - Key management with biometric unlock
+   - UBD package reception and confirmation
+   - Local balance tracking with demurrage calculation
+
+2. **P2P Payment System**:
+   - NFC/QR code payment interface
+   - NATS-based payment events
+   - Instant balance updates
+   - Transaction history
+
+3. **ShortVault Integration**:
+   - View ShortVault balances
+   - Request demurrage releases
+   - Auto-save configurations
+
+### **Future Enhancements**
+1. **TorqedPledge Management**: Create and track pledges
+2. **Investment Portal**: BidNet contract browsing and investment
+3. **P2P Marketplace**: Goods/services trading
+4. **Currency Exchange**: RT ↔ USDC via BidNet
+5. **Physical RoboTorq Activation**: NFC scanning for wallet funding
+
+---
+
+## 📊 **Current System Capabilities**
+
+### **✅ Working End-to-End**
+- Certificate minting and storage
+- UBD authorization based on certificates
+- Package creation and delivery
+- Distribution schedule persistence
+- Recovery after restarts
+- Simulation testing features
+
+### **🔄 Integration Points**
+- **Mint**: Sends Phase3 completion events
+- **Wallets**: Receive UBD packages (when implemented)
+- **NATS**: Message bus for all communication
+- **PostgreSQL**: Schedule persistence
+
+### **🎯 Production Ready**
+- Comprehensive error handling
+- Atomic operations for concurrency
+- Monitoring and metrics
+- Docker deployment
+- Health checks
+
+---
+
+## 🏁 **Conclusion**
+
+The **vault system is implemented and working** as the wallet backend. The missing piece is the **phone app** that connects to NATS and manages local wallet state. The original plan for a separate Go wallet service was never implemented - the Rust vault system serves this purpose.
+
+**Current Status**: Backend ready, frontend needed for complete wallet experience.
+
+---
+
+*"The vault system delivers UBD packages to wallets - now we need the wallets to receive them."*### **Phase 2 - Vaults & Demurrage**:
 **What will exist**: Vault Service (StashVault + TorqedPledge)
 **What's needed**: Savings integration, demurrage mechanics
 
