@@ -1,0 +1,10 @@
+[package]
+name = "triples"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Add any dependencies if needed, but start minimal
+
+[dev-dependencies]
+# For testing
