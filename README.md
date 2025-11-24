@@ -349,9 +349,10 @@ This isn't a "flex": the author can't proceed too much further without expert he
 - Basic labor tracking
 - Cryptographic signing (falcon + SPHINCS)
 - Merkle tree aggregation at all layers (except physical bearer bond merkles, depends on vault)
-- Persistance of some data
-- Wallet recieves UBD, but cannot spend
+- Persistence of some data
+- Wallet receives UBD, but cannot spend
 - Vault MVP live (CertVault storing certificates, StakeVault tracking RoboStake balances, metrics + Grafana dashboard)
+- Rust Mint: Fully written and tested, ready for integration
 
 **In Progress**:
 - In-Flight mint ingot recovery backend integration
@@ -360,7 +361,6 @@ This isn't a "flex": the author can't proceed too much further without expert he
 - Mock-Printer to Real 3D Printer (aka robot)
 - Comprehensive documentation
 - Simulator configuration design
-
 
 **Effectively Blocked**:
 - Security audit and hardening (high priority, expert needed)
