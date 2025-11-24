@@ -52,7 +52,7 @@ impl NatsHandler {
             };
 
             if let Err(e) = msg.respond(resp.into()).await {
-                tracing::error!("failed to respond to contract request: {}", %e);
+                tracing::error!("failed to respond to contract request: {}", e);
             }
         }
 
