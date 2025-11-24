@@ -20,6 +20,14 @@
    - Default: `genesis-0001`
    - The `contract_id` used for the genesis contract; useful to override per-deployment.
 
+- `TRUST_OWNER_NAME` (string)
+  - Default: `"Jonathan Joseph Clark"` (optional)
+  - Description: Human-readable owner name to embed in contracts (useful for audit/ownership fields).
+
+- `TRUST_OWNER_WALLET_ID` (string)
+  - Default: empty
+  - Description: Wallet identifier owned by the operator (populate once a wallet exists). When present the Genesis contract will include `owner_wallet_id`.
+
  - `TRUST_ENABLE_SIGNING` (bool)
    - Default: `false`
    - If `true`, the service will sign contracts when publishing replies.

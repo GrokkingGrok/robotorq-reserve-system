@@ -80,7 +80,9 @@ pub struct Contract {
     pub version: u32,
     pub title: String,
     pub description: Option<String>,
-    pub robot_id: String,          // e.g. "3d-printer-jon"
+  pub robot_id: String,          // e.g. "3d-printer-jon"
+  pub owner_name: Option<String>,// human owner name (e.g. "Jonathan Joseph Clark")
+  pub owner_wallet_id: Option<String>, // owner's wallet id (populate when available)
     pub robostake_required: bool,  // MUST be false for the Genesis contract
     pub payload: serde_json::Value,// contract body (DSL or JSON args)
     pub created_at: DateTime<Utc>,
@@ -97,6 +99,8 @@ Sample Genesis contract JSON (example—replace `robot_id` with your 3D printer 
   "title": "Genesis: 3D Printer Contract",
   "description": "Initial genesis contract allowing 3D printer to act without robostake.",
   "robot_id": "3d-printer-jon",
+  "owner_name": "Jonathan Joseph Clark",
+  "owner_wallet_id": null,
   "robostake_required": false,
   "payload": { "actions": ["print-object"], "parameters": {} },
   "created_at": "2025-11-24T00:00:00Z",
@@ -147,6 +151,8 @@ Estimated total: ~4–5 workdays for a single engineer to deliver a tested MVP (
 ## Next steps (planned, but not executed)
 
 1. Author `src/trust/src/config.rs` implementing `TrustConfig::from_env()` and safe defaults.
+2. Add `TRUST_OWNER_NAME` / `TRUST_OWNER_WALLET_ID` env support and wire owner fields into loaded Genesis contract (populate when wallet exists).
+3. Implement `models::Contract` and `store::ContractStore` with file-backed snapshot.
 2. Implement `models::Contract` and `store::ContractStore` with file-backed snapshot.
 3. Implement `handlers::NatsHandler` using the `async-nats` client and request/reply semantics.
 4. Add tests and a docker-compose recipe for local integration testing.
