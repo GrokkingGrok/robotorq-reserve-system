@@ -191,6 +191,64 @@ impl fmt::Display for Decimal {
     }
 }
 
+// ===== Triple representation (decomposed RoboTorq) =====
+// Provides a lossless decomposition of a whole balance into RoboTorq, TokenTorq ingots, and JouleTorq ore.
+// Arithmetic is delegated to Decimal for safety; conversion preserves invariants.
+
+pub const INGOTS_PER_ROBOTORQ: i64 = 1000; // TokenTorq per RoboTorq
+pub const ORE_PER_INGOT: i64 = 3600;       // JouleTorq per TokenTorq ingot
+pub const JOULETORQ_PER_ROBOTORQ: i64 = INGOTS_PER_ROBOTORQ * ORE_PER_INGOT; // 3_600_000
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Triple {
+    pub robotorq: i64,
+    pub tokentorq_remainder: i64, // 0..999
+    pub jouletorq_remainder: i64, // 0..3599
+}
+
+impl Triple {
+    pub fn new(r: i64, t: i64, j: i64) -> Self { Self { robotorq: r, tokentorq_remainder: t, jouletorq_remainder: j } }
+    pub fn zero() -> Self { Self::new(0,0,0) }
+}
+
+impl Default for Triple { fn default() -> Self { Triple::zero() } }
+
+pub fn jouletorq_to_triple(total_jouletorq: i64) -> Triple {
+    let robotorq = total_jouletorq / JOULETORQ_PER_ROBOTORQ;
+    let remainder = total_jouletorq % JOULETORQ_PER_ROBOTORQ;
+    let tokentorq_remainder = remainder / ORE_PER_INGOT;
+    let jouletorq_remainder = remainder % ORE_PER_INGOT;
+    Triple::new(robotorq, tokentorq_remainder, jouletorq_remainder)
+}
+
+pub fn triple_to_jouletorq(triple: Triple) -> i64 {
+    triple.robotorq * JOULETORQ_PER_ROBOTORQ + triple.tokentorq_remainder * ORE_PER_INGOT + triple.jouletorq_remainder
+}
+
+pub fn triple_to_decimal(triple: Triple) -> Decimal {
+    Decimal::new(triple_to_jouletorq(triple), 0)
+}
+
+pub fn decimal_to_triple(d: &Decimal) -> Result<Triple, DecimalError> {
+    if d.scale() != 0 { return Err(DecimalError::MismatchedScale(d.scale(), 0)); }
+    if d.value() < 0 { return Err(DecimalError::NegativeSplit); }
+    Ok(jouletorq_to_triple(d.value()))
+}
+
+pub fn add_triples(a: Triple, b: Triple) -> Triple {
+    let da = triple_to_decimal(a);
+    let db = triple_to_decimal(b);
+    let sum = da.add(db).expect("triple addition overflow");
+    decimal_to_triple(&sum).expect("decimal to triple conversion")
+}
+
+pub fn subtract_triples(a: Triple, b: Triple) -> Triple {
+    let da = triple_to_decimal(a);
+    let db = triple_to_decimal(b);
+    let diff = da.subtract(db).expect("triple subtraction overflow");
+    decimal_to_triple(&diff).expect("decimal to triple conversion")
+}
+
 impl PartialEq for Decimal {
     fn eq(&self, other: &Self) -> bool {
         let (a, b, _scale) = self.normalize_scales(other);
@@ -359,5 +417,33 @@ mod tests {
         let d = Decimal::new_with_string(100, 2, "1.00").unwrap();
         assert!(d.validate_cross());
         assert!(d.is_valid());
+    }
+
+    // Triple tests (migrated from wallet)
+    #[test]
+    fn test_triple_round_trip() {
+        let t = Triple::new(3, 250, 3599);
+        let d = triple_to_decimal(t);
+        let back = decimal_to_triple(&d).unwrap();
+        assert_eq!(t, back);
+    }
+
+    #[test]
+    fn test_triple_add_rollover() {
+        let a = Triple::new(0, 999, 3599);
+        let b = Triple::new(0, 0, 1);
+        let legacy = jouletorq_to_triple(triple_to_jouletorq(a) + triple_to_jouletorq(b));
+        let sum = add_triples(a, b);
+        assert_eq!(legacy, sum);
+    }
+
+    #[test]
+    fn test_triple_subtract() {
+        let a = Triple::new(2, 500, 1800);
+        let b = Triple::new(1, 200, 1000);
+        let diff = subtract_triples(a,b);
+        assert_eq!(diff.robotorq,1);
+        assert_eq!(diff.tokentorq_remainder,300);
+        assert_eq!(diff.jouletorq_remainder,800);
     }
 }
