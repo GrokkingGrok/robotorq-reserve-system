@@ -102,6 +102,38 @@ Formula relationships:
 Extended layered explanation: see [`ROBOTORQ_CONCEPT_STACK_V1.md`](./ROBOTORQ_CONCEPT_STACK_V1.md).
 
 
+### Proof Signature Format (Mint Rust Rewrite)
+
+The Mint rewrite introduces a hash–then–sign, post‑quantum ready proof signature structure to improve portability and verification efficiency:
+
+```rust
+pub struct ProofSignature {
+	pub signer_id: String,        // service id (e.g. "mint-service")
+	pub algorithm: String,        // currently "falcon1024"
+	pub signature: Vec<u8>,       // detached signature over message_hash bytes
+	pub message_hash: String,     // 64‑char hex SHA256 of canonical payload
+	pub key_fingerprint: String,  // 64‑char hex SHA256(public_key)
+	pub public_key: Vec<u8>,      // raw public key bytes
+	pub timestamp: SystemTime,
+}
+```
+
+Canonical payload (before hashing):
+```
+cert_id || cert_merkle_root || proof_id || proof_merkle_root || cert_timestamp_nanos
+```
+`message_hash = SHA256(payload)` → signature created using selected algorithm.
+
+Environment variables:
+```
+MINT_ENABLE_CRYPTO=true
+MINT_SIGNATURE_ALGORITHM=falcon1024
+MINT_KEY_STORAGE_PATH=/data/mint/keys/falcon_key
+```
+
+Future algorithms (Dilithium, SPHINCS+) will plug in via the shared `common` crate without changing this external format.
+
+
 ---
 
 ## Quick Start

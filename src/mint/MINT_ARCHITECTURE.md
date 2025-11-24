@@ -794,6 +794,57 @@ func VerifyProof(leafHash string, proof []string, root string, leafIndex int) bo
 
 ---
 
+### Rust ProofEngine Rewrite (Falcon Signatures)
+
+The original Go mint service has an ongoing Rust rewrite introducing a unified `ProofEngine` and a common crypto abstraction (`common/src/crypto/mod.rs`). This modernization adds:
+
+- Runtime algorithm selection (`MINT_SIGNATURE_ALGORITHM=falcon1024`).
+- Optional persistent key storage (`MINT_KEY_STORAGE_PATH=/data/mint/keys/falcon_key`).
+- Hash–then–sign flow (`message_hash = SHA256(canonical_payload)`).
+- Public key fingerprinting (`key_fingerprint = SHA256(public_key)`).
+
+Updated Rust `ProofSignature` structure:
+```rust
+pub struct ProofSignature {
+    pub signer_id: String,        // "mint-service"
+    pub algorithm: String,        // "falcon1024"
+    pub signature: Vec<u8>,       // detached signature over message_hash bytes
+    pub message_hash: String,     // 64-char hex SHA256 of canonical payload
+    pub key_fingerprint: String,  // 64-char hex SHA256(public_key)
+    pub public_key: Vec<u8>,      // raw public key bytes
+    pub timestamp: SystemTime,
+}
+```
+
+Canonical payload (before hashing) combines certificate + proof identifiers and timing fields; downstream services recompute and verify:
+```text
+payload := cert_id || cert_merkle_root || proof_id || proof_merkle_root || cert_timestamp_nanos
+message_hash := SHA256(payload)
+valid := algo.verify(message_hash.bytes(), signature, public_key)
+```
+
+Environment variables (Rust):
+```text
+MINT_ENABLE_CRYPTO=true
+MINT_SIGNATURE_ALGORITHM=falcon1024
+MINT_KEY_STORAGE_PATH=/data/mint/keys/falcon_key
+```
+
+Falcon‑1024 integration notes:
+- Keypair persisted as `<base>.pub` and `<base>.sec` if path supplied.
+- Abstraction allows future Dilithium / SPHINCS+ support by extending `CryptoKind`.
+- Detached signature approach reduces payload surface and enables multi‑signer aggregation later.
+
+Planned enhancements:
+- Encrypt secret key file at rest.
+- Multi‑party signature sets (Mint + Refinery cooperative proofs).
+- Detached Falcon API usage when library exposes optimized interface.
+
+Source references:
+- `src/mint/src/engine/proof_engine.rs`
+- `src/common/src/crypto/mod.rs`
+
+
 ### Verification API
 
 **Port**: 8080 (unified with main Mint HTTP API)

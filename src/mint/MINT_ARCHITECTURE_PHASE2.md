@@ -666,6 +666,37 @@ Response: {"status": "healthy", "queue_depth": 1234, "units_published_total": 56
 
 ## 🔗 Related Documentation
 
+### Rust Rewrite Addendum (ProofEngine & Signatures)
+
+Phase 2/3 functionality is being ported to a Rust `ProofEngine` consolidating merkle assembly and cryptographic signing. New signature format (Falcon‑1024 initially) includes:
+
+```rust
+pub struct ProofSignature {
+    pub signer_id: String,
+    pub algorithm: String,       // e.g. "falcon1024"
+    pub signature: Vec<u8>,      // detached signature over message_hash
+    pub message_hash: String,    // hex SHA256 of canonical payload
+    pub key_fingerprint: String, // SHA256(public_key) for quick identity
+    pub public_key: Vec<u8>,
+    pub timestamp: SystemTime,
+}
+```
+
+Config (Rust):
+```text
+MINT_ENABLE_CRYPTO=true
+MINT_SIGNATURE_ALGORITHM=falcon1024
+MINT_KEY_STORAGE_PATH=/data/mint/keys/falcon_key
+```
+
+Verification steps (downstream):
+1. Recompute payload → SHA256 → compare with `message_hash`.
+2. Run `algo.verify(message_hash.bytes(), signature, public_key)`.
+3. Confirm stable `key_fingerprint` for key continuity.
+
+This addendum supersedes earlier SPHINCS+ only assumptions and enables future multi‑algorithm support by extending the `CryptoKind` enum in the shared `common` crate.
+
+
 - [`REFINERY_ARCHITECTURE.md`](../refinery/REFINERY_ARCHITECTURE.md): Phase2Ingot format
 - [`PROOF_CHAIN_ARCHITECTURE.md`](../../PROOF_CHAIN_ARCHITECTURE.md): Complete proof chain design
 - [`README.md` Appendix O](../../README.md): RoboTorq data structures
