@@ -30,7 +30,7 @@ impl NatsHandler {
     pub async fn start(&self) -> Result<()> {
         tracing::info!(nats_url = %self.cfg.nats_url, "NatsHandler connecting to NATS");
 
-        let client = Client::connect(self.cfg.nats_url.clone()).await?;
+        let client = async_nats::connect(self.cfg.nats_url.clone()).await?;
 
         let mut sub = client.subscribe("trust.contract.request").await?;
 
