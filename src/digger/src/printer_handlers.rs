@@ -27,17 +27,14 @@ use tokio_stream::StreamExt;
 
 /// Spawn asynchronous tasks for all printer-related NATS subjects.
 pub async fn start_printer_listeners(state: ApiState, nats_url: String) {
-    // Optional disable of initial printer handshake via env flag.
-    // Set DISABLE_PRINTER_HANDSHAKE=1 (or "true") to skip the registration listener
-    // and rely solely on a pre-populated `printer_registry.json` plus start/stop
-    // contract events. This supports the simplified MVP without live registration.
-    let disable_handshake = std::env::var("DISABLE_PRINTER_HANDSHAKE")
+    // Optional enable of initial printer handshake via env flag.
+    // Set ENABLE_PRINTER_HANDSHAKE=1 (or "true") to spawn the registration listener.
+    // Disabled by default to support pre-populated printer_registry.json.
+    let enable_handshake = std::env::var("ENABLE_PRINTER_HANDSHAKE")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
 
-    if disable_handshake {
-        info!("🛑 Printer registration handshake disabled (DISABLE_PRINTER_HANDSHAKE set). Expect pre-populated registry file.");
-    } else {
+    if enable_handshake {
         // Spawn listener for printer registrations with its own NATS connection
         let reg_state = state.clone();
         let reg_nats_url = nats_url.clone();
@@ -46,6 +43,8 @@ pub async fn start_printer_listeners(state: ApiState, nats_url: String) {
                 error!("Printer registration listener error: {}", e);
             }
         });
+    } else {
+        info!("🛑 Printer registration handshake disabled by default. Set ENABLE_PRINTER_HANDSHAKE=1 to enable.");
     }
 
     // Spawn listener for contract_started events with its own NATS connection
