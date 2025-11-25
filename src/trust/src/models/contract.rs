@@ -27,3 +27,63 @@ impl Contract {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    #[test]
+    fn test_validate_valid_contract() {
+        let contract = Contract {
+            contract_id: "genesis-001".to_string(),
+            version: 1,
+            title: "Genesis Contract".to_string(),
+            description: Some("Initial contract".to_string()),
+            robot_id: "3d-printer-jon".to_string(),
+            owner_name: Some("Jonathan Joseph Clark".to_string()),
+            owner_wallet_id: None,
+            robostake_required: false,
+            payload: serde_json::json!({"key": "value"}),
+            created_at: Utc::now(),
+            signature: None,
+        };
+        assert!(contract.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_empty_contract_id() {
+        let contract = Contract {
+            contract_id: "".to_string(),
+            version: 1,
+            title: "Genesis Contract".to_string(),
+            description: Some("Initial contract".to_string()),
+            robot_id: "3d-printer-jon".to_string(),
+            owner_name: Some("Jonathan Joseph Clark".to_string()),
+            owner_wallet_id: None,
+            robostake_required: false,
+            payload: serde_json::json!({"key": "value"}),
+            created_at: Utc::now(),
+            signature: None,
+        };
+        assert_eq!(contract.validate(), Err("contract_id empty".to_string()));
+    }
+
+    #[test]
+    fn test_validate_empty_robot_id() {
+        let contract = Contract {
+            contract_id: "genesis-001".to_string(),
+            version: 1,
+            title: "Genesis Contract".to_string(),
+            description: Some("Initial contract".to_string()),
+            robot_id: "".to_string(),
+            owner_name: Some("Jonathan Joseph Clark".to_string()),
+            owner_wallet_id: None,
+            robostake_required: false,
+            payload: serde_json::json!({"key": "value"}),
+            created_at: Utc::now(),
+            signature: None,
+        };
+        assert_eq!(contract.validate(), Err("robot_id empty".to_string()));
+    }
+}
