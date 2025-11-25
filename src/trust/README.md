@@ -1,10 +1,41 @@
-# rust-trust
+# rust-trust (MVP)
 
-Minimal scaffold for the Rust `trust` service (MVP).
+This Rust service loads a single Genesis contract (no robostake required) and serves it via NATS request/reply.
 
-This crate serves the Genesis contract and replies to contract requests from Diggers over NATS.
+Core subject: `trust.contract.request`
 
-See `RUST_TRUST_MVP_PLAN.md` and `RUST_TRUST_CONFIG.md` in the repo for design and configuration.
+Example request payload:
+```json
+{ "contract_id": "genesis-0001" }
+```
+Reply: full contract JSON or structured error:
+```json
+{ "error": { "code": "not_found", "message": "contract not found" } }
+```
+
+Readiness: `/ready` (503 until genesis loaded). Liveness: `/health` includes `ready` flag.
+Metrics: `/metrics` (Prometheus exposition).
+
+Run locally:
+```bash
+docker run -d --name nats -p 4222:4222 nats:latest
+export TRUST_NATS_URL="nats://127.0.0.1:4222"
+cargo run --manifest-path src/trust/Cargo.toml
+```
+
+Request (Rust example):
+```bash
+cargo run --manifest-path src/trust/Cargo.toml --example client --release
+```
+
+Request (nats-box):
+```bash
+docker run --rm -it natsio/nats-box nats req trust.contract.request '{"contract_id":"genesis-0001"}'
+```
+
+Configuration documented in `src/trust/CONFIG.md`.
+
+Below is legacy Go architecture retained for historical context.
 # Trust Service
 
 The Trust service is a decentralized contract orchestration system that evaluates opportunities, creates contracts, and executes them through the Digger network.

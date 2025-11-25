@@ -5,8 +5,7 @@ FROM rust:1.91-alpine AS build
 WORKDIR /app
 RUN apk add --no-cache musl-dev openssl-dev pkgconfig
 
-# Copy common + trust crates (context: repo root)
-COPY src/common ./src/common
+# Copy trust crate only (adjust if shared crates added later)
 COPY src/trust ./src/trust
 
 WORKDIR /app/src/trust
@@ -14,9 +13,12 @@ WORKDIR /app/src/trust
 RUN cargo build --release --bin rust-trust
 
 # Final runtime stage
-FROM gcr.io/distroless/cc-debian12:nonroot
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates curl
 WORKDIR /app
 COPY --from=build /app/src/trust/target/release/rust-trust ./rust-trust
-EXPOSE 8082
-USER nonroot
-ENTRYPOINT ["/app/rust-trust"]
+COPY src/trust/config ./config
+EXPOSE 8080 9092
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
+CMD ["./rust-trust"]
