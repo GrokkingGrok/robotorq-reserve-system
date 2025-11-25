@@ -1,0 +1,24 @@
+# Dockerfile.rust - Rust trust service (side-by-side Rust implementation)
+# Multi-stage build: compile in Rust image, run in distroless for minimal surface.
+
+FROM rust:1.91-alpine AS build
+WORKDIR /app
+RUN apk add --no-cache musl-dev openssl-dev pkgconfig
+
+# Copy trust crate only (adjust if shared crates added later)
+COPY src/trust ./src/trust
+
+WORKDIR /app/src/trust
+# Build release binary
+RUN cargo build --release --bin rust-trust
+
+# Final runtime stage
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates curl
+WORKDIR /app
+COPY --from=build /app/src/trust/target/release/rust-trust ./rust-trust
+COPY src/trust/config ./config
+EXPOSE 8080 9092
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
+CMD ["./rust-trust"]

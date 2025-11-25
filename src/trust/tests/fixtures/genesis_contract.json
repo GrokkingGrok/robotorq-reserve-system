@@ -1,0 +1,13 @@
+{
+  "contract_id": "genesis-0001",
+  "version": 1,
+  "title": "Genesis: 3D Printer Contract",
+  "description": "Initial genesis contract allowing 3D printer to act without robostake.",
+  "robot_id": "3d-printer-jon",
+  "owner_name": "Jonathan Joseph Clark",
+  "owner_wallet_id": null,
+  "robostake_required": false,
+  "payload": { "actions": ["print-object"], "parameters": {} },
+  "created_at": "2025-11-24T00:00:00Z",
+  "signature": null
+}

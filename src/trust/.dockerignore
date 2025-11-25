@@ -1,0 +1,31 @@
+# Exclude build artifacts
+target/
+**/target/
+
+# Exclude logs and temp files
+*.log
+logs/
+**/logs/
+
+# Exclude large dirs (adjust as needed)
+node_modules/
+.git/
+docs/
+images/
+Grafana/
+research/
+scripts/
+tests/
+.vscode/
+.github/
+
+# Exclude other services' code if not needed
+src/bidnet/
+src/digger/
+src/distodam/
+src/mint/
+src/printer/
+src/refinery/
+src/vault/
+src/wallet/
+# Keep only src/trust/ and any shared deps
