@@ -316,23 +316,6 @@ Contributions welcome (and needed)! Please see [`CONTRIBUTING.md`](./CONTRIBUTIN
 
 ---
 
-## Security
-
-For security concerns or vulnerability reports, see [`SECURITY.md`](./SECURITY.md).
-
-**Current Status**: Pre-release development on `release/v0-cleanup` branch. Not production-ready.
-
----
-
-## License
-
-Apache License 2.0 with Patent Pledge - see [`LICENSE`](./LICENSE) for details.
-
-**Patent Pledge**: All contributors irrevocably dedicate patent rights to the public domain and pledge not to assert patent claims against users or derivatives.
-
-
----
-
 ## Status
 
 The RoboTorq Reserve System has been designed and built up to release by the author alone.
@@ -353,10 +336,11 @@ This isn't a "flex": the author can't proceed too much further without expert he
 - Wallet receives UBD, but cannot spend
 - Vault MVP live (CertVault storing certificates, StakeVault tracking RoboStake balances, metrics + Grafana dashboard)
 - Rust Mint: Fully written and tested, ready for integration
+- Expansion from Vault MVP to full Vault (contract approval, persistent storage, demurrage workflows)
 
 **In Progress**:
+- Refinery Rust rewrite.
 - In-Flight mint ingot recovery backend integration
-- Expansion from Vault MVP to full Vault (contract approval, persistent storage, demurrage workflows)
 - Replacement of DistoDam by extended Vault logic
 - Mock-Printer to Real 3D Printer (aka robot)
 - Comprehensive documentation
@@ -393,3 +377,19 @@ Other parts of the repository — including many architecture deep-dive docs, an
 `1 RoboTorq = 1000 Tokentorq = 3.6 million JouleTorq`
 
 **Brief Vault Status**: MVP running (CertVault + StakeVault + metrics); next: approvals, persistence, demurrage integration.
+
+---
+
+## Security
+
+For security concerns or vulnerability reports, see [`SECURITY.md`](./SECURITY.md).
+
+**Current Status**: Pre-release development on `release/v0-cleanup` branch. Not production-ready.
+
+---
+
+## License
+
+Apache License 2.0 with Patent Pledge - see [`LICENSE`](./LICENSE) for details.
+
+**Patent Pledge**: All contributors irrevocably dedicate patent rights to the public domain and pledge not to assert patent claims against users or derivatives.
