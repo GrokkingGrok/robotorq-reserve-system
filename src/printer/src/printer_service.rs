@@ -2,14 +2,13 @@ use anyhow::{Context, Result};
 use async_nats::Client;
 use chrono::Utc;
 use futures_util::StreamExt;
-use pqcrypto_traits::sign::PublicKey;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-use crate::{Certificate, CertificateManager, Config, KlipperClient, MockKlipperClient};
+use crate::{Config, KlipperClient, MockKlipperClient};
 use crate::metrics::METRICS;
 use crate::mock_api::MockContractState;
 
@@ -17,7 +16,6 @@ pub struct PrinterService {
     config: Config,
     nats_client: Client,
     klipper_client: KlipperClient,
-    cert_manager: CertificateManager,
     is_printing: bool,
     print_start_time: Option<chrono::DateTime<Utc>>,
     current_job_id: Option<String>,
@@ -38,14 +36,10 @@ impl PrinterService {
         // Initialize Klipper client
         let klipper_client = KlipperClient::new(&config.klipper_url);
         
-        // Initialize certificate manager
-        let cert_manager = CertificateManager::new(&config.printer_id);
-        
         Ok(Self {
             config,
             nats_client,
             klipper_client,
-            cert_manager,
             is_printing: false,
             print_start_time: None,
             current_job_id: None,
@@ -69,25 +63,8 @@ impl PrinterService {
     }
     
     pub async fn initialize(&mut self) -> Result<()> {
-        // Try to load existing certificate
-        if self.cert_manager.load_certificate().is_ok() {
-            info!("✅ Loaded existing bonded certificate");
-            if let Some(cert) = self.cert_manager.certificate() {
-                info!("   Certificate Hash: {}", cert.certificate_hash);
-                info!("   Issued At: {}", cert.issued_at);
-                info!("   Certified Capacity: {}W", cert.rated_watts);
-                METRICS.certificate_valid.set(1.0);
-            }
-            
-            // TODO: Notify Digger we're online (re-register without requesting new cert)
-            info!("📡 Using existing certificate - skipping re-registration for now");
-        } else {
-            warn!("⚠️  No certificate found - requesting from Digger");
-            self.register_with_digger().await?;
-        }
-        
-        // Note: Contract listener will be started after mock state is set (in main.rs)
-        
+        // Simplified initialization for MVP (no certificate / signing)
+        info!("🔑 Skipping certificate registration (MVP without signing)");
         Ok(())
     }
     
@@ -96,10 +73,7 @@ impl PrinterService {
         self.start_contract_listener().await
     }
     
-    /// Manually trigger registration with Digger (call this explicitly, not automatic)
-    pub async fn register(&mut self) -> Result<()> {
-        self.register_with_digger().await
-    }
+    // Registration removed for MVP
     
     pub async fn run(&mut self) -> Result<()> {
         info!("🚀 Starting status reporting loop");
@@ -129,6 +103,9 @@ impl PrinterService {
             if let Err(e) = self.send_status().await {
                 error!("Error sending status: {}", e);
             }
+
+            // Update printing state gauge (0 = idle, 1 = printing)
+            METRICS.currently_printing.set(if self.is_printing { 1 } else { 0 });
             
             // Update uptime metric
             METRICS.uptime_seconds.inc();
@@ -246,60 +223,7 @@ impl PrinterService {
         Ok(())
     }
     
-    async fn register_with_digger(&mut self) -> Result<()> {
-        // Generate Falcon-1024 keypair for this printer
-        let (public_key, _secret_key) = pqcrypto_falcon::falcon1024::keypair();
-        let public_key_hex = hex::encode(public_key.as_bytes());
-        
-        let registration = json!({
-            "printer_id": self.config.printer_id,
-            "model": self.config.printer_model,
-            "manufacturer": "RoboTorq",
-            "serial_number": format!("{}-001", self.config.printer_id), // Mock serial
-            "rated_watts": self.config.rated_watts,
-            "public_key": public_key_hex,
-        });
-        
-        info!("📤 Requesting bonded certificate from Digger");
-        
-        // Properly encode as JSON bytes
-        let registration_bytes = serde_json::to_vec(&registration)?;
-        
-        self.nats_client
-            .publish("printer.register", registration_bytes.into())
-            .await?;
-        
-        // Subscribe to certificate response
-        let cert_topic = format!("printer.{}.certificate", self.config.printer_id);
-        let mut sub = self.nats_client.subscribe(cert_topic.clone()).await?;
-        
-        info!("📥 Waiting for certificate on topic: {}", cert_topic);
-        
-        // Wait for certificate (30 second timeout)
-        match tokio::time::timeout(Duration::from_secs(30), sub.next()).await {
-            Ok(Some(msg)) => {
-                let cert: Certificate = serde_json::from_slice(&msg.payload)?;
-                self.cert_manager.save_certificate(&cert)?;
-                
-                info!("✅ Received and saved bonded certificate");
-                info!("   Certificate Hash: {}", cert.certificate_hash);
-                info!("   Certified Capacity: {}W", cert.rated_watts);
-                
-                METRICS.certificate_valid.set(1.0);
-                
-                Ok(())
-            }
-            Ok(None) => {
-                error!("❌ Certificate stream closed unexpectedly");
-                anyhow::bail!("Certificate stream closed")
-            }
-            Err(_) => {
-                error!("❌ Timeout waiting for certificate (30s)");
-                error!("   Check that Digger service is running");
-                anyhow::bail!("Timeout waiting for certificate")
-            }
-        }
-    }
+    // Registration & certificate logic removed for MVP
     
     async fn report_completion(&self, duration_hours: f64, capacity_kwh: f64) -> Result<()> {
         let completion = json!({

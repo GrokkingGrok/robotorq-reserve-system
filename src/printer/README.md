@@ -15,7 +15,7 @@
 ## Overview
 
 The Printer Service is an edge agent that:
-- Registers with Digger to get a bonded certificate
+- Connects directly to Klipper/Moonraker (no certificate in MVP)
 - Monitors printer state (idle/printing) via Klipper/Moonraker
 - Listens for contract assignments via NATS
 - Publishes lifecycle events (contract_started, contract_completed)
@@ -114,34 +114,17 @@ nats_url: "nats://localhost:4222"
 klipper_url: "http://localhost:7125"
 ```
 
-### Certificate Setup
+### Certificate Setup (Removed in MVP)
 
-On first run, the printer will:
-1. Generate Falcon-1024 keypair (if needed)
-2. Request bonded certificate from Digger
-3. Save certificate to `./data/{printer_id}_certificate.json`
-
-Certificate includes:
-- Printer ID and model
-- Certified power rating (watts)
-- Mint signature (proof of bonding)
-- Validity period
+The initial MVP intentionally omits certificate generation and signing to reduce complexity.
+Future versions will restore a lightweight bonding + signature flow once physical validation
+and power measurement are integrated.
 
 ## NATS Event Flow
 
-### Registration
-
-1. Printer → `printer.register` → Digger
-   ```json
-   {
-     "printer_id": "test-printer-001",
-     "model": "MockPrinter",
-     "rated_watts": 250
-   }
-   ```
-
-2. Digger saves printer to registry (`printer_registry.json`)
-3. Digger returns bonded certificate
+### Registration (Removed in MVP)
+No network registration or bonding occurs. Printer simply publishes status and lifecycle
+events. Future implementation will add a registration handshake.
 
 ### Contract Assignment
 
@@ -257,17 +240,13 @@ printer_heartbeats_sent_total
 printer_prints_completed_total
 printer_capacity_kwh_total
 printer_uptime_seconds
-printer_certificate_valid (gauge: 0 or 1)
+(removed: printer_certificate_valid)
 ```
 
 ## Security
 
-### Certificate Validation
-
-- Certificate signed by Mint (SPHINCS+)
-- Includes printer public key
-- Verified on every heartbeat
-- Stored locally (not transmitted)
+### Certificate Validation (Deferred)
+Will be added after power-proof and bonding workflow are finalized.
 
 ### Attack Vectors
 
@@ -412,7 +391,7 @@ curl http://localhost:9091/metrics
 ### Completed ✅
 
 - [x] Basic status reporting
-- [x] Certificate management
+- [x] (Removed) Certificate management
 - [x] NATS event publishing (contract_started, contract_completed)
 - [x] Contract assignment listener
 - [x] Shared state between mock API and service

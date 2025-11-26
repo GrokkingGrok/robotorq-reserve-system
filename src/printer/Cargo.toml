@@ -16,14 +16,6 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# Crypto dependencies (shared with Digger)
-pqcrypto-falcon = "0.4.1"
-pqcrypto-traits = "0.3"
-sha2 = "0.10"
-hex = "0.4"
-
-# Prometheus metrics
 prometheus = { version = "0.14", features = ["process"] }
 lazy_static = "1.4"
 warp = { version = "0.4.2", features = ["server"] }

@@ -78,6 +78,63 @@ async fn main() {
     let storage_manager = JtuStorageManager::new(config.storage_path.clone())
         .expect("Failed to initialize storage manager");
 
+    // Load genesis contract from Trust config (auto-approve if no robostake required)
+    tracing::info!("📜 Loading genesis contract from Trust config...");
+    let genesis_path = std::path::Path::new(
+        "c:/Users/Jon/Documents/Project-Asimov/robotorq-reserve-system/src/trust/config/genesis_contract.json",
+    );
+    if genesis_path.exists() {
+        match std::fs::read_to_string(genesis_path) {
+            Ok(text) => {
+                match serde_json::from_str::<serde_json::Value>(&text) {
+                    Ok(gen) => {
+                        let contract_id = gen
+                            .get("contract_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("genesis-unknown")
+                            .to_string();
+                        let robostake_required = gen
+                            .get("robostake_required")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true);
+
+                        // Minimal defaults for economics and machine specs
+                        let torq = 0.0f64;
+                        let robo_stake = 0.0f64;
+                        let milestones_total = 1i64;
+                        let power_watts = 2000.0f64; // default until registry provides exact value
+
+                        {
+                            let mut mgr = state.contract_manager.lock().unwrap();
+                            if let Err(e) = mgr.create_contract(
+                                contract_id.clone(),
+                                torq,
+                                robo_stake,
+                                milestones_total,
+                                power_watts,
+                            ) {
+                                tracing::warn!("Genesis contract exists or failed to create: {}", e);
+                            } else {
+                                tracing::info!("✅ Genesis contract created: {}", contract_id);
+                                if !robostake_required {
+                                    if let Some(c) = mgr.get_mut(&contract_id) {
+                                        // Genesis: permit execution without funding; mark StakeApproved directly
+                                        c.approval_status = contract_state::ApprovalStatus::StakeApproved;
+                                        tracing::info!("🔓 Genesis contract approved without funding (stake not required)");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => tracing::error!("Failed to parse genesis JSON: {}", e),
+                }
+            }
+            Err(e) => tracing::error!("Failed to read genesis file: {}", e),
+        }
+    } else {
+        tracing::warn!("Genesis contract file not found at {}", genesis_path.display());
+    }
+
     // Generate Falcon-1024 keypair for signing ore batches
     tracing::info!("🔐 Generating Falcon-1024 keypair...");
     let keypair = DiggerKeypair::generate();

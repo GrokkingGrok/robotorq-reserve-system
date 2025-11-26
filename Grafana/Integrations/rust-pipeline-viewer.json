@@ -1,0 +1,72 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Rust Pipeline Viewer - Digger & Printer",
+    "tags": ["robotorq", "digger", "printer"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Digger Metrics",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "digger_contracts_loaded_total",
+            "legendFormat": "Contracts Loaded"
+          },
+          {
+            "expr": "digger_ore_sent_total",
+            "legendFormat": "Ore Sent"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "red", "value": 80 }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "Printer Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "printer_currently_printing",
+            "legendFormat": "Currently Printing"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "options": { "0": { "text": "Not Printing", "color": "red" }, "1": { "text": "Printing", "color": "green" } }, "type": "value" }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "green", "value": 1 }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+      }
+    ],
+    "time": { "from": "now-1h", "to": "now" },
+    "timepicker": {},
+    "templating": { "list": [] },
+    "annotations": { "list": [] },
+    "refresh": "5s",
+    "schemaVersion": 27,
+    "version": 0,
+    "links": []
+  }
+}

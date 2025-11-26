@@ -1,5 +1,5 @@
 use lazy_static::lazy_static;
-use prometheus::{Counter, Gauge, IntCounter, IntGauge, Opts, Registry};
+use prometheus::{Counter, IntCounter, IntGauge, Opts, Registry};
 use std::net::SocketAddr;
 use warp::Filter;
 
@@ -8,7 +8,7 @@ pub struct Metrics {
     pub prints_completed_total: IntCounter,
     pub capacity_kwh_total: Counter,
     pub uptime_seconds: IntGauge,
-    pub certificate_valid: Gauge,
+    pub currently_printing: IntGauge,
 }
 
 lazy_static! {
@@ -38,17 +38,17 @@ impl Metrics {
         ).unwrap();
         REGISTRY.register(Box::new(uptime_seconds.clone())).unwrap();
         
-        let certificate_valid = Gauge::with_opts(
-            Opts::new("printer_certificate_valid", "Whether printer has valid certificate (0 or 1)")
+        let currently_printing = IntGauge::with_opts(
+            Opts::new("printer_currently_printing", "1 if currently printing, 0 otherwise")
         ).unwrap();
-        REGISTRY.register(Box::new(certificate_valid.clone())).unwrap();
+        REGISTRY.register(Box::new(currently_printing.clone())).unwrap();
         
         Self {
             heartbeats_sent_total,
             prints_completed_total,
             capacity_kwh_total,
             uptime_seconds,
-            certificate_valid,
+            currently_printing,
         }
     }
 }
