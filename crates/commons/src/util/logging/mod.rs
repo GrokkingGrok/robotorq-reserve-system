@@ -6,7 +6,7 @@ use tracing_appender::rolling;
 /// - `json`: when true, logs are emitted as JSON (good for services).
 /// - `default_level`: e.g., "info"; can be overridden by `RUST_LOG`.
 /// - `rolling_dir`: optional directory for daily rolling files; when `None`, only stdout.
-pub fn init_logging(json: bool, default_level: &str, rolling_dir: Option<&str>) {
+pub fn init_logging(json: bool, default_level: &str, rolling_dir: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new(default_level));
 
@@ -38,21 +38,23 @@ pub fn init_logging(json: bool, default_level: &str, rolling_dir: Option<&str>) 
     };
 
     if let Some(file) = file_layer {
-        let _ = tracing_subscriber::registry()
+        tracing_subscriber::registry()
             .with(env_filter)
             .with(stdout_layer)
             .with(file)
-            .try_init();
+            .try_init()
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     } else {
-        let _ = tracing_subscriber::registry()
+        tracing_subscriber::registry()
             .with(env_filter)
             .with(stdout_layer)
-            .try_init();
+            .try_init()
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     }
 }
 
 /// Initialize a human-friendly compact logger (ANSI, no JSON), stdout only.
-pub fn init_logging_pretty(default_level: &str) {
+pub fn init_logging_pretty(default_level: &str) -> Result<(), Box<dyn std::error::Error>> {
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new(default_level));
     let stdout_layer = fmt::layer()
@@ -60,10 +62,11 @@ pub fn init_logging_pretty(default_level: &str) {
         .with_target(true)
         .with_level(true)
         .compact();
-    let _ = tracing_subscriber::registry()
+    tracing_subscriber::registry()
         .with(env_filter)
         .with(stdout_layer)
-        .try_init();
+        .try_init()
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
 
 #[cfg(test)]
@@ -73,14 +76,14 @@ mod tests {
 
     #[test]
     fn init_logging_compiles_and_runs() {
-        init_logging(false, "info", None);
+        let _ = init_logging(false, "info", None); // Ignore error if already set
         info!(component = "commons.logging", "logging initialized");
         // No assert; test ensures no panic and basic path compiles.
     }
 
     #[test]
     fn init_logging_pretty_compiles_and_runs() {
-        init_logging_pretty("debug");
+        let _ = init_logging_pretty("debug"); // Ignore error if already set
         info!(component = "commons.logging", "pretty logging initialized");
     }
 }

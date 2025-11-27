@@ -1,5 +1,10 @@
+pub mod printer;
+
 use serde::{Serialize, Deserialize};
-use crate::{RobotId, InvariantError, RobotError, ContractId};
+use crate::types::ids::{RobotId, ContractId};
+use crate::util::error::InvariantError;
+use crate::util::error::robot_error::RobotError;
+use crate::util::schema::ROBOT_SCHEMA_VERSION;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Robot {
@@ -9,6 +14,7 @@ pub struct Robot {
     pub joule_throughput_rating: u32,  // rated joules per second (watts)
     pub is_working: bool,              // operational status
     pub active_contract: ContractId,   // current active contract
+    pub schema_version: u32,
 }
 
 impl Robot {
@@ -25,14 +31,14 @@ impl Robot {
         if token_throughput_rating == 0 { return Err(InvariantError::from(RobotError::ZeroTokenThroughput)); }
         if joule_throughput_rating == 0 { return Err(InvariantError::from(RobotError::ZeroJouleThroughput)); }
 
-        Ok(Self { id, name, token_throughput_rating, joule_throughput_rating, is_working, active_contract })
+        Ok(Self { id, name, token_throughput_rating, joule_throughput_rating, is_working, active_contract, schema_version: ROBOT_SCHEMA_VERSION })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::RobotId;
+    use crate::types::ids::RobotId;
 
     #[test]
     fn robot_new_ok() {

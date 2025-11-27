@@ -90,6 +90,20 @@ Formula relationships:
 
 ---
 
+## Schema Versioning
+
+Commons types that are serialized and hashed carry an explicit `schema_version` field or are covered by central version constants in `util/schema`.
+
+- Central registry: see `util/schema/schema.rs` for per-type constants and helpers (`current_schema_version`, `all_schema_versions`).
+- Included types: `Token`, `Robot`, `TripleTorq`, `UnmappedOreBatch`, runtime `RoboTorqConfig`, and all ID newtypes (constants only).
+- Policy:
+	- Increment on backward-incompatible changes to a type’s serialized shape.
+	- Minor additions that are backward-compatible may leave the version unchanged; bump if consumers require it.
+	- Migration/validation helpers can query `current_schema_version(type_name)` to compare stored vs current versions.
+- Metrics: the `MetricsHandler` provides `register_schema_version_gauges(prefix)` to export a gauge per type (e.g., `commons_schema_version_token`).
+
+---
+
 ## Contact
 
 - **Repository**: https://github.com/GrokkingGrok/robotorq-reserve-system

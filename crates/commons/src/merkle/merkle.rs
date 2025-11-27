@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::hashing::hash_bytes;
+use crate::util::hashing::hash_bytes;
 
 /// Abstraction for items that can be used as Merkle leaves.
 pub trait MerkleHashable {
@@ -144,7 +144,7 @@ impl<H: MerkleHash + Send + 'static> MerkleBuilder<H> {
 	}
 }
 
-fn build_levels<H: MerkleHash>(mut leaves: Vec<[u8; 32]>, hasher: H) -> MerkleTree {
+fn build_levels<H: MerkleHash>(leaves: Vec<[u8; 32]>, hasher: H) -> MerkleTree {
 	if leaves.is_empty() { return MerkleTree { leaves, levels: vec![vec![]] }; }
 	let mut levels: Vec<Vec<[u8; 32]>> = Vec::new();
 	levels.push(leaves.clone());

@@ -10,6 +10,7 @@ path = "src/lib.rs"
 [dependencies]
 commons = { path = "../commons", default-features = false }
 tracing = "0.1.41"
+tiny_http = "0.12"
  
 [features]
 default = []
