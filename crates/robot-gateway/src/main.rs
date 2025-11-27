@@ -23,7 +23,9 @@ fn main() {
 
     // Build gateway with metrics and HTTP config
     let gw_metrics = RobotGatewayMetrics::new("robot_gateway");
-    let cfg = HttpServerConfig::local_defaults(robot_gateway_port());
+    let port = robot_gateway_port();
+    info!(component = "robot-gateway", %port, "effective robot gateway port");
+    let cfg = HttpServerConfig::local_defaults(port);
     let addr = format!("{}:{}", cfg.service.address, cfg.service.port);
     let gw = RobotGateway::single(RobotId::new())
         .with_metrics(gw_metrics)

@@ -8,11 +8,11 @@ fn parse_port(var: &str, default: u16) -> u16 {
 		.unwrap_or(default)
 }
 
-/// Metrics HTTP port (local dev default 8075).
-pub fn metrics_port() -> u16 { parse_port("METRICS_PORT", 8075) }
-
-/// Grafana HTTP port (local dev default 8085).
-pub fn grafana_port() -> u16 { parse_port("GRAFANA_PORT", 8085) }
+/// Metrics HTTP port (local dev default 8005).
+pub fn metrics_port() -> u16 { parse_port("METRICS_PORT", 8005) }
+    
+/// Grafana HTTP port (local dev default 8015).
+pub fn grafana_port() -> u16 { parse_port("GRAFANA_PORT", 8015) }
 
 /// HTTP port for the `robot-gateway` service (local dev default 9000).
 pub fn robot_gateway_port() -> u16 { parse_port("ROBOT_GATEWAY_PORT", 9000) }
