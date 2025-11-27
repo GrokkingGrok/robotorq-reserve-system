@@ -1,0 +1,47 @@
+use prometheus::{Counter, Gauge};
+use crate::util::metrics::MetricsHandler;
+use std::sync::Arc;
+use crate::services::http::{HttpServerConfig, start_basic_http_server_with_config};
+use crate::util::error::InvariantError;
+
+pub struct RobotGatewayMetrics {
+    handler: Arc<MetricsHandler>,
+    registered_robots: Gauge,
+    batches_captured_total: Counter,
+    batches_rejected_total: Counter,
+}
+
+impl RobotGatewayMetrics {
+    /// Create a new metrics set for the robot gateway.
+    /// Internally allocates a fresh `MetricsHandler` and registers schema gauges plus
+    /// gateway-specific counters/gauges.
+    pub fn new(prefix: &str) -> Self {
+        let handler = MetricsHandler::new();
+        handler.register_schema_version_gauges("commons");
+        let registered_robots = handler.register_gauge(
+            &format!("{}_registered_robots", prefix),
+            "number of robots registered in gateway",
+        );
+        let batches_captured_total = handler.register_counter(
+            &format!("{}_batches_captured_total", prefix),
+            "total unmapped ore batches successfully captured",
+        );
+        let batches_rejected_total = handler.register_counter(
+            &format!("{}_batches_rejected_total", prefix),
+            "total batch capture attempts rejected (e.g., unknown robot)",
+        );
+        Self { handler, registered_robots, batches_captured_total, batches_rejected_total }
+    }
+
+    pub fn set_registered(&self, n: usize) { self.registered_robots.set(n as f64); }
+    pub fn inc_captured(&self) { self.batches_captured_total.inc(); }
+    pub fn inc_rejected(&self) { self.batches_rejected_total.inc(); }
+
+    /// Getter returning a cloned Arc to the underlying handler for server/export usage.
+    pub fn get_handler(&self) -> Arc<MetricsHandler> { self.handler.clone() }
+
+    /// Start an HTTP server exposing health & metrics using internal handler.
+    pub fn start_http_server(&self, cfg: HttpServerConfig) -> Result<std::thread::JoinHandle<()>, InvariantError> {
+        start_basic_http_server_with_config(self.handler.clone(), cfg)
+    }
+}
