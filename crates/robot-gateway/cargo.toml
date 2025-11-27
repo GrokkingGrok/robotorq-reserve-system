@@ -11,6 +11,7 @@ path = "src/lib.rs"
 commons = { path = "../commons", default-features = false }
 tracing = "0.1.41"
 tiny_http = "0.12"
+dotenvy = "0.15"
  
 [features]
 default = []

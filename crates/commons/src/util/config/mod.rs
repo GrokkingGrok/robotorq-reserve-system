@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION;
 use crate::util::config::orchestration::Orchestration;
 use crate::util::config::simulation::Simulation;
+use dotenvy::from_filename;
 
 
 
@@ -32,4 +33,14 @@ impl RoboTorqConfig {
             toml::from_str(&content).map_err(|e| e.to_string())
         }
     }
+}
+
+/// Load environment variables from a specific file if provided.
+/// Set `ROBOTORQ_ENV_FILE` to a path (absolute or relative) to enable.
+/// Returns Ok(()) even if the variable is unset or file missing; logs are caller's responsibility.
+pub fn load_env_from_configurable_file() -> Result<(), String> {
+    if let Ok(path) = std::env::var("ROBOTORQ_ENV_FILE") {
+        from_filename(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }

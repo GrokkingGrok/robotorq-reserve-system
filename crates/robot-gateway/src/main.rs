@@ -7,8 +7,11 @@ use commons::util::config::port_mapping::robot_gateway_port;
 use commons::types::ids::RobotId;
 // HTTP types are configured via HttpServerConfig; no direct imports needed here
 use tracing::{info, error};
+use commons::util::config::load_env_from_configurable_file;
 
 fn main() {
+    // Optionally load environment from a configurable file path via ROBOTORQ_ENV_FILE.
+    let _ = load_env_from_configurable_file();
     // Initialize human-friendly colored logs for local dev.
     if let Err(e) = init_logging_pretty("info") {
         let err: InvariantError = LoggingError::from(e).into();
