@@ -4,39 +4,9 @@ global:
 
 scrape_configs:
   # ─── Scrape Mint ────────────────────────────────
-  - job_name: 'mint'
+  - job_name: 'robot'
     static_configs:
-      - targets: ['mint:9090']
-    metrics_path: /metrics
-
-  # ─── Scrape Refinery ────────────────────────────
-  - job_name: 'refinery'
-    static_configs:
-      - targets: ['refinery:8080']
-    metrics_path: /metrics
-
-  # ─── Scrape DistoDam ────────────────────────────
-  - job_name: 'distodam'
-    static_configs:
-      - targets: ['distodam:8082']
-    metrics_path: /metrics
-
-  # ─── Scrape TrustService ────────────────────────
-  - job_name: 'trust'
-    static_configs:
-      - targets: ['trust:8080']
-    metrics_path: /metrics
-
-  # ─── Scrape Digger ──────────────────────────────
-  - job_name: 'digger'
-    static_configs:
-      - targets: ['digger:3030']
-    metrics_path: /metrics
-
-  # ─── Scrape Wallet ──────────────────────────────
-  - job_name: 'wallet'
-    static_configs:
-      - targets: ['wallet:8080']
+      - targets: ['robot:9090']
     metrics_path: /metrics
 
   # ─── Scrape Prometheus itself ───────────────────

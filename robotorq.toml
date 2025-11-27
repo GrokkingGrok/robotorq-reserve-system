@@ -1,0 +1,25 @@
+[orchestration]
+mode = "simulation"
+nats_url = "nats://localhost:4222"
+prometheus_bind = "0.0.0.0:9091"
+
+[simulation]
+enabled = true
+speedup = 1000.0
+energy_variance = 0.15
+failure_rate = 0.05
+network_latency_ms = 0
+random_seed = 42
+contract_profile = "uniform"
+
+[robot]
+robot_id = "auto"
+klipper_url = "http://printer.local:7125"
+moonraker_url = "http://printer.local:7125"
+power_sensor = "ina219"
+
+[refinery]
+ingot_size = 3600
+
+[mint]
+certificate_ingots = 1000

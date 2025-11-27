@@ -1,0 +1,16 @@
+[package]
+name = "robot-gateway"
+version = "0.0.1"
+edition = "2024"
+
+[lib]
+name = "robot_gateway"
+path = "src/lib.rs"
+
+[dependencies]
+commons = { path = "../commons", default-features = false }
+tracing = "0.1.41"
+ 
+[features]
+default = []
+sim = ["commons/sim"]

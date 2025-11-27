@@ -1,0 +1,33 @@
+[package]
+name = "commons"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+blake3.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+time.workspace = true
+toml = "0.9.8"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["fmt", "env-filter", "json"] }
+tracing-appender = "0.2.3"
+prometheus = "0.13.4"
+
+[features]
+default = ["async-merkle"]
+sim = ["dep:robotorq-sim-gate"]
+async-merkle = ["dep:tokio"]
+
+[dependencies.robotorq-sim-gate]
+version = "0.0.1"
+optional = true
+package = "robotorq-sim-gate"
+
+[dependencies.tokio]
+version = "1.48.0"
+optional = true
+features = ["rt", "rt-multi-thread", "macros"]
+
