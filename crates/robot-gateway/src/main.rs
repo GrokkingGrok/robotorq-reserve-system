@@ -3,6 +3,7 @@ use commons::util::error::{InvariantError, logging_error::LoggingError};
 use commons::services::robot_gateway::metrics::RobotGatewayMetrics;
 use commons::services::robot_gateway::RobotGateway;
 use commons::services::http::HttpServerConfig;
+use commons::util::config::port_mapping::ROBOT_GATEWAY_PORT;
 use commons::types::ids::RobotId;
 // HTTP types are configured via HttpServerConfig; no direct imports needed here
 use tracing::{info, error};
@@ -17,17 +18,18 @@ fn main() {
 
     info!(component = "robot-gateway", "gateway starting up");
 
-    // Metrics setup (remain borrowed while starting HTTP server)
+    // Build gateway with metrics and HTTP config
     let gw_metrics = RobotGatewayMetrics::new("robot_gateway");
-
-    let cfg = HttpServerConfig::local_defaults(9090);
+    let cfg = HttpServerConfig::local_defaults(ROBOT_GATEWAY_PORT);
     let addr = format!("{}:{}", cfg.service.address, cfg.service.port);
+    let gw = RobotGateway::single(RobotId::new())
+        .with_metrics(gw_metrics)
+        .with_http_config(cfg);
+
     info!(component = "robot-gateway", %addr, "starting http server");
-    match gw_metrics.start_http_server(cfg) {
+    match gw.start_http_server() {
         Ok(handle) => {
             info!(component = "robot-gateway", %addr, "http server ready");
-            // Move metrics into gateway after server start for encapsulation
-            let _gw = RobotGateway::single(RobotId::new()).with_metrics(gw_metrics);
             let _ = handle.join();
         }
         Err(err) => {
