@@ -1,12 +1,11 @@
 pub mod orchestration;
 pub mod mode;
 pub mod simulation;
-pub mod port_mapping;
+pub mod parameters;
 use serde::{Deserialize, Serialize};
 use crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION;
 use crate::util::config::orchestration::Orchestration;
 use crate::util::config::simulation::Simulation;
-use dotenvy::from_path;
 use tracing::{info, warn};
 
 
@@ -34,45 +33,4 @@ impl RoboTorqConfig {
             toml::from_str(&content).map_err(|e| e.to_string())
         }
     }
-}
-
-/// Load environment variables from a specific file if provided.
-/// Set `ROBOTORQ_ENV_FILE` to a path (absolute or relative) to enable.
-/// Returns Ok(()) even if the variable is unset or file missing; logs are caller's responsibility.
-pub fn load_env_from_configurable_file() -> Result<(), String> {
-    if let Ok(raw) = std::env::var("ROBOTORQ_ENV_FILE") {
-        let trimmed = raw.trim().trim_matches('"').trim_matches('\'');
-        let mut p = std::path::PathBuf::from(trimmed);
-        if p.is_relative() {
-            if let Ok(cwd) = std::env::current_dir() { p = cwd.join(p); }
-        }
-        from_path(&p).map_err(|e| format!("failed to load env from {}: {}", p.display(), e))?;
-        info!(component = "commons.config", path = %p.display(), "loaded env from ROBOTORQ_ENV_FILE");
-        return Ok(());
-    }
-
-    // Fallbacks: try common filenames relative to current working directory
-    if let Ok(cwd) = std::env::current_dir() {
-        let candidates = [
-            ".env",
-            "workspace.env",
-            "crates/commons/src/util/config/.env",
-        ];
-        for rel in candidates {
-            let p = cwd.join(rel);
-            if p.exists() {
-                match from_path(&p) {
-                    Ok(_) => {
-                        info!(component = "commons.config", path = %p.display(), "loaded env from fallback file");
-                        return Ok(());
-                    }
-                    Err(e) => {
-                        warn!(component = "commons.config", path = %p.display(), error = %e, "failed loading fallback env file");
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
 }

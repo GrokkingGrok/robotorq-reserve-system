@@ -41,6 +41,7 @@ pub fn start_basic_http_server(
 
     let health_path = health.0.clone();
     let metrics_path = metrics.0.clone();
+    let shutdown_path = String::from("/shutdown");
 
     let handle = thread::spawn(move || {
         for request in server.incoming_requests() {
@@ -50,6 +51,9 @@ pub fn start_basic_http_server(
             } else if url == metrics_path {
                 let body = handler.export_text();
                 let _ = request.respond(Response::from_string(body).with_status_code(200));
+            } else if url == shutdown_path {
+                let _ = request.respond(Response::from_string("bye").with_status_code(200));
+                break;
             } else {
                 let _ = request.respond(Response::from_string("not found").with_status_code(404));
             }
@@ -88,3 +92,18 @@ pub fn start_basic_http_server_with_config(
 ) -> Result<JoinHandle<()>, InvariantError> {
     start_basic_http_server(handler, cfg.service, cfg.health, cfg.metrics)
 }
+
+/// Gracefully request shutdown by calling the internal `/shutdown` endpoint.
+pub fn request_graceful_shutdown(service: &HttpService) -> Result<(), InvariantError> {
+    use std::io::Write;
+    use std::net::TcpStream;
+    let addr = format!("{}:{}", service.address, service.port);
+    let mut stream = TcpStream::connect(&addr)
+        .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
+    let req = format!("GET /shutdown HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", addr);
+    stream.write_all(req.as_bytes())
+        .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
+    Ok(())
+}
+
+
