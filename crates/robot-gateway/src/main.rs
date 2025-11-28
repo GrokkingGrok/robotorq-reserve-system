@@ -4,7 +4,7 @@ use commons::services::robot_gateway::metrics::RobotGatewayMetrics;
 use commons::services::robot_gateway::RobotGateway;
 use commons::services::http::{HttpServerConfig, request_graceful_shutdown};
 use ctrlc;
-use commons::util::config::parameters::load_ports_config_from_default;
+use commons::util::config::ports::load_ports_config_from_default;
 use commons::types::ids::RobotId;
 use tracing::{info, error};
 
@@ -47,6 +47,17 @@ fn main() {
             let _ = request_graceful_shutdown(&service);
         }).expect("failed to set Ctrl+C handler");
 
+
+        
+
+
         // Block until server thread exits
         let _ = handle.join();
+}
+
+pub fn sim_wait_test(seconds: u64, speedup: f64) {
+    use std::time::Duration;
+    use std::thread::sleep;
+    let sp = if speedup <= 0.0 { 1.0 } else { speedup };
+    sleep(Duration::from_secs_f64((seconds as f64) / sp));
 }
