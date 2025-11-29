@@ -19,13 +19,7 @@ tiny_http = "0.12"
 
 [features]
 default = ["async-merkle"]
-sim = ["dep:robotorq-sim-gate"]
 async-merkle = ["dep:tokio"]
-
-[dependencies.robotorq-sim-gate]
-version = "0.0.1"
-optional = true
-package = "robotorq-sim-gate"
 
 [dependencies.tokio]
 version = "1.48.0"

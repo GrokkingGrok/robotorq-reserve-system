@@ -143,17 +143,18 @@ impl MetricsHandler {
     /// Export current metrics in Prometheus text format.
     ///
     /// Example usage:
-    /// ```rust,ignore
+    /// ```
     /// use commons::util::metrics::MetricsHandler;
-    /// use commons::robot_gateway_metrics::RobotGatewayMetrics;
-    /// use commons::{RobotId};
+    /// use commons::services::robot_gateway::metrics::RobotGatewayMetrics;
+    /// use commons::services::robot_gateway::RobotGateway;
+    /// use commons::types::ids::RobotId;
     ///
     /// let handler = MetricsHandler::new();
     /// // Optional: expose schema version gauges for observability
     /// handler.register_schema_version_gauges("commons");
     /// // Service-specific metrics (e.g., RobotGateway)
-    /// let gw_metrics = RobotGatewayMetrics::new(&handler, "robot_gateway");
-    /// let gw = commons::robot_gateway::RobotGateway::single(RobotId::new()).with_metrics(gw_metrics);
+    /// let gw_metrics = RobotGatewayMetrics::new("robot_gateway");
+    /// let gw = RobotGateway::single(RobotId::new()).with_metrics(gw_metrics);
     /// // ... perform operations that update metrics ...
     /// let text = handler.export_text();
     /// // Serve `text` via HTTP endpoint or write to logs

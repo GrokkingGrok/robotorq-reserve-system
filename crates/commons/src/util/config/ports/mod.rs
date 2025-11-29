@@ -1,7 +1,7 @@
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
 use tracing::{info, warn};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PortsConfig {
     #[serde(rename = "ROBOT_GATEWAY_PORT", default = "default_robot_gateway_port")] 
     pub robot_gateway_port: u16,

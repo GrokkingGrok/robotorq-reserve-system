@@ -13,7 +13,3 @@ tracing = "0.1.41"
 tiny_http = "0.12"
 dotenvy = "0.15"
 ctrlc = "3.4"
- 
-[features]
-default = []
-sim = ["commons/sim"]

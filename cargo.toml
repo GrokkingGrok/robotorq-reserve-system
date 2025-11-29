@@ -19,6 +19,3 @@ thiserror = "2.0.17"
 time = { version = "0.3", features = ["macros", "serde"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 
-[patch.crates-io]
-robotorq-sim-gate = { path = "crates/sim-gate" }
-

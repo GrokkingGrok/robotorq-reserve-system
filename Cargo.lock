@@ -97,7 +97,6 @@ version = "0.0.1"
 dependencies = [
  "blake3",
  "prometheus",
- "robotorq-sim-gate",
  "serde",
  "serde_json",
  "thiserror 2.0.17",
@@ -459,10 +458,6 @@ dependencies = [
  "tiny_http",
  "tracing",
 ]
-
-[[package]]
-name = "robotorq-sim-gate"
-version = "0.0.1"
 
 [[package]]
 name = "rustversion"

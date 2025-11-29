@@ -1,11 +1,13 @@
-pub mod orchestration;
 pub mod mode;
 pub mod simulation;
-pub mod parameters;
+pub mod ports;
+// Re-export common config types for ergonomic imports
+pub use mode::Mode;
+pub use simulation::Simulation;
+pub use ports::PortsConfig;
 use serde::{Deserialize, Serialize};
 use crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION;
-use crate::util::config::orchestration::Orchestration;
-use crate::util::config::simulation::Simulation;
+
 use tracing::{info, warn};
 
 
@@ -14,12 +16,9 @@ use tracing::{info, warn};
 pub struct RoboTorqConfig {
     #[serde(default = "default_robotorq_config_schema_version")]
     pub schema_version: u32,
-    pub orchestration: Orchestration,
+    pub mode: Mode,
     pub simulation: Simulation,
-    // Future optional components
-    // pub robot: Option<RobotConfig>,
-    // pub refinery: Option<RefineryConfig>,
-    // pub mint: Option<MintConfig>,
+    pub ports: ports::PortsConfig,
 }
 
 fn default_robotorq_config_schema_version() -> u32 { ROBOTORQ_CONFIG_SCHEMA_VERSION }

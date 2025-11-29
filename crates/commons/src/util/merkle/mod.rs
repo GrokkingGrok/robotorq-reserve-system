@@ -17,9 +17,9 @@ pub trait MerkleHash {
 
 /// Default Blake3-based hasher used across the system.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Blake3MerkleHash;
+pub struct MerkleHashBuilder;
 
-impl MerkleHash for Blake3MerkleHash {
+impl MerkleHash for MerkleHashBuilder {
 	fn hash_leaf(&self, leaf_bytes: &[u8]) -> [u8; 32] {
 		hash_bytes(leaf_bytes)
 	}

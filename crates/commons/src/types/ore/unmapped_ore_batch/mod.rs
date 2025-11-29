@@ -3,9 +3,9 @@ use crate::types::ids::{RobotId, UnmappedOreBatchId};
 use crate::util::error::InvariantError;
 use crate::util::error::batch_error::BatchError;
 use crate::util::hashing::hash_struct;
-use crate::util::schema::schema::UNMAPPED_ORE_BATCH_SCHEMA_VERSION;
-use crate::util::timekeeping::timekeeping::now;
-use crate::types::token::Token;
+use crate::util::schema::UNMAPPED_ORE_BATCH_SCHEMA_VERSION;
+use crate::util::timekeeping::now;
+use crate::types::Token;
 
 // Unmapped ore batch: robot output of tokens with per-token joule counts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
