@@ -1,163 +1,50 @@
-//! HTTP utilities to expose `RoboTorqService` implementations over Axum.
+//! Axum HTTP utilities for exposing `RoboTorqService` implementations.
 //!
-//! Provides `HttpServer` and helpers to serve standardized `/health` and
-//! `/metrics` endpoints for any service implementing `RoboTorqService`.
+//! Handlers and lifecycle helpers live in focused submodules: `healthz`,
+//! `readyz`, `metrics`, `initialization`, and `shutdown`. Prefer those over
+//! adding logic here.
 #![allow(async_fn_in_trait)]
 use std::sync::Arc;
 use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
     routing::get,
     Router,
 };
 use tower_http::cors::CorsLayer;
 use tokio::net::TcpListener;
+use std::sync::atomic::{AtomicBool, Ordering};
 use crate::util::error::{InvariantError, logging_error::LoggingError};
-use crate::util::metrics::MetricsHandler;
 use crate::util::config::RoboTorqConfig;
 
-/// Core trait for any service that can be exposed via HTTP endpoints.
-/// Services implementing this trait can provide health checks and metrics.
-///
-/// This trait enables services to be automatically exposed via HTTP endpoints
-/// without coupling the service logic to HTTP infrastructure. The HTTP server
-/// will automatically route `/health` and `/metrics` requests to the appropriate
-/// trait methods.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use commons::services::http::RoboTorqService;
-/// use commons::util::error::InvariantError;
-/// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
-/// use commons::types::ids::RobotId;
-/// use std::sync::Arc;
-///
-/// // Before: Create a service without HTTP exposure
-/// let metrics = RobotGatewayMetrics::new("gateway");
-/// let gateway = Arc::new(RobotGateway::single(RobotId::new()).with_metrics(metrics));
-///
-/// // The service can perform health checks and export metrics
-/// // without any HTTP server running
-/// assert!(gateway.health_check().is_ok());
-/// assert!(!gateway.export_metrics().is_empty());
-///
-/// // After: The HTTP server can expose this service via endpoints
-/// // GET /health -> calls gateway.health_check()
-/// // GET /metrics -> calls gateway.export_metrics()
-/// ```
+mod healthz;
+mod readyz;
+mod metrics;
+mod initialization;
+mod shutdown;
+mod basic;
+pub use healthz::health_handler;
+pub use metrics::metrics_handler;
+pub use initialization::initialize_service;
+pub use shutdown::shutdown_service;
+pub use basic::{
+    start_basic_http_server_async,
+    start_basic_http_server_with_config_async,
+    request_graceful_shutdown,
+};
+
+/// Core trait for services exposed via standardized HTTP endpoints.
 pub trait RoboTorqService: Send + Sync + 'static {
-    /// Perform a comprehensive health check of the service.
-    ///
-    /// This method should verify that the service is operational and all
-    /// critical components are functioning correctly. The returned message
-    /// should provide details about the service's health status.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(message)` with a descriptive health status message if the
-    /// service is healthy, or `Err(error)` if the service is unhealthy or
-    /// misconfigured.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,ignore
-    /// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
-    /// use commons::types::ids::RobotId;
-    ///
-    /// let metrics = RobotGatewayMetrics::new("gateway");
-    /// let gateway = RobotGateway::single(RobotId::new()).with_metrics(metrics);
-    ///
-    /// // Before: Service is properly configured
-    /// // After: Health check confirms everything is working
-    /// match gateway.health_check() {
-    ///     Ok(msg) => println!("Service healthy: {}", msg),
-    ///     Err(e) => println!("Service unhealthy: {:?}", e),
-    /// }
-    /// ```
+    /// Liveness check; `GET /healthz` returns 200 when this is Ok.
     fn health_check(&self) -> Result<String, InvariantError>;
 
-    /// Export service metrics in Prometheus text format.
-    ///
-    /// This method should return metrics data that can be scraped by
-    /// Prometheus or displayed in monitoring dashboards. The format should
-    /// follow Prometheus exposition format standards.
-    ///
-    /// # Returns
-    ///
-    /// A string containing metrics data in Prometheus text format.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,ignore
-    /// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
-    /// use commons::types::ids::RobotId;
-    ///
-    /// let metrics = RobotGatewayMetrics::new("gateway");
-    /// let gateway = RobotGateway::single(RobotId::new()).with_metrics(metrics);
-    ///
-    /// // Before: Metrics are being collected internally
-    /// // After: Metrics are exported in Prometheus format
-    /// let metrics_text = gateway.export_metrics();
-    /// assert!(metrics_text.contains("# HELP"));
-    /// assert!(metrics_text.contains("# TYPE"));
-    /// ```
+    /// Export metrics in Prometheus text format; served at `/metrics`.
     fn export_metrics(&self) -> String;
 
-    /// Handle service-specific HTTP requests.
-    ///
-    /// This optional method allows services to handle custom endpoints beyond
-    /// the standard `/health` and `/metrics`. If the service can handle the
-    /// request, it should return `Some(result)`. If it cannot handle the request,
-    /// it should return `None` to allow the HTTP server to handle it or return
-    /// a 404.
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - The request path (e.g., "/custom/endpoint")
-    /// * `method` - The HTTP method (e.g., "GET", "POST")
-    ///
-    /// # Returns
-    ///
-    /// Returns `Some(Ok(response))` if the request was handled successfully,
-    /// `Some(Err(error))` if the request was handled but failed, or `None` if
-    /// the service cannot handle this request.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,ignore
-    /// use commons::services::http::RoboTorqService;
-    /// use commons::util::error::InvariantError;
-    ///
-    /// struct MyService;
-    ///
-    /// impl RoboTorqService for MyService {
-    ///     fn health_check(&self) -> Result<String, InvariantError> {
-    ///         Ok("OK".to_string())
-    ///     }
-    ///
-    ///     fn export_metrics(&self) -> String {
-    ///         "# No metrics".to_string()
-    ///     }
-    ///
-    ///     fn handle_request(&self, path: &str, method: &str) -> Option<Result<String, InvariantError>> {
-    ///         match (path, method) {
-    ///             ("/custom/status", "GET") => {
-    ///                 // Before: Request received for custom endpoint
-    ///                 // After: Service handles it and returns custom response
-    ///                 Some(Ok("Custom status: Active".to_string()))
-    ///             }
-    ///             _ => None, // Let HTTP server handle other requests
-    ///         }
-    ///     }
-    /// }
-    /// ```
+    /// Optional hook for custom endpoints beyond `/healthz` and `/metrics`.
     fn handle_request(&self, _path: &str, _method: &str) -> Option<Result<String, InvariantError>> {
         None
     }
 
-    /// Initialize the service with configuration and dependencies.
+    /// One-time initialization with configuration and dependencies.
     ///
     /// This method is called once during service startup to set up resources,
     /// establish connections, load configuration, and prepare for operation.
@@ -197,7 +84,7 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// ```
     async fn initialize(&mut self, config: &RoboTorqConfig) -> Result<(), InvariantError>;
 
-    /// Start the service and begin processing operations.
+    /// Transition from initialized to running.
     ///
     /// This method transitions the service from initialized state to running state.
     /// The service should begin accepting requests, processing operations, and
@@ -237,7 +124,7 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// ```
     async fn start(&self) -> Result<(), InvariantError>;
 
-    /// Stop processing operations while keeping resources allocated.
+    /// Gracefully stop processing while keeping resources allocated.
     ///
     /// This method gracefully stops the service's operational processing but
     /// keeps resources allocated for potential restart. The service should
@@ -277,7 +164,7 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// ```
     async fn stop(&self) -> Result<(), InvariantError>;
 
-    /// Perform a complete shutdown and release all resources.
+    /// Final cleanup; release all resources.
     ///
     /// This method performs a clean shutdown of the service, releasing all
     /// allocated resources, closing connections, and preparing for termination.
@@ -319,8 +206,7 @@ pub trait RoboTorqService: Send + Sync + 'static {
     async fn shutdown(&self) -> Result<(), InvariantError>;
 }
 
-/// HTTP server that exposes a RoboTorqService via standard endpoints.
-/// Decouples HTTP infrastructure from business logic.
+/// Lightweight Axum server exposing standardized endpoints for a service.
 ///
 /// The HttpServer automatically creates HTTP endpoints for any service that
 /// implements `RoboTorqService`. It provides standard `/health` and `/metrics`
@@ -368,10 +254,12 @@ pub struct HttpServer<S: RoboTorqService> {
     service: Arc<S>,
     /// Configuration specifying network address, port, and endpoint paths.
     config: HttpServerConfig,
+    /// Readiness flag indicating whether the server is ready to serve traffic.
+    ready: Arc<AtomicBool>,
 }
 
 impl<S: RoboTorqService> HttpServer<S> {
-    /// Create a new HTTP server for the given service.
+    /// Create a new server for the given service and config.
     ///
     /// This constructor wraps the service in an Arc for thread-safe sharing
     /// across multiple HTTP requests and stores the configuration.
@@ -403,17 +291,18 @@ impl<S: RoboTorqService> HttpServer<S> {
     /// // The service is now wrapped and configured for HTTP exposure
     /// ```
     pub fn new(service: Arc<S>, config: HttpServerConfig) -> Self {
-        Self { service, config }
+        Self { service, config, ready: Arc::new(AtomicBool::new(false)) }
     }
 
-    /// Start the HTTP server asynchronously.
+    /// Bind, route, and serve until shutdown.
     ///
     /// This method binds to the configured address and port, sets up the HTTP routes,
     /// and begins accepting connections. The server will run until it receives a
     /// shutdown signal or encounters an unrecoverable error.
     ///
     /// The server automatically creates the following endpoints:
-    /// - `GET {health_path}` - Calls `service.health_check()` and returns the result
+    /// - `GET /healthz` - Liveness: returns 200 if process is up
+    /// - `GET /readyz` - Readiness: returns 200 only when ready flag is set
     /// - `GET {metrics_path}` - Calls `service.export_metrics()` and returns Prometheus format
     ///
     /// # Returns
@@ -456,8 +345,10 @@ impl<S: RoboTorqService> HttpServer<S> {
         let addr = format!("{}:{}", self.config.service.address, self.config.service.port);
 
         // Build the application with routes
+        let ready_flag = Arc::clone(&self.ready);
         let app = Router::new()
-            .route(self.config.health.0.as_str(), get(health_handler))
+            .route("/healthz", get(health_handler))
+            .route("/readyz", get(move || readyz::readyz_handler(Arc::clone(&ready_flag))))
             .route(self.config.metrics.0.as_str(), get(metrics_handler))
             .layer(CorsLayer::permissive())
             .with_state(self.service);
@@ -468,30 +359,19 @@ impl<S: RoboTorqService> HttpServer<S> {
 
         tracing::info!("HTTP server listening on {}", addr);
 
-        // Start serving
+        // Mark ready and start serving
+        self.ready.store(true, Ordering::Relaxed);
         axum::serve(listener, app).await
             .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
+
+        // After shutdown, mark not ready
+        self.ready.store(false, Ordering::Relaxed);
 
         Ok(())
     }
 }
 
-/// Handler for health check endpoint.
-async fn health_handler<S: RoboTorqService>(
-    State(service): State<Arc<S>>,
-) -> impl IntoResponse {
-    match service.health_check() {
-        Ok(message) => (StatusCode::OK, message),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Health check failed: {:?}", e)),
-    }
-}
-
-/// Handler for metrics endpoint.
-async fn metrics_handler<S: RoboTorqService>(
-    State(service): State<Arc<S>>,
-) -> impl IntoResponse {
-    (StatusCode::OK, service.export_metrics())
-}
+// Re-exported handlers live in submodules
 
 /// Represents an HTTP service configuration with address and port.
 ///
@@ -719,36 +599,6 @@ impl HttpEndpoint {
 ///     Ok(())
 /// }
 /// ```
-pub async fn start_basic_http_server_async(
-    handler: Arc<MetricsHandler>,
-    service: HttpService,
-    health: HttpEndpoint,
-    metrics: HttpEndpoint,
-) -> Result<(), InvariantError> {
-    let addr = format!("{}:{}", service.address, service.port);
-
-    // Build the application with routes
-    let app = Router::new()
-        .route(health.0.as_str(), get(move || async move {
-            (StatusCode::OK, "OK".to_string())
-        }))
-        .route(metrics.0.as_str(), get(move || async move {
-            (StatusCode::OK, handler.export_text())
-        }))
-        .layer(CorsLayer::permissive());
-
-    // Create listener
-    let listener = TcpListener::bind(&addr).await
-        .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
-
-    tracing::info!("Basic HTTP server listening on {}", addr);
-
-    // Start serving
-    axum::serve(listener, app).await
-        .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
-
-    Ok(())
-}
 
 /// Configuration for an HTTP server including service details and endpoint paths.
 ///
@@ -909,12 +759,6 @@ impl HttpServerConfig {
 ///     Ok(())
 /// }
 /// ```
-pub async fn start_basic_http_server_with_config_async(
-    handler: Arc<MetricsHandler>,
-    cfg: HttpServerConfig,
-) -> Result<(), InvariantError> {
-    start_basic_http_server_async(handler, cfg.service, cfg.health, cfg.metrics).await
-}
 
 /// Gracefully request shutdown by calling the internal `/shutdown` endpoint.
 /// Note: This is a legacy synchronous function. For async code, use proper shutdown signaling.
@@ -963,21 +807,12 @@ pub async fn start_basic_http_server_with_config_async(
 ///     Ok(())
 /// }
 /// ```
-pub fn request_graceful_shutdown(service: &HttpService) -> Result<(), InvariantError> {
-    use std::io::Write;
-    use std::net::TcpStream;
-    let addr = format!("{}:{}", service.address, service.port);
-    let mut stream = TcpStream::connect(&addr)
-        .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
-    let req = format!("GET /shutdown HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", addr);
-    stream.write_all(req.as_bytes())
-        .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
-    Ok(())
-}
+// Legacy helpers moved to `basic` submodule.
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::metrics::MetricsHandler;
     // Use a local test service to avoid cross-crate type duplication
     struct TestService {
         handler: Arc<MetricsHandler>,
