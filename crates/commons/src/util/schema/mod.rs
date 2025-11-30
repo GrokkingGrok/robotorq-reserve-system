@@ -5,7 +5,7 @@
 /// Schema versioning constants for data structures.
 /// Increment these when the structure changes in a backward-incompatible way.
 /// Use semantic versioning: major for breaking changes, minor for additions, patch for fixes.
-
+///
 /// Current schema version for UnmappedOreBatch.
 pub const UNMAPPED_ORE_BATCH_SCHEMA_VERSION: u32 = 1;
 

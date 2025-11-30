@@ -668,10 +668,10 @@ impl HttpEndpoint {
 ///     Ok(())
 /// }
 /// ```
-
 /// Start a minimal HTTP server serving health and metrics endpoints using Axum.
 /// - Health: responds 200 with health status
 /// - Metrics: responds with Prometheus text from MetricsHandler::export_text()
+///
 /// This is a legacy function for backward compatibility - prefer HttpServer for new code.
 ///
 /// This function provides a basic HTTP server that serves static health and metrics

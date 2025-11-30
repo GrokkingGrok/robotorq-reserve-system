@@ -414,7 +414,7 @@ impl TripleTorq {
     pub fn abs_diff(&self, other: &TripleTorq) -> TripleTorq {
         let a = self.total_smallest_units();
         let b = other.total_smallest_units();
-        let diff = if a >= b { a - b } else { b - a };
+        let diff = a.abs_diff(b);
         TripleTorq::from_smallest_units(diff)
     }
 

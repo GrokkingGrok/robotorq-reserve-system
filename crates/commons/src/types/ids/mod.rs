@@ -105,6 +105,10 @@ impl RobotId {
     pub fn new() -> Self { Self(Uuid::new_v4()) }
 }
 
+impl Default for RobotId {
+    fn default() -> Self { Self::new() }
+}
+
 impl TokenId {
     /// Creates a new unique TokenId using UUID v4.
     ///
@@ -114,6 +118,10 @@ impl TokenId {
     /// let token_id = TokenId::new();
     /// ```
     pub fn new() -> Self { Self(Uuid::new_v4()) }
+}
+
+impl Default for TokenId {
+    fn default() -> Self { Self::new() }
 }
 
 impl UnmappedOreBatchId {
@@ -127,6 +135,10 @@ impl UnmappedOreBatchId {
     pub fn new() -> Self { Self(Uuid::new_v4()) }
 }
 
+impl Default for UnmappedOreBatchId {
+    fn default() -> Self { Self::new() }
+}
+
 impl TripleTorqId {
     /// Creates a new unique TripleTorqId using UUID v4.
     ///
@@ -136,6 +148,10 @@ impl TripleTorqId {
     /// let account_id = TripleTorqId::new();
     /// ```
     pub fn new() -> Self { Self(Uuid::new_v4()) }
+}
+
+impl Default for TripleTorqId {
+    fn default() -> Self { Self::new() }
 }
 
 impl ContractId {
@@ -149,6 +165,10 @@ impl ContractId {
     pub fn new() -> Self { Self(Uuid::new_v4()) }
 }
 
+impl Default for ContractId {
+    fn default() -> Self { Self::new() }
+}
+
 impl PartyId {
     /// Creates a new unique PartyId using UUID v4.
     ///
@@ -158,4 +178,8 @@ impl PartyId {
     /// let party_id = PartyId::new();
     /// ```
     pub fn new() -> Self { Self(Uuid::new_v4()) }
+}
+
+impl Default for PartyId {
+    fn default() -> Self { Self::new() }
 }

@@ -57,18 +57,18 @@ impl RobotGateway {
             return Err(InvariantError::Gateway(RobotGatewayError::UnknownRobotId));
         }
         let res = UnmappedOreBatch::new(robot_id, tokens);
-        if res.is_ok() { if let Some(m) = &self.metrics { m.inc_captured(); } }
+        if res.is_ok() && let Some(m) = &self.metrics { m.inc_captured(); }
         res
     }
 
     /// Capture a batch using the first registered robot (returns error if none).
     pub fn capture_unmapped_batch_any(&self, tokens: Vec<Token>) -> Result<UnmappedOreBatch, InvariantError> {
-        let robot_id = *self.robots.get(0).ok_or_else(|| {
+        let robot_id = *self.robots.first().ok_or_else(|| {
             if let Some(m) = &self.metrics { m.inc_rejected(); }
             InvariantError::Gateway(RobotGatewayError::UnknownRobotId)
         })?;
         let res = UnmappedOreBatch::new(robot_id, tokens);
-        if res.is_ok() { if let Some(m) = &self.metrics { m.inc_captured(); } }
+        if res.is_ok() && let Some(m) = &self.metrics { m.inc_captured(); }
         res
     }
 }
