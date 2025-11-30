@@ -10,6 +10,8 @@ use axum::{
     Router,
 };
 use tower_http::cors::CorsLayer;
+use tower_http::timeout::TimeoutLayer;
+use tower_http::limit::RequestBodyLimitLayer;
 use tokio::net::TcpListener;
 use std::sync::atomic::{AtomicBool, Ordering};
 use crate::util::error::{InvariantError, logging_error::LoggingError};
@@ -351,7 +353,7 @@ impl<S: RoboTorqService> HttpServer<S> {
         let ready_flag = Arc::clone(&self.ready);
         // Minimal registry setup for Phase 1; labels can be refined later
         let registry = std::sync::Arc::new(PrometheusRegistry::new("robotorq", "http", "dev"));
-        let app = Router::new()
+        let mut app = Router::new()
             .route("/healthz", get(health_handler))
             .route("/readyz", get(move || readyz::readyz_handler(Arc::clone(&ready_flag))))
             .route(self.config.metrics.0.as_str(), get({
@@ -363,8 +365,20 @@ impl<S: RoboTorqService> HttpServer<S> {
                 }
             }))
             .layer(HttpMetricsLayer::new(registry))
-            .layer(CorsLayer::permissive())
             .with_state(self.service);
+
+        // Conditionally add middleware layers based on configuration
+        if let Some(body_limit) = self.config.max_body_size_bytes {
+            app = app.layer(RequestBodyLimitLayer::new(body_limit));
+        }
+
+        if let Some(timeout_secs) = self.config.timeout_seconds {
+            app = app.layer(TimeoutLayer::new(std::time::Duration::from_secs(timeout_secs)));
+        }
+
+        if self.config.cors_permissive {
+            app = app.layer(CorsLayer::permissive());
+        }
 
         // Create listener
         let listener = TcpListener::bind(&addr).await
@@ -580,6 +594,12 @@ pub struct HttpServerConfig {
     /// This path will be routed to call `service.export_metrics()` and return
     /// the metrics in Prometheus text format.
     pub metrics: HttpEndpoint,
+    /// Optional request timeout in seconds. If None, no timeout is applied.
+    pub timeout_seconds: Option<u64>,
+    /// Optional maximum request body size in bytes. If None, no limit is applied.
+    pub max_body_size_bytes: Option<usize>,
+    /// Whether to enable permissive CORS. Defaults to true for development.
+    pub cors_permissive: bool,
 }
 
 impl HttpServerConfig {
@@ -614,7 +634,14 @@ impl HttpServerConfig {
     /// // that listens on 0.0.0.0:80 with /health and /metrics endpoints
     /// ```
     pub fn new(service: HttpService, health: HttpEndpoint, metrics: HttpEndpoint) -> Self {
-        Self { service, health, metrics }
+        Self { 
+            service, 
+            health, 
+            metrics, 
+            timeout_seconds: None, 
+            max_body_size_bytes: None, 
+            cors_permissive: true 
+        }
     }
 
     /// Convenience for local development defaults.
@@ -658,6 +685,9 @@ impl HttpServerConfig {
             service: HttpService::new("127.0.0.1", port),
             health: HttpEndpoint::new("/health"),
             metrics: HttpEndpoint::new("/metrics"),
+            timeout_seconds: Some(30), // 30 second timeout for development
+            max_body_size_bytes: Some(1024 * 1024), // 1MB body limit
+            cors_permissive: true,
         }
     }
 }
@@ -705,6 +735,18 @@ mod tests {
 
         // Test that we can create the server (without starting it)
         let _server = HttpServer::new(svc, config);
+    }
+
+    #[test]
+    fn http_server_config_defaults() {
+        let config = HttpServerConfig::local_defaults(8080);
+        assert_eq!(config.service.address, "127.0.0.1");
+        assert_eq!(config.service.port, 8080);
+        assert_eq!(config.health.0, "/health");
+        assert_eq!(config.metrics.0, "/metrics");
+        assert_eq!(config.timeout_seconds, Some(30));
+        assert_eq!(config.max_body_size_bytes, Some(1024 * 1024));
+        assert!(config.cors_permissive);
     }
 
     #[tokio::test]
