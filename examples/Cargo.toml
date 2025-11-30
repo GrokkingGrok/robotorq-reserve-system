@@ -1,0 +1,15 @@
+[package]
+name = "robotorq-examples"
+version = "0.0.1"
+edition = "2024"
+license = "Apache-2.0"
+authors = ["RoboTorq Contributors"]
+
+[[bin]]
+name = "example-service"
+path = "example-service.rs"
+
+[dependencies]
+commons = { path = "../crates/commons" }
+tokio = { workspace = true }
+tracing = "0.1.41"

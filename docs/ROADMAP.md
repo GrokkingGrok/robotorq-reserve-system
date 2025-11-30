@@ -14,22 +14,31 @@ This roadmap sequences work from the current template to a fully distributed, ob
 
 ### Phase 1 — Lifecycle, Config, and Observability Baseline
 - Traits: finalize `RoboTorqService` expectations (async init/shutdown, health, metrics).
-- Config: define `RoboTorqConfig` schema and validation (HTTP, NATS, Persistence, Observability, TLS).
+- Config: define comprehensive `RoboTorqConfig` schema (HTTP, NATS, Persistence, Observability, Security, Crypto, Economic).
 - HTTP: add middleware for request timing, status metrics; configurable CORS; body/timeout limits.
 - Metrics: implement a minimal metrics registry interface and expose common counters/gauges.
 - Docs/CI: `cargo doc`, examples crate, unit/integration tests; add basic Grafana dashboards.
 
 Deliverables:
-- Validated config loader, improved `HttpServer`, middleware, `/metrics` consistency
+- Validated config loader with 7 comprehensive config layers
+- Improved `HttpServer` with middleware, CORS, timeouts, body limits
+- Metrics registry with common counters/gauges and `/metrics` consistency
 - Docs: ARCHITECTURE.md, ROADMAP.md, example service
+- Full test coverage and CI integration
 
 ### Phase 2 — Persistence Strategy (Unified)
-- Choose storage (e.g., Postgres + SQLx) and create a small repository abstraction.
-- Health contributions and migrations; pooling and timeouts.
-- Standardize error mapping from persistence layer to service errors.
+- Implement multi-backend repository abstraction supporting Postgres/SQLite/Memory
+- Add health contributions, connection pooling, and timeout handling
+- Implement database migrations with multi-backend support
+- Standardize error mapping from persistence layer to service errors
+- Add repository pattern for common data access operations
 
 Deliverables:
-- Persistence module with migrations, health, examples, tests
+- Multi-backend persistence module with repository abstraction
+- Migration system supporting all configured backends
+- Health checks and connection management
+- Standardized persistence error types and mapping
+- Examples and comprehensive tests
 
 ### Phase 3 — NATS & JetStream
 - Client abstraction over `async-nats`: connect, publish, subscribe, request/reply.
@@ -80,6 +89,7 @@ Deliverables:
 
 ## Decision Log (to fill as we go)
 
-- Persistence choice: TBD (evaluate Postgres vs embedded)
+- Persistence choice: Multi-backend support (Postgres, SQLite, Memory) with runtime configuration
+- Persistence config: Comprehensive layer supporting connection pooling, SSL, backend-specific tuning
 - AuthN/Z baseline: TBD (start with JWT + policy traits)
 - Tracing sink: TBD (OpenTelemetry/OTLP)

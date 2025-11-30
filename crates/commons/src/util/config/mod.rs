@@ -9,6 +9,13 @@
 //! - **Mode Configuration**: Production vs Simulation operation modes
 //! - **Simulation Parameters**: Timing, performance, and robot gateway simulation settings
 //! - **Port Configuration**: Network port assignments for services and monitoring
+//! - **HTTP Configuration**: Web server settings with middleware and security
+//! - **NATS Configuration**: Message bus connection and JetStream settings
+//! - **Persistence Configuration**: Database connection and storage settings
+//! - **Observability Configuration**: Metrics, tracing, and monitoring settings
+//! - **Security Configuration**: TLS, authentication, and authorization settings
+//! - **Crypto Configuration**: Cryptographic signing, key management, and certificate settings
+//! - **Economic Configuration**: Economic invariants, reserve ratios, and monetary policy settings
 //!
 //! # Configuration Sources
 //!
@@ -46,12 +53,26 @@
 pub mod mode;
 pub mod simulation;
 pub mod ports;
+pub mod http;
+pub mod nats;
+pub mod persistence;
+pub mod observability;
+pub mod security;
+pub mod crypto;
+pub mod economic;
 
 // Re-export common config types for ergonomic imports
 pub use mode::Mode;
 pub use simulation::Simulation;
 pub use ports::PortsConfig;
 pub use ports::load_ports_config_from_default;
+pub use http::HttpConfig;
+pub use nats::NatsConfig;
+pub use persistence::PersistenceConfig;
+pub use observability::ObservabilityConfig;
+pub use security::SecurityConfig;
+pub use crypto::CryptoConfig;
+pub use economic::EconomicConfig;
 
 use serde::{Deserialize, Serialize};
 use crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION;
@@ -60,7 +81,7 @@ use crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION;
 ///
 /// This struct encapsulates all configuration parameters needed to operate
 /// the RoboTorq system, including operational mode, simulation settings,
-/// and network configuration.
+/// network configuration, and service-specific settings.
 ///
 /// # Configuration Sections
 ///
@@ -68,6 +89,13 @@ use crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION;
 /// - `mode`: Operational mode (Production or Simulation)
 /// - `simulation`: Simulation-specific parameters (only used in Simulation mode)
 /// - `ports`: Network port assignments for all services
+/// - `http`: HTTP server configuration (middleware, CORS, timeouts)
+/// - `nats`: NATS message bus configuration (servers, JetStream)
+/// - `persistence`: Database and storage configuration
+/// - `observability`: Metrics, tracing, and monitoring settings
+/// - `security`: TLS, authentication, and authorization settings
+/// - `crypto`: Cryptographic signing, key management, and certificate settings
+/// - `economic`: Economic invariants, reserve ratios, and monetary policy settings
 ///
 /// # Validation
 ///
@@ -102,6 +130,55 @@ pub struct RoboTorqConfig {
     /// Defines the ports on which various system services will listen,
     /// including the robot gateway, metrics endpoint, and Grafana dashboard.
     pub ports: ports::PortsConfig,
+
+    /// HTTP server configuration.
+    ///
+    /// Configures the HTTP server including middleware settings, CORS policy,
+    /// request timeouts, and body size limits.
+    #[serde(default)]
+    pub http: HttpConfig,
+
+    /// NATS message bus configuration.
+    ///
+    /// Defines connection settings for the NATS server, JetStream configuration,
+    /// and subject naming conventions for inter-service communication.
+    #[serde(default)]
+    pub nats: NatsConfig,
+
+    /// Persistence layer configuration.
+    ///
+    /// Configures database connections, connection pooling, and storage settings
+    /// for the unified persistence strategy across all services.
+    #[serde(default)]
+    pub persistence: PersistenceConfig,
+
+    /// Observability configuration.
+    ///
+    /// Settings for metrics collection, tracing, and monitoring integration
+    /// including Prometheus endpoints and Grafana dashboard connections.
+    #[serde(default)]
+    pub observability: ObservabilityConfig,
+
+    /// Security configuration.
+    ///
+    /// TLS settings, authentication mechanisms, and authorization policies
+    /// for securing service communication and external access.
+    #[serde(default)]
+    pub security: SecurityConfig,
+
+    /// Cryptographic configuration.
+    ///
+    /// Settings for digital signatures, key management, and certificate handling
+    /// including post-quantum algorithms like Falcon and SPHINCS.
+    #[serde(default)]
+    pub crypto: CryptoConfig,
+
+    /// Economic configuration.
+    ///
+    /// Settings for economic invariants, reserve ratios, monetary policy,
+    /// and token economics including demurrage rates and UBD parameters.
+    #[serde(default)]
+    pub economic: EconomicConfig,
 }
 
 /// Returns the default schema version for new configurations.
@@ -236,5 +313,12 @@ pub fn load_robotorq_config(config_path: Option<&std::path::Path>) -> Result<Rob
         mode: Mode::Production, // Safe default
         simulation: Simulation::default(),
         ports: load_ports_config_from_default(),
+        http: HttpConfig::default(),
+        nats: NatsConfig::default(),
+        persistence: PersistenceConfig::default(),
+        observability: ObservabilityConfig::default(),
+        security: SecurityConfig::default(),
+        crypto: CryptoConfig::default(),
+        economic: EconomicConfig::default(),
     })
 }
