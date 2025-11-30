@@ -10,6 +10,6 @@ name = "example-service"
 path = "example-service.rs"
 
 [dependencies]
-commons = { path = "../crates/commons" }
+commons = { path = "../commons", default-features = true }
 tokio = { workspace = true }
 tracing = "0.1.41"

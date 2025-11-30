@@ -2,7 +2,7 @@
 members = [
 	"crates/commons",
 	"crates/robot-gateway",
-	"examples"
+	"crates/examples"
 ]
 resolver = "2"
 

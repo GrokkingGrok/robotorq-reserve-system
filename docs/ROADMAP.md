@@ -26,7 +26,20 @@ Deliverables:
 - Docs: ARCHITECTURE.md, ROADMAP.md, example service
 - Full test coverage and CI integration
 
-### Phase 2 — Persistence Strategy (Unified)
+### Phase 2.0 — Template Stabilization
+- Pin dependencies in workspace Cargo.toml with specific versions
+- Implement sim_sleep helper for time dilation in simulation mode
+- Clarify simulation legal notice for contributor awareness
+- Add default implementations to RoboTorqService trait methods
+- Set up CI pipeline with automated testing and linting
+
+Deliverables:
+- Stabilized template with pinned dependencies and CI
+- Implemented time dilation for simulation testing
+- Updated documentation and legal notices
+- Template ready for persistence implementation without regressions
+
+### Phase 2.1 — Persistence Strategy (Unified)
 - Implement multi-backend repository abstraction supporting Postgres/SQLite/Memory
 - Add health contributions, connection pooling, and timeout handling
 - Implement database migrations with multi-backend support
