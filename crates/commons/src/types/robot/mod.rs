@@ -1,3 +1,11 @@
+//! Robotic entities that perform work and generate JouleTorqOre.
+//!
+//! Robots are the primary work-performing agents in the RoboTorq Reserve System.
+//! They execute contracts by performing physical labor, generating tokens that
+//! represent measurable work output. Each robot has defined throughput ratings
+//! and operational status, forming the foundation of the system's work proof
+//! mechanism.
+
 pub mod printer;
 
 use serde::{Serialize, Deserialize};
@@ -6,6 +14,34 @@ use crate::util::error::InvariantError;
 use crate::util::error::robot_error::RobotError;
 use crate::util::schema::ROBOT_SCHEMA_VERSION;
 
+/// A robotic work-performing entity in the RoboTorq network.
+///
+/// Robots are the fundamental producers of value in the RoboTorq Reserve System.
+/// They execute contracts by performing physical work, generating JouleTorqOre
+/// tokens that represent measurable robotic labor. Each robot has defined
+/// performance characteristics and operational constraints that ensure
+/// predictable and verifiable work output.
+///
+/// # Economic Role
+/// - Primary generators of JouleTorqOre tokens through physical work
+/// - Execute contracts defining work requirements and compensation
+/// - Provide verifiable work proof through token generation and batching
+/// - Enable distributed work execution across the robotic network
+///
+/// # Operational Characteristics
+/// Robots have defined throughput ratings for both token production and
+/// energy consumption, ensuring predictable performance and economic
+/// calculations. They maintain operational status and contract assignments
+/// to coordinate work across the distributed system.
+///
+/// # Fields
+/// - `id`: Unique identifier for this robot
+/// - `name`: Human-readable identifier for operational purposes
+/// - `token_throughput_rating`: Maximum tokens this robot can produce per second
+/// - `joule_throughput_rating`: Maximum joules this robot can consume per second (watts)
+/// - `is_working`: Current operational status (true = active, false = idle)
+/// - `active_contract`: ID of the contract this robot is currently executing
+/// - `schema_version`: Version of the robot schema for compatibility
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Robot {
     pub id: RobotId,
@@ -18,6 +54,49 @@ pub struct Robot {
 }
 
 impl Robot {
+    /// Creates a new robot with validated parameters.
+    ///
+    /// This constructor ensures that all robot parameters meet system invariants:
+    /// - Name must not be empty or whitespace-only
+    /// - Token throughput must be positive (robots must produce tokens)
+    /// - Joule throughput must be positive (robots must consume energy)
+    ///
+    /// # Arguments
+    /// * `id` - Unique identifier for the robot
+    /// * `name` - Human-readable name (must not be empty/whitespace)
+    /// * `token_throughput_rating` - Maximum tokens per second (must be > 0)
+    /// * `joule_throughput_rating` - Maximum joules per second (must be > 0)
+    /// * `is_working` - Initial operational status
+    /// * `active_contract` - Contract this robot will execute
+    ///
+    /// # Returns
+    /// Returns a `Result` containing the new robot or an `InvariantError` if validation fails.
+    ///
+    /// # Errors
+    /// - `RobotError::InvalidRobotName` if name is empty or whitespace-only
+    /// - `RobotError::ZeroTokenThroughput` if token_throughput_rating is 0
+    /// - `RobotError::ZeroJouleThroughput` if joule_throughput_rating is 0
+    ///
+    /// # Examples
+    /// ```rust
+    /// # use commons::types::ids::{RobotId, ContractId};
+    /// # use commons::types::robot::Robot;
+    /// let robot_id = RobotId::new();
+    /// let contract_id = ContractId::new();
+    ///
+    /// let robot = Robot::new(
+    ///     robot_id,
+    ///     "KLP-01",
+    ///     5,    // 5 tokens per second
+    ///     500,  // 500 watts
+    ///     true, // initially working
+    ///     contract_id
+    /// ).unwrap();
+    ///
+    /// assert_eq!(robot.name, "KLP-01");
+    /// assert_eq!(robot.token_throughput_rating, 5);
+    /// assert_eq!(robot.joule_throughput_rating, 500);
+    /// ```
     pub fn new(
         id: RobotId,
         name: impl Into<String>,
