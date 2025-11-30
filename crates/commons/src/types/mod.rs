@@ -1,3 +1,8 @@
+//! Core shared data types for RoboTorq.
+//!
+//! This module contains identifiers and domain models representing robots,
+//! tokens, unmapped ore batches, and monetary accounting structures used
+//! across the RoboTorq Reserve System.
 pub mod ids;
 pub mod ore;
 pub mod robot;

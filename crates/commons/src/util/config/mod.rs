@@ -51,6 +51,7 @@ pub mod ports;
 pub use mode::Mode;
 pub use simulation::Simulation;
 pub use ports::PortsConfig;
+pub use ports::load_ports_config_from_default;
 
 use serde::{Deserialize, Serialize};
 use crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION;
@@ -159,4 +160,81 @@ impl RoboTorqConfig {
             toml::from_str(&content).map_err(|e| e.to_string())
         }
     }
+}
+
+/// Load RoboTorq configuration with fallback logic.
+/// 
+/// This function provides a unified way to load configuration across all services.
+/// It tries multiple sources in order:
+/// 1. Command line argument (if provided)
+/// 2. ROBOTORQ_CONFIG environment variable
+/// 3. Default config file paths
+/// 4. Built-in defaults
+/// 
+/// # Arguments
+/// 
+/// * `config_path` - Optional path to config file. If None, uses environment/default paths.
+/// 
+/// # Returns
+/// 
+/// Returns the loaded configuration or an error message.
+/// 
+/// # Examples
+/// 
+/// ```rust,no_run
+/// use commons::util::config::load_robotorq_config;
+/// 
+/// // Load from default locations
+/// let config = load_robotorq_config(None)?;
+/// 
+/// // Load from specific file
+/// let config = load_robotorq_config(Some("my-config.toml".as_ref()))?;
+/// # Ok::<(), String>(())
+/// ```
+pub fn load_robotorq_config(config_path: Option<&std::path::Path>) -> Result<RoboTorqConfig, String> {
+    // Try explicit path first
+    if let Some(path) = config_path {
+        match RoboTorqConfig::load_from_file(path) {
+            Ok(config) => return Ok(config),
+            Err(e) => tracing::warn!("Failed to load config from {}: {}", path.display(), e),
+        }
+    }
+
+    // Try environment variable
+    if let Ok(env_path) = std::env::var("ROBOTORQ_CONFIG") {
+        let path = std::path::Path::new(&env_path);
+        match RoboTorqConfig::load_from_file(path) {
+            Ok(config) => return Ok(config),
+            Err(e) => tracing::warn!("Failed to load config from ROBOTORQ_CONFIG={}: {}", env_path, e),
+        }
+    }
+
+    // Try default locations
+    let default_paths = [
+        "robotorq.toml",
+        "config/robotorq.toml",
+        "etc/robotorq.toml",
+    ];
+
+    for path_str in &default_paths {
+        let path = std::path::Path::new(path_str);
+        if path.exists() {
+            match RoboTorqConfig::load_from_file(path) {
+                Ok(config) => {
+                    tracing::info!("Loaded config from {}", path.display());
+                    return Ok(config);
+                }
+                Err(e) => tracing::warn!("Failed to load config from {}: {}", path.display(), e),
+            }
+        }
+    }
+
+    // Fall back to defaults
+    tracing::warn!("No config file found, using defaults");
+    Ok(RoboTorqConfig {
+        schema_version: default_robotorq_config_schema_version(),
+        mode: Mode::Production, // Safe default
+        simulation: Simulation::default(),
+        ports: load_ports_config_from_default(),
+    })
 }

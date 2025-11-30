@@ -45,7 +45,12 @@ pub enum BatchError {
     /// }
     /// ```
     #[error("Batch size violates invariant: actual {actual}, expected {expected}")]
-    BatchSize { actual: usize, expected: usize },
+    BatchSize {
+        /// The actual size of the batch encountered at runtime.
+        actual: usize,
+        /// The expected batch size according to RoboTorq economic invariants.
+        expected: usize,
+    },
 
     /// Attempted to process an empty batch.
     ///

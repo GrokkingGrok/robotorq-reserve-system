@@ -1,3 +1,7 @@
+//! Schema version constants and helpers for serialized types.
+//!
+//! Centralizes schema version numbers for all public data structures so
+//! migrations and compatibility checks can be performed consistently.
 /// Schema versioning constants for data structures.
 /// Increment these when the structure changes in a backward-incompatible way.
 /// Use semantic versioning: major for breaking changes, minor for additions, patch for fixes.

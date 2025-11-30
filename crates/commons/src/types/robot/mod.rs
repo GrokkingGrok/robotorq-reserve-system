@@ -44,12 +44,19 @@ use crate::util::schema::ROBOT_SCHEMA_VERSION;
 /// - `schema_version`: Version of the robot schema for compatibility
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Robot {
+    /// Unique identifier of the robot.
     pub id: RobotId,
-    pub name: String,                  // human-readable identifier
-    pub token_throughput_rating: u32,  // rated tokens per second
-    pub joule_throughput_rating: u32,  // rated joules per second (watts)
-    pub is_working: bool,              // operational status
-    pub active_contract: ContractId,   // current active contract
+    /// Human-readable identifier for operational use.
+    pub name: String,
+    /// Rated tokens the robot can produce per second.
+    pub token_throughput_rating: u32,
+    /// Rated joules the robot can consume per second (watts).
+    pub joule_throughput_rating: u32,
+    /// Current operational status (true = working, false = idle).
+    pub is_working: bool,
+    /// Currently active contract identifier.
+    pub active_contract: ContractId,
+    /// Schema version for compatibility and migrations.
     pub schema_version: u32,
 }
 

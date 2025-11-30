@@ -39,9 +39,13 @@ use crate::util::schema::TOKEN_SCHEMA_VERSION;
 /// - `hash`: Cryptographic hash of the token contents for integrity verification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Token {
+    /// Unique identifier for this token.
     pub id: TokenId,
-    pub joule_count: u32,           // operational status
+    /// Number of joules of work this token represents (must be > 0).
+    pub joule_count: u32,
+    /// Schema version for compatibility and migrations.
     pub schema_version: u32,
+    /// Cryptographic hash of the token contents for integrity verification.
     pub hash: [u8; 32],
 }
 

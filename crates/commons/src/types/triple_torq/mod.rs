@@ -134,11 +134,17 @@ fn from_smallest_units(total: u128) -> (u128, u16, u16) {
 /// - `hash`: Cryptographic hash of the account state for integrity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TripleTorq {
+    /// Unique identifier for this TripleTorq account.
     pub id: TripleTorqId,
+    /// Balance in RoboTorq units (unbounded 128-bit).
     pub robotorq_balance: u128,
-    pub tokentorq_balance: u16,         // can never be larer than 1000, must rollover into robotorq
-    pub jouletorq_balance: u16,         // can never be larger than 3600, must rollover into tokentorq
+    /// Balance in TokenTorq units (0–999; rolls into RoboTorq when exceeding bound).
+    pub tokentorq_balance: u16,
+    /// Balance in JouleTorq units (0–3599; rolls into TokenTorq when exceeding bound).
+    pub jouletorq_balance: u16,
+    /// Schema version for compatibility and migrations.
     pub schema_version: u32,
+    /// Cryptographic hash of the account state for integrity verification.
     pub hash: [u8; 32],
 }
 

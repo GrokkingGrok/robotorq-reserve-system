@@ -1,3 +1,8 @@
+//! Prometheus metrics integration helpers.
+//!
+//! Provides a shared `MetricsHandler` abstraction that owns a Prometheus
+//! registry and convenience functions to register counters, gauges, and
+//! histograms, plus export in text format.
 use prometheus::{Registry, TextEncoder, Encoder, Counter, Gauge, Histogram, HistogramOpts};
 use crate::util::schema::all_schema_versions;
 use std::sync::Arc;

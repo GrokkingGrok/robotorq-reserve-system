@@ -1,3 +1,7 @@
+//! Timekeeping utilities.
+//!
+//! Provides an abstraction over `SystemTime::now()` to make time access
+//! testable and consistent across the codebase.
 use std::time::SystemTime;
 
 /// Get the current system time.

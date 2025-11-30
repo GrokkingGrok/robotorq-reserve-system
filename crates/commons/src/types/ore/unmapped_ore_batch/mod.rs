@@ -39,11 +39,17 @@ use crate::types::Token;
 /// - `hash`: Cryptographic hash of the batch contents for integrity verification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnmappedOreBatch {
+    /// Unique identifier for this batch.
     pub id: UnmappedOreBatchId,
+    /// Identifier of the robot that produced this batch.
     pub robot_id: RobotId,
+    /// Schema version for compatibility and migrations.
     pub schema_version: u32,
+    /// Individual tokens representing joules of work performed.
     pub tokens: Vec<Token>,
+    /// Milliseconds since Unix epoch when this batch was captured.
     pub captured_at_ms: i128,
+    /// Cryptographic hash of the batch contents for integrity verification.
     pub hash: [u8; 32],
 }
 

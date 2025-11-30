@@ -54,4 +54,16 @@ pub enum RobotGatewayError {
     /// - Gateway started without metrics enabled
     #[error("metrics not configured for gateway")]
     MetricsNotConfigured,
+
+    /// The gateway configuration is invalid or incomplete.
+    ///
+    /// This error occurs when the gateway is initialized with invalid
+    /// or inconsistent configuration parameters.
+    ///
+    /// # Causes
+    /// - Invalid port numbers (e.g., port 0)
+    /// - Missing required configuration fields
+    /// - Inconsistent configuration values
+    #[error("Invalid gateway configuration: {0}")]
+    InvalidConfiguration(String),
 }

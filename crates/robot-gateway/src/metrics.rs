@@ -1,8 +1,6 @@
 use prometheus::{Counter, Gauge};
-use crate::util::metrics::MetricsHandler;
+use commons::util::metrics::MetricsHandler;
 use std::sync::Arc;
-use crate::services::http::{HttpServerConfig, start_basic_http_server_with_config};
-use crate::util::error::InvariantError;
 
 pub struct RobotGatewayMetrics {
     handler: Arc<MetricsHandler>,
@@ -39,9 +37,4 @@ impl RobotGatewayMetrics {
 
     /// Getter returning a cloned Arc to the underlying handler for server/export usage.
     pub fn get_handler(&self) -> Arc<MetricsHandler> { self.handler.clone() }
-
-    /// Start an HTTP server exposing health & metrics using internal handler.
-    pub fn start_http_server(&self, cfg: HttpServerConfig) -> Result<std::thread::JoinHandle<()>, InvariantError> {
-        start_basic_http_server_with_config(self.handler.clone(), cfg)
-    }
 }
