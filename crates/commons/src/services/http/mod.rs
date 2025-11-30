@@ -14,22 +14,23 @@ use tokio::net::TcpListener;
 use std::sync::atomic::{AtomicBool, Ordering};
 use crate::util::error::{InvariantError, logging_error::LoggingError};
 use crate::util::config::RoboTorqConfig;
+// Metrics abstraction for HTTP middleware wiring
+use crate::util::metrics::PrometheusRegistry;
+use crate::services::http::middleware::HttpMetricsLayer;
+// Metrics abstraction imported when wiring middleware
+// use crate::util::metrics::{MetricsRegistry, Histogram, Counter, Gauge};
+// use std::time::Duration;
 
-mod healthz;
-mod readyz;
+pub mod healthz;
+pub mod readyz;
 mod metrics;
 mod initialization;
 mod shutdown;
-mod basic;
+pub mod middleware;
 pub use healthz::health_handler;
 pub use metrics::metrics_handler;
 pub use initialization::initialize_service;
 pub use shutdown::shutdown_service;
-pub use basic::{
-    start_basic_http_server_async,
-    start_basic_http_server_with_config_async,
-    request_graceful_shutdown,
-};
 
 /// Core trait for services exposed via standardized HTTP endpoints.
 pub trait RoboTorqService: Send + Sync + 'static {
@@ -256,6 +257,8 @@ pub struct HttpServer<S: RoboTorqService> {
     config: HttpServerConfig,
     /// Readiness flag indicating whether the server is ready to serve traffic.
     ready: Arc<AtomicBool>,
+    // Optional metrics registry for middleware; can be None in minimal setups
+    // (Will be extended in Phase 1 wiring.)
 }
 
 impl<S: RoboTorqService> HttpServer<S> {
@@ -346,10 +349,20 @@ impl<S: RoboTorqService> HttpServer<S> {
 
         // Build the application with routes
         let ready_flag = Arc::clone(&self.ready);
+        // Minimal registry setup for Phase 1; labels can be refined later
+        let registry = std::sync::Arc::new(PrometheusRegistry::new("robotorq", "http", "dev"));
         let app = Router::new()
             .route("/healthz", get(health_handler))
             .route("/readyz", get(move || readyz::readyz_handler(Arc::clone(&ready_flag))))
-            .route(self.config.metrics.0.as_str(), get(metrics_handler))
+            .route(self.config.metrics.0.as_str(), get({
+                let r = std::sync::Arc::clone(&registry);
+                move || async move {
+                    use axum::http::StatusCode;
+                    use crate::util::metrics::MetricsRegistry;
+                    (StatusCode::OK, r.export_text())
+                }
+            }))
+            .layer(HttpMetricsLayer::new(registry))
             .layer(CorsLayer::permissive())
             .with_state(self.service);
 
@@ -524,82 +537,7 @@ impl HttpEndpoint {
     pub fn new<S: Into<String>>(path: S) -> Self { Self(path.into()) }
 }
 
-/// Example usage of the Axum-based HTTP server with RobotGateway.
-///
-/// ```rust,ignore
-/// use std::sync::Arc;
-/// use commons::services::http::{HttpServer, HttpServerConfig};
-/// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
-/// use commons::types::ids::RobotId;
-///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     // Create a service that implements RoboTorqService
-///     let metrics = RobotGatewayMetrics::new("gateway");
-///     let gateway = Arc::new(RobotGateway::single(RobotId::new()).with_metrics(metrics));
-///
-///     // Configure the HTTP server
-///     let config = HttpServerConfig::local_defaults(8080);
-///
-///     // Create and start the server
-///     let server = HttpServer::new(gateway, config);
-///     server.start().await?;
-///
-///     Ok(())
-/// }
-/// ```
-/// Start a minimal HTTP server serving health and metrics endpoints using Axum.
-/// - Health: responds 200 with health status
-/// - Metrics: responds with Prometheus text from MetricsHandler::export_text()
-///
-/// This is a legacy function for backward compatibility - prefer HttpServer for new code.
-///
-/// This function provides a basic HTTP server that serves static health and metrics
-/// responses without requiring a full RoboTorqService implementation. It's useful
-/// for simple monitoring endpoints or as a compatibility layer.
-///
-/// # Arguments
-///
-/// * `handler` - Metrics handler that provides the metrics data
-/// * `service` - HTTP service configuration (address and port)
-/// * `health` - Endpoint path for health checks
-/// * `metrics` - Endpoint path for metrics export
-///
-/// # Returns
-///
-/// Returns `Ok(())` if the server shuts down gracefully, or `Err(error)` if
-/// it fails to start or encounters an unrecoverable error.
-///
-/// # Panics
-///
-/// This method does not panic under normal circumstances. Network binding errors
-/// and HTTP server errors are returned as `InvariantError` results.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use commons::services::http::{HttpService, HttpEndpoint, start_basic_http_server_async};
-/// use commons::util::metrics::MetricsHandler;
-///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     // Before: Metrics handler exists but is not exposed via HTTP
-///     let handler = MetricsHandler::new();
-///     handler.register_counter("requests_total", "Total requests");
-///
-///     let service = HttpService::new("127.0.0.1", 8080);
-///     let health = HttpEndpoint::new("/health");
-///     let metrics = HttpEndpoint::new("/metrics");
-///
-///     // After: HTTP server is running and exposing metrics
-///     // GET http://127.0.0.1:8080/health -> "OK"
-///     // GET http://127.0.0.1:8080/metrics -> Prometheus format metrics
-///     start_basic_http_server_async(handler, service, health, metrics).await?;
-///
-///     Ok(())
-/// }
-/// ```
-
+/// Legacy helpers exist for minimal servers; prefer `HttpServer` for new code.
 /// Configuration for an HTTP server including service details and endpoint paths.
 ///
 /// This struct combines all the configuration needed to start an HTTP server:
@@ -724,90 +662,10 @@ impl HttpServerConfig {
     }
 }
 
-/// Start server using a structured config (async version).
-/// This is a legacy function for backward compatibility - prefer HttpServer for new code.
-///
-/// This function is a convenience wrapper around `start_basic_http_server_async`
-/// that takes a structured `HttpServerConfig` instead of individual parameters.
-///
-/// # Arguments
-///
-/// * `handler` - Metrics handler that provides the metrics data
-/// * `cfg` - Complete HTTP server configuration
-///
-/// # Returns
-///
-/// Returns `Ok(())` if the server shuts down gracefully, or `Err(error)` if
-/// it fails to start or encounters an unrecoverable error.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use commons::services::http::{HttpServerConfig, start_basic_http_server_with_config_async};
-/// use commons::util::metrics::MetricsHandler;
-///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     // Before: Metrics handler and config exist separately
-///     let handler = MetricsHandler::new();
-///     let config = HttpServerConfig::local_defaults(8080);
-///
-///     // After: HTTP server is running with the combined configuration
-///     // The config provides address, port, and endpoint paths
-///     start_basic_http_server_with_config_async(handler, config).await?;
-///
-///     Ok(())
-/// }
-/// ```
 
-/// Gracefully request shutdown by calling the internal `/shutdown` endpoint.
-/// Note: This is a legacy synchronous function. For async code, use proper shutdown signaling.
-///
-/// This function attempts to gracefully shut down a running HTTP server by making
-/// an HTTP request to its `/shutdown` endpoint. This is a simple shutdown mechanism
-/// that works for basic servers but may not be suitable for production use.
-///
-/// # Arguments
-///
-/// * `service` - The HTTP service configuration pointing to the server to shut down
-///
-/// # Returns
-///
-/// Returns `Ok(())` if the shutdown request was sent successfully, or `Err(error)`
-/// if the request failed (e.g., connection refused, network error).
-///
-/// # Panics
-///
-/// This method does not panic under normal circumstances. Network connection errors
-/// are returned as `InvariantError` results.
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use commons::services::http::{HttpService, request_graceful_shutdown};
-/// use std::thread;
-/// use std::time::Duration;
-///
-/// fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     let service = HttpService::new("127.0.0.1", 8080);
-///
-///     // Assume a server is running on port 8080
-///     // Before: Server is running and accepting connections
-///
-///     // After: Shutdown request is sent to the server
-///     // The server should stop accepting new connections and shut down
-///     match request_graceful_shutdown(&service) {
-///         Ok(()) => println!("Shutdown request sent successfully"),
-///         Err(e) => println!("Failed to send shutdown request: {:?}", e),
-///     }
-///
-///     // Give the server time to shut down
-///     thread::sleep(Duration::from_secs(1));
-///
-///     Ok(())
-/// }
-/// ```
-// Legacy helpers moved to `basic` submodule.
+
+
+
 
 #[cfg(test)]
 mod tests {
@@ -857,9 +715,6 @@ mod tests {
         let _service = HttpService::new("127.0.0.1", 0); // Use port 0 for testing
         let _health = HttpEndpoint::new("/health");
         let _metrics = HttpEndpoint::new("/metrics");
-
-        // This would start the server (commented out to avoid actually starting in tests)
-        // start_basic_http_server_async(handler, service, health, metrics).await.unwrap();
 
         // Just verify the handler works
         assert!(!handler.export_text().is_empty());

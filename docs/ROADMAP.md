@@ -1,0 +1,85 @@
+# RoboTorq HTTP Service Template — Roadmap
+
+This roadmap sequences work from the current template to a fully distributed, observable, secure foundation usable by Robot-Gateway, Refinery, Mint, Vault, and future services.
+
+## Goals
+
+- Single persistence strategy across all service types
+- First-class NATS (JetStream) messaging with backpressure
+- Strong observability (Prometheus + Grafana) and error taxonomy
+- Security hooks for AuthN/Z and transport security
+- Extensible template with domain plugins and consistent lifecycle
+
+## Phased Plan
+
+### Phase 1 — Lifecycle, Config, and Observability Baseline
+- Traits: finalize `RoboTorqService` expectations (async init/shutdown, health, metrics).
+- Config: define `RoboTorqConfig` schema and validation (HTTP, NATS, Persistence, Observability, TLS).
+- HTTP: add middleware for request timing, status metrics; configurable CORS; body/timeout limits.
+- Metrics: implement a minimal metrics registry interface and expose common counters/gauges.
+- Docs/CI: `cargo doc`, examples crate, unit/integration tests; add basic Grafana dashboards.
+
+Deliverables:
+- Validated config loader, improved `HttpServer`, middleware, `/metrics` consistency
+- Docs: ARCHITECTURE.md, ROADMAP.md, example service
+
+### Phase 2 — Persistence Strategy (Unified)
+- Choose storage (e.g., Postgres + SQLx) and create a small repository abstraction.
+- Health contributions and migrations; pooling and timeouts.
+- Standardize error mapping from persistence layer to service errors.
+
+Deliverables:
+- Persistence module with migrations, health, examples, tests
+
+### Phase 3 — NATS & JetStream
+- Client abstraction over `async-nats`: connect, publish, subscribe, request/reply.
+- JetStream: idempotent stream/consumer setup utilities.
+- Bounded channel bridge for backpressure between HTTP and NATS workers.
+- Typed envelopes with trace IDs and version; retry/backoff policies.
+- Observability: metrics for NATS ops, queue depths, acks/nacks; health contributions for connection/state.
+
+Deliverables:
+- NATS module, JetStream setup helpers, bounded queues, metrics & health integration
+
+### Phase 4 — Security Hooks
+- AuthN: JWT, API keys, optional mTLS.
+- AuthZ: policy interface with allow/deny decisions; per-route configuration.
+- TLS for HTTP and NATS; secrets management guidelines.
+
+Deliverables:
+- Security middleware, policy traits, configuration, tests
+
+### Phase 5 — Extensibility and Plugins
+- Route registration trait for domain services; health/metrics contributors.
+- Cargo features to include/exclude domain modules (Gateway, Refinery, Mint, Vault).
+
+Deliverables:
+- Plugin architecture, example domain module integrations
+
+### Phase 6 — Distributed Operation Readiness
+- HA configurations: NATS clusters, persistence replication/failover.
+- Graceful shutdown signaling across components; readiness flipping on dependency degradation.
+- Backpressure strategies validated under load; rate limiting and circuit breakers.
+- Advanced dashboards and alerting.
+
+Deliverables:
+- Deployment guides and terraform/scripts; load test results
+
+## Cross-Cutting Standards
+
+- **Subject Naming:** `rtq.<service>.<type>.*` (e.g., `rtq.gateway.cmd.*`, `rtq.mint.tx.*`).
+- **Error Codes:** Stable error categories and codes for programmatic handling.
+- **Tracing:** Propagate trace IDs across HTTP ↔ NATS; standard span names and fields.
+- **Metrics Labels:** `service`, `component`, `version`, `subject` where applicable.
+
+## Try It (Dev Workflow)
+
+1. Run local NATS with JetStream and expose Prometheus/Grafana.
+2. Start a sample service implementing `RoboTorqService`, publish a message, observe metrics.
+3. Flip readiness during init; verify `/readyz` and `/healthz` behavior.
+
+## Decision Log (to fill as we go)
+
+- Persistence choice: TBD (evaluate Postgres vs embedded)
+- AuthN/Z baseline: TBD (start with JWT + policy traits)
+- Tracing sink: TBD (OpenTelemetry/OTLP)

@@ -1,12 +1,193 @@
-//! Prometheus metrics integration helpers.
+//! Metrics abstraction and Prometheus-backed adapter.
 //!
-//! Provides a shared `MetricsHandler` abstraction that owns a Prometheus
-//! registry and convenience functions to register counters, gauges, and
-//! histograms, plus export in text format.
-use prometheus::{Registry, TextEncoder, Encoder, Counter, Gauge, Histogram, HistogramOpts};
-use crate::util::schema::all_schema_versions;
+//! Provides a small, stable interface for counters, gauges, and histograms
+//! so domain code depends only on our trait while the implementation uses
+//! the `prometheus` crate underneath. Text exposition is consumed by the
+//! HTTP `/metrics` handler elsewhere.
+
+use std::time::Duration;
 use std::sync::Arc;
+
+/// Counter interface: monotonic increasing measurement.
+pub trait MetricCounter: Send + Sync {
+    /// Increment by 1.
+    fn inc(&self);
+    /// Add an arbitrary value.
+    fn add(&self, v: f64);
+}
+
+/// Gauge interface: arbitrary up/down measurement.
+pub trait MetricGauge: Send + Sync {
+    /// Set to an exact value.
+    fn set(&self, v: f64);
+    /// Increment by 1.
+    fn inc(&self);
+    /// Decrement by 1.
+    fn dec(&self);
+}
+
+/// Histogram interface: bucketed observations.
+pub trait MetricHistogram: Send + Sync {
+    /// Observe a raw value.
+    fn observe(&self, v: f64);
+    /// Observe a time duration (seconds).
+    fn observe_duration(&self, d: Duration) {
+        self.observe(d.as_secs_f64());
+    }
+}
+use prometheus::{Registry, Encoder, TextEncoder, Opts, CounterVec, GaugeVec, HistogramVec, HistogramOpts};
+// Use fully qualified prometheus types in MetricsHandler to avoid name collisions
+
+/// Metrics registry abstraction: creates metrics and exports text.
+pub trait MetricsRegistry: Send + Sync + 'static {
+    /// Create a counter.
+    fn counter(&self, name: &str, help: &str, labels: &[(&str, &str)]) -> Box<dyn MetricCounter + Send + Sync>;
+    /// Create a gauge.
+    fn gauge(&self, name: &str, help: &str, labels: &[(&str, &str)]) -> Box<dyn MetricGauge + Send + Sync>;
+    /// Create a histogram (optional buckets).
+    fn histogram(&self, name: &str, help: &str, labels: &[(&str, &str)], buckets: Option<Vec<f64>>) -> Box<dyn MetricHistogram + Send + Sync>;
+    /// Export metrics as Prometheus text.
+    fn export_text(&self) -> String;
+}
+
+// --- Prometheus-backed adapter ---
+
+// duplicate import block removed
+
+/// Prometheus-backed implementation of `MetricsRegistry`.
+pub struct PrometheusRegistry {
+    registry: Registry,
+    // Common labels that are injected into all metrics created via this registry
+    common_labels: Vec<(String, String)>,
+}
+
+impl PrometheusRegistry {
+    /// Create a new registry with common labels.
+    pub fn new(service: &str, component: &str, version: &str) -> Self {
+        let registry = Registry::new();
+        let common = vec![
+            ("service".to_string(), service.to_string()),
+            ("component".to_string(), component.to_string()),
+            ("version".to_string(), version.to_string()),
+        ];
+        Self { registry, common_labels: common }
+    }
+
+    fn merged_labels<'a>(&'a self, labels: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
+        let mut out = Vec::with_capacity(self.common_labels.len() + labels.len());
+        for (k, v) in &self.common_labels {
+            out.push((k.as_str(), v.as_str()));
+        }
+        out.extend(labels.iter().copied());
+        out
+    }
+}
+
+struct PromCounter { inner: CounterVec, label_values: Vec<String> }
+struct PromGauge { inner: GaugeVec, label_values: Vec<String> }
+struct PromHistogram { inner: HistogramVec, label_values: Vec<String> }
+struct PromSimpleCounter { inner: prometheus::Counter }
+struct PromSimpleGauge { inner: prometheus::Gauge }
+struct PromSimpleHistogram { inner: prometheus::Histogram }
+
+impl PromCounter {
+    fn vals(&self) -> Vec<&str> { self.label_values.iter().map(|s| s.as_str()).collect() }
+}
+impl MetricCounter for PromCounter {
+    fn inc(&self) { let vals = self.vals(); self.inner.with_label_values(&vals).inc(); }
+    fn add(&self, v: f64) { let vals = self.vals(); self.inner.with_label_values(&vals).inc_by(v); }
+}
+impl MetricCounter for PromSimpleCounter {
+    fn inc(&self) { self.inner.inc(); }
+    fn add(&self, v: f64) { self.inner.inc_by(v); }
+}
+impl PromGauge {
+    fn vals(&self) -> Vec<&str> { self.label_values.iter().map(|s| s.as_str()).collect() }
+}
+impl MetricGauge for PromGauge {
+    fn set(&self, v: f64) { let vals = self.vals(); self.inner.with_label_values(&vals).set(v); }
+    fn inc(&self) { let vals = self.vals(); self.inner.with_label_values(&vals).inc(); }
+    fn dec(&self) { let vals = self.vals(); self.inner.with_label_values(&vals).dec(); }
+}
+impl MetricGauge for PromSimpleGauge {
+    fn set(&self, v: f64) { self.inner.set(v); }
+    fn inc(&self) { self.inner.inc(); }
+    fn dec(&self) { self.inner.dec(); }
+}
+impl PromHistogram {
+    fn vals(&self) -> Vec<&str> { self.label_values.iter().map(|s| s.as_str()).collect() }
+}
+impl MetricHistogram for PromHistogram {
+    fn observe(&self, v: f64) { let vals = self.vals(); self.inner.with_label_values(&vals).observe(v); }
+}
+impl MetricHistogram for PromSimpleHistogram {
+    fn observe(&self, v: f64) { self.inner.observe(v); }
+}
+
+impl MetricsRegistry for PrometheusRegistry {
+    fn counter(&self, name: &str, help: &str, labels: &[(&str, &str)]) -> Box<dyn MetricCounter + Send + Sync> {
+        let merged = self.merged_labels(labels);
+        if merged.is_empty() {
+            let c = prometheus::Counter::new(name, help).expect("counter");
+            self.registry.register(Box::new(c.clone())).ok();
+            Box::new(PromSimpleCounter { inner: c })
+        } else {
+            let label_keys: Vec<&str> = merged.iter().map(|(k, _)| *k).collect();
+            let label_values: Vec<String> = merged.iter().map(|(_, v)| v.to_string()).collect();
+            let vec = CounterVec::new(Opts::new(name, help), &label_keys).expect("counter vec");
+            self.registry.register(Box::new(vec.clone())).ok();
+            Box::new(PromCounter { inner: vec, label_values })
+        }
+    }
+
+    fn gauge(&self, name: &str, help: &str, labels: &[(&str, &str)]) -> Box<dyn MetricGauge + Send + Sync> {
+        let merged = self.merged_labels(labels);
+        if merged.is_empty() {
+            let g = prometheus::Gauge::new(name, help).expect("gauge");
+            self.registry.register(Box::new(g.clone())).ok();
+            Box::new(PromSimpleGauge { inner: g })
+        } else {
+            let label_keys: Vec<&str> = merged.iter().map(|(k, _)| *k).collect();
+            let label_values: Vec<String> = merged.iter().map(|(_, v)| v.to_string()).collect();
+            let vec = GaugeVec::new(Opts::new(name, help), &label_keys).expect("gauge vec");
+            self.registry.register(Box::new(vec.clone())).ok();
+            Box::new(PromGauge { inner: vec, label_values })
+        }
+    }
+
+    fn histogram(&self, name: &str, help: &str, labels: &[(&str, &str)], buckets: Option<Vec<f64>>) -> Box<dyn MetricHistogram + Send + Sync> {
+        let merged = self.merged_labels(labels);
+        let mut opts = HistogramOpts::new(name, help);
+        if let Some(b) = buckets { opts = opts.buckets(b.to_vec()); }
+        if merged.is_empty() {
+            let h = prometheus::Histogram::with_opts(opts).expect("histogram");
+            self.registry.register(Box::new(h.clone())).ok();
+            Box::new(PromSimpleHistogram { inner: h })
+        } else {
+            let label_keys: Vec<&str> = merged.iter().map(|(k, _)| *k).collect();
+            let label_values: Vec<String> = merged.iter().map(|(_, v)| v.to_string()).collect();
+            let vec = HistogramVec::new(opts, &label_keys).expect("histogram vec");
+            self.registry.register(Box::new(vec.clone())).ok();
+            Box::new(PromHistogram { inner: vec, label_values })
+        }
+    }
+
+    fn export_text(&self) -> String {
+        let mf = self.registry.gather();
+        let mut buf = Vec::new();
+        let enc = TextEncoder::new();
+        enc.encode(&mf, &mut buf).ok();
+        String::from_utf8(buf).unwrap_or_default()
+    }
+}
+
+// Prometheus metrics integration helpers.
+//
+// Provides a shared `MetricsHandler` abstraction that owns a Prometheus
+// registry and convenience functions to register counters, gauges, and
+// histograms, plus export in text format.
 use crate::util::error::prometheus_error::PrometheusError;
+use crate::util::schema::all_schema_versions;
 
 /// Core metrics handler: owns the Prometheus registry and provides helpers.
 /// 
@@ -65,7 +246,7 @@ impl MetricsHandler {
     /// let gauges = handler.register_schema_version_gauges("commons");
     /// // Gauges are now registered and set to current schema versions
     /// ```
-    pub fn register_schema_version_gauges(&self, prefix: &str) -> Vec<Gauge> {
+    pub fn register_schema_version_gauges(&self, prefix: &str) -> Vec<prometheus::Gauge> {
         fn to_snake(name: &str) -> String {
             let mut out = String::with_capacity(name.len() * 2);
             for (i, ch) in name.chars().enumerate() {
@@ -108,7 +289,7 @@ impl MetricsHandler {
     /// // Gauges are now registered and set to current schema versions
     /// # Ok::<(), commons::util::error::prometheus_error::PrometheusError>(())
     /// ```
-    pub fn register_schema_version_gauges_result(&self, prefix: &str) -> Result<Vec<Gauge>, PrometheusError> {
+    pub fn register_schema_version_gauges_result(&self, prefix: &str) -> Result<Vec<prometheus::Gauge>, PrometheusError> {
         fn to_snake(name: &str) -> String {
             let mut out = String::with_capacity(name.len() * 2);
             for (i, ch) in name.chars().enumerate() {
@@ -158,8 +339,8 @@ impl MetricsHandler {
     /// // or increment by a specific amount
     /// counter.inc_by(5.0);
     /// ```
-    pub fn register_counter(&self, name: &str, help: &str) -> Counter {
-        let c = Counter::new(name, help).expect("counter");
+    pub fn register_counter(&self, name: &str, help: &str) -> prometheus::Counter {
+        let c = prometheus::Counter::new(name, help).expect("counter");
         self.registry.register(Box::new(c.clone())).ok();
         c
     }
@@ -184,8 +365,8 @@ impl MetricsHandler {
     /// counter.inc();
     /// # Ok::<(), commons::util::error::prometheus_error::PrometheusError>(())
     /// ```
-    pub fn register_counter_result(&self, name: &str, help: &str) -> Result<Counter, PrometheusError> {
-        let c = Counter::new(name, help)?;
+    pub fn register_counter_result(&self, name: &str, help: &str) -> Result<prometheus::Counter, PrometheusError> {
+        let c = prometheus::Counter::new(name, help)?;
         self.registry.register(Box::new(c.clone()))?;
         Ok(c)
     }
@@ -216,8 +397,8 @@ impl MetricsHandler {
     /// // later, decrease connections
     /// gauge.set(7.0);
     /// ```
-    pub fn register_gauge(&self, name: &str, help: &str) -> Gauge {
-        let g = Gauge::new(name, help).expect("gauge");
+    pub fn register_gauge(&self, name: &str, help: &str) -> prometheus::Gauge {
+        let g = prometheus::Gauge::new(name, help).expect("gauge");
         self.registry.register(Box::new(g.clone())).ok();
         g
     }
@@ -242,8 +423,8 @@ impl MetricsHandler {
     /// gauge.set(10.0);
     /// # Ok::<(), commons::util::error::prometheus_error::PrometheusError>(())
     /// ```
-    pub fn register_gauge_result(&self, name: &str, help: &str) -> Result<Gauge, PrometheusError> {
-        let g = Gauge::new(name, help)?;
+    pub fn register_gauge_result(&self, name: &str, help: &str) -> Result<prometheus::Gauge, PrometheusError> {
+        let g = prometheus::Gauge::new(name, help)?;
         self.registry.register(Box::new(g.clone()))?;
         Ok(g)
     }
@@ -274,8 +455,8 @@ impl MetricsHandler {
     /// hist.observe(0.5);
     /// hist.observe(2.0);
     /// ```
-    pub fn register_histogram(&self, name: &str, help: &str, buckets: &[f64]) -> Histogram {
-        let h = Histogram::with_opts(HistogramOpts::new(name, help).buckets(buckets.to_vec())).expect("histogram");
+    pub fn register_histogram(&self, name: &str, help: &str, buckets: &[f64]) -> prometheus::Histogram {
+        let h = prometheus::Histogram::with_opts(HistogramOpts::new(name, help).buckets(buckets.to_vec())).expect("histogram");
         self.registry.register(Box::new(h.clone())).ok();
         h
     }
@@ -302,8 +483,8 @@ impl MetricsHandler {
     /// hist.observe(0.5);
     /// # Ok::<(), commons::util::error::prometheus_error::PrometheusError>(())
     /// ```
-    pub fn register_histogram_result(&self, name: &str, help: &str, buckets: &[f64]) -> Result<Histogram, PrometheusError> {
-        let h = Histogram::with_opts(HistogramOpts::new(name, help).buckets(buckets.to_vec()))?;
+    pub fn register_histogram_result(&self, name: &str, help: &str, buckets: &[f64]) -> Result<prometheus::Histogram, PrometheusError> {
+        let h = prometheus::Histogram::with_opts(HistogramOpts::new(name, help).buckets(buckets.to_vec()))?;
         self.registry.register(Box::new(h.clone()))?;
         Ok(h)
     }
@@ -330,7 +511,7 @@ impl MetricsHandler {
     /// // on error
     /// err_counter.inc();
     /// ```
-    pub fn register_error_counter(&self, name: &str, help: &str) -> Counter {
+    pub fn register_error_counter(&self, name: &str, help: &str) -> prometheus::Counter {
         self.register_counter(&format!("{}_errors_total", name), help)
     }
 
@@ -354,7 +535,7 @@ impl MetricsHandler {
     /// err_counter.inc();
     /// # Ok::<(), commons::util::error::prometheus_error::PrometheusError>(())
     /// ```
-    pub fn register_error_counter_result(&self, name: &str, help: &str) -> Result<Counter, PrometheusError> {
+    pub fn register_error_counter_result(&self, name: &str, help: &str) -> Result<prometheus::Counter, PrometheusError> {
         self.register_counter_result(&format!("{}_errors_total", name), help)
     }
 
@@ -381,7 +562,7 @@ impl MetricsHandler {
     /// // later
     /// batch_gauge.set(30.0);
     /// ```
-    pub fn register_batch_size_gauge(&self, name: &str, help: &str) -> Gauge {
+    pub fn register_batch_size_gauge(&self, name: &str, help: &str) -> prometheus::Gauge {
         self.register_gauge(&format!("{}_batch_size", name), help)
     }
 
@@ -405,7 +586,7 @@ impl MetricsHandler {
     /// batch_gauge.set(50.0);
     /// # Ok::<(), commons::util::error::prometheus_error::PrometheusError>(())
     /// ```
-    pub fn register_batch_size_gauge_result(&self, name: &str, help: &str) -> Result<Gauge, PrometheusError> {
+    pub fn register_batch_size_gauge_result(&self, name: &str, help: &str) -> Result<prometheus::Gauge, PrometheusError> {
         self.register_gauge_result(&format!("{}_batch_size", name), help)
     }
 
@@ -431,7 +612,7 @@ impl MetricsHandler {
     /// proc_hist.observe(0.05);
     /// proc_hist.observe(0.2);
     /// ```
-    pub fn register_processing_time_histogram(&self, name: &str, help: &str) -> Histogram {
+    pub fn register_processing_time_histogram(&self, name: &str, help: &str) -> prometheus::Histogram {
         let buckets = [0.001, 0.01, 0.1, 1.0, 10.0]; // seconds
         self.register_histogram(&format!("{}_processing_time_seconds", name), help, &buckets)
     }
@@ -456,7 +637,7 @@ impl MetricsHandler {
     /// proc_hist.observe(0.05);
     /// # Ok::<(), commons::util::error::prometheus_error::PrometheusError>(())
     /// ```
-    pub fn register_processing_time_histogram_result(&self, name: &str, help: &str) -> Result<Histogram, PrometheusError> {
+    pub fn register_processing_time_histogram_result(&self, name: &str, help: &str) -> Result<prometheus::Histogram, PrometheusError> {
         let buckets = [0.001, 0.01, 0.1, 1.0, 10.0]; // seconds
         self.register_histogram_result(&format!("{}_processing_time_seconds", name), help, &buckets)
     }
