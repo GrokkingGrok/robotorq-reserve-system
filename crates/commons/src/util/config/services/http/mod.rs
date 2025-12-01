@@ -365,6 +365,7 @@ fn default_health_endpoint_config() -> EndpointConfig {
     }
 }
 
+/// Default metrics endpoint config used by RoboTorq HTTP services.
 fn default_metrics_endpoint_config() -> EndpointConfig {
     EndpointConfig {
         path: default_metrics_endpoint_path(),
@@ -372,4 +373,5 @@ fn default_metrics_endpoint_config() -> EndpointConfig {
     }
 }
 
+/// Default metrics endpoint path exposed to Prometheus.
 fn default_metrics_endpoint_path() -> String { "/metrics".to_string() }
