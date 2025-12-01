@@ -9,6 +9,7 @@ use commons::{
     services::http::{HttpServerConfig, RoboTorqService},
     util::error::InvariantError,
     util::metrics::{MetricCounter, MetricsRegistry, PrometheusRegistry},
+    services::http::label_source::LabelSet,
 };
 
 /// Lightweight service used for playground demos.
@@ -22,8 +23,8 @@ pub struct SandboxService {
 
 impl SandboxService {
     /// Build the sandbox service and register the health counter.
-    pub fn new(http_config: HttpServerConfig) -> Self {
-        let metrics = Arc::new(PrometheusRegistry::new("sandbox", "playground", "dev"));
+    pub fn new(http_config: HttpServerConfig, labels: &LabelSet) -> Self {
+        let metrics = Arc::new(PrometheusRegistry::new(&labels.service, &labels.component, &labels.version));
         let health_checks = metrics.counter(
             "sandbox_health_checks_total",
             "Number of sandbox health checks",

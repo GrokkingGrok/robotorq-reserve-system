@@ -392,18 +392,25 @@ impl<S: RoboTorqService> HttpServer<S> {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn start(self, config: &RoboTorqConfig) -> Result<(), InvariantError> {
+    pub async fn start(mut self, config: &RoboTorqConfig) -> Result<(), InvariantError> {
         // Initialize the service
         {
             let mut service = self.service.lock().await;
-            if let Some(registry) = &self.config.metrics_registry {
-                let labels = build_label_set(config);
-                let ctx = ServiceMetricsContext::new(
-                    std::sync::Arc::clone(registry),
-                    labels,
-                );
-                service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
-            }
+            // Ensure a metrics registry exists; create one with config-derived labels if missing
+            let labels = build_label_set(config);
+            let registry_arc: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = if let Some(r) = &self.config.metrics_registry {
+                std::sync::Arc::clone(r)
+            } else {
+                let r: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = std::sync::Arc::new(crate::util::metrics::PrometheusRegistry::new(
+                    &labels.service,
+                    &labels.component,
+                    &labels.version,
+                ));
+                self.config.metrics_registry = Some(std::sync::Arc::clone(&r));
+                r
+            };
+            let ctx = ServiceMetricsContext::new(std::sync::Arc::clone(&registry_arc), labels);
+            service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
             if let Err(err) = service.initialize(config).await {
                 tracing::warn!(error = ?err, "service initialize failed, continuing");
             }
@@ -427,47 +434,59 @@ impl<S: RoboTorqService> HttpServer<S> {
     /// This convenience method keeps callers clean by loading `RoboTorqConfig`
     /// within commons and driving the full lifecycle. Errors during
     /// initialization are logged and the server continues, per policy.
-    pub async fn start_autoload(self) -> Result<(), InvariantError> {
+    pub async fn start_autoload(mut self) -> Result<(), InvariantError> {
         // Initialize with autoloaded config
         {
             let mut service = self.service.lock().await;
             match load_and_initialize_service(&mut *service).await {
                 Ok(cfg) => {
-                    if let Some(registry) = &self.config.metrics_registry {
-                        let labels = build_label_set(&cfg);
-                        let ctx = ServiceMetricsContext::new(
-                            std::sync::Arc::clone(registry),
-                            labels,
-                        );
-                        service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
-                    }
+                    let labels = build_label_set(&cfg);
+                    let registry_arc: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = if let Some(r) = &self.config.metrics_registry {
+                        std::sync::Arc::clone(r)
+                    } else {
+                        let r: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = std::sync::Arc::new(crate::util::metrics::PrometheusRegistry::new(
+                            &labels.service,
+                            &labels.component,
+                            &labels.version,
+                        ));
+                        self.config.metrics_registry = Some(std::sync::Arc::clone(&r));
+                        r
+                    };
+                    let ctx = ServiceMetricsContext::new(std::sync::Arc::clone(&registry_arc), labels);
+                    service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
                 }
                 Err(err) => {
                     tracing::warn!(error = ?err, "service initialize failed, continuing");
-                    if let Some(registry) = &self.config.metrics_registry {
-                        let cfg = crate::util::config::load_robotorq_config(None).unwrap_or_else(|_| {
-                            // Fallback to minimal config if loading fails
-                            crate::util::config::RoboTorqConfig {
-                                schema_version: crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION,
-                                mode: crate::util::config::Mode::Production,
-                                simulation: Default::default(),
-                                ports: crate::util::config::load_ports_config_from_default(),
-                                http: Default::default(),
-                                nats: Default::default(),
-                                persistence: Default::default(),
-                                observability: Default::default(),
-                                security: Default::default(),
-                                crypto: Default::default(),
-                                economic: Default::default(),
-                            }
-                        });
-                        let labels = build_label_set(&cfg);
-                        let ctx = ServiceMetricsContext::new(
-                            std::sync::Arc::clone(registry),
-                            labels,
-                        );
-                        service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
-                    }
+                    // Build minimal labels and registry in failure path as well
+                    let cfg = crate::util::config::load_robotorq_config(None).unwrap_or_else(|_| {
+                        crate::util::config::RoboTorqConfig {
+                            schema_version: crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION,
+                            mode: crate::util::config::Mode::Production,
+                            simulation: Default::default(),
+                            ports: crate::util::config::load_ports_config_from_default(),
+                            http: Default::default(),
+                            nats: Default::default(),
+                            persistence: Default::default(),
+                            observability: Default::default(),
+                            security: Default::default(),
+                            crypto: Default::default(),
+                            economic: Default::default(),
+                        }
+                    });
+                    let labels = build_label_set(&cfg);
+                    let registry_arc: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = if let Some(r) = &self.config.metrics_registry {
+                        std::sync::Arc::clone(r)
+                    } else {
+                        let r: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = std::sync::Arc::new(crate::util::metrics::PrometheusRegistry::new(
+                            &labels.service,
+                            &labels.component,
+                            &labels.version,
+                        ));
+                        self.config.metrics_registry = Some(std::sync::Arc::clone(&r));
+                        r
+                    };
+                    let ctx = ServiceMetricsContext::new(std::sync::Arc::clone(&registry_arc), labels);
+                    service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
                 }
             }
         }
@@ -533,6 +552,9 @@ impl<S: RoboTorqService> HttpServer<S> {
             app = app.route_layer(middleware::HttpMetricsLayer::new(std::sync::Arc::clone(
                 registry,
             )));
+            // Attach HTTP endpoint-specific metrics (e.g., /healthz)
+            let healthz_metrics = std::sync::Arc::new(healthz::HealthzMetrics::new(std::sync::Arc::clone(registry)));
+            app = app.layer(Extension(healthz_metrics));
         }
 
         // Create listener

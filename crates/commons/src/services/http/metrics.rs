@@ -49,14 +49,10 @@ pub async fn metrics_handler<S: RoboTorqService>(
     State(service): State<Arc<Mutex<S>>>,
     maybe_registry: Option<Extension<std::sync::Arc<dyn crate::util::metrics::MetricsRegistry>>>,
 ) -> impl IntoResponse {
-    // Prefer a shared registry when present (middleware/populated registry),
-    // otherwise fall back to the service's own exporter.
-    let body = if let Some(Extension(reg)) = maybe_registry {
-        reg.export_text()
-    } else {
-        let svc = service.lock().await;
-        svc.export_metrics()
-    };
+    let svc = service.lock().await;
+    let service_metrics = svc.export_metrics();
+    let registry_metrics = maybe_registry.map(|Extension(reg)| reg.export_text()).unwrap_or_default();
+    let body = format!("{}{}", service_metrics, registry_metrics);
 
     (
         StatusCode::OK,
