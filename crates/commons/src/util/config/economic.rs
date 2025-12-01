@@ -80,7 +80,7 @@ pub struct EconomicConfig {
 
     /// Demurrage model configuration.
     ///
-    /// Defines how token value decays over time to encourage circulation
+    /// Defines how idle RoboTorq is collected to encourage circulation
     /// and prevent hoarding.
     #[serde(default)]
     pub demurrage_model: DemurrageModel,
