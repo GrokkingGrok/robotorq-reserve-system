@@ -33,6 +33,7 @@
 //! and testing purposes only.
 
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 /// Configuration parameters for simulation mode.
 ///
@@ -127,5 +128,49 @@ impl Default for Simulation {
             robot_gateway_robot_count_growth_rate: None,
             robot_gateway_max_robot_count: None,
         }
+    }
+}
+
+/// Sleep with time dilation for simulation mode.
+///
+/// This function adjusts sleep duration based on the simulation speedup factor.
+/// In simulation mode with speedup enabled, the actual sleep time is reduced
+/// to accelerate testing while maintaining logical timing.
+///
+/// # Arguments
+///
+/// * `duration` - The logical duration to sleep (in simulated time)
+/// * `config` - Simulation configuration to determine speedup
+///
+/// # Examples
+///
+/// ```rust
+/// use std::time::Duration;
+/// use commons::util::config::Simulation;
+/// use commons::util::config::sim_sleep;
+///
+/// # let rt = tokio::runtime::Runtime::new().unwrap();
+/// # rt.block_on(async {
+/// let config = Simulation {
+///     enabled: true,
+///     speedup: Some(10.0),
+///     ..Default::default()
+/// };
+///
+/// // Sleep for 1 second of simulated time (actually 100ms real time)
+/// sim_sleep(Duration::from_secs(1), &config).await;
+/// # });
+/// ```
+pub async fn sim_sleep(duration: Duration, config: &Simulation) {
+    if config.enabled && config.speedup.is_some() {
+        let speedup = config.speedup.unwrap();
+        if speedup > 1.0 {
+            let adjusted_duration = duration.div_f64(speedup);
+            tokio::time::sleep(adjusted_duration).await;
+        } else {
+            tokio::time::sleep(duration).await;
+        }
+    } else {
+        tokio::time::sleep(duration).await;
     }
 }

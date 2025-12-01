@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::http::{HttpConfig, CorsConfig};
+/// use commons::util::config::services::http::{HttpConfig, CorsConfig};
 ///
 /// // Development configuration with permissive CORS
 /// let dev_config = HttpConfig {
@@ -128,7 +128,7 @@ impl Default for HttpConfig {
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::http::CorsConfig;
+/// use commons::util::config::services::http::CorsConfig;
 ///
 /// // Permissive CORS for development
 /// let dev_cors = CorsConfig {
@@ -229,7 +229,7 @@ impl Default for CorsConfig {
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::http::EndpointConfig;
+/// use commons::util::config::services::http::EndpointConfig;
 ///
 /// // Standard health check endpoint
 /// let health_endpoint = EndpointConfig {

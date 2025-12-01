@@ -53,9 +53,17 @@
 pub mod mode;
 pub mod simulation;
 pub mod ports;
-pub mod http;
-pub mod nats;
-pub mod persistence;
+// Nested service-specific config modules live under `services/`
+/// Service-specific configuration modules.
+///
+/// This namespace groups configuration for transport adapters and
+/// messaging backbones used by services (e.g., HTTP and NATS).
+pub mod services {
+    pub mod http;
+    pub mod nats;
+}
+// Persistence config lives under `persistance/` (intentional spelling per repo layout)
+pub mod persistance;
 pub mod observability;
 pub mod security;
 pub mod crypto;
@@ -64,11 +72,12 @@ pub mod economic;
 // Re-export common config types for ergonomic imports
 pub use mode::Mode;
 pub use simulation::Simulation;
+pub use simulation::sim_sleep;
 pub use ports::PortsConfig;
 pub use ports::load_ports_config_from_default;
-pub use http::HttpConfig;
-pub use nats::NatsConfig;
-pub use persistence::PersistenceConfig;
+pub use services::http::HttpConfig;
+pub use services::nats::NatsConfig;
+pub use persistance::PersistenceConfig;
 pub use observability::ObservabilityConfig;
 pub use security::SecurityConfig;
 pub use crypto::CryptoConfig;

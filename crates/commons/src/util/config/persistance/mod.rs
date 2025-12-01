@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::persistence::{PersistenceConfig, PersistenceBackend};
+/// use commons::util::config::persistance::{PersistenceConfig, PersistenceBackend};
 ///
 /// // Development SQLite configuration
 /// let dev_config = PersistenceConfig {
@@ -142,7 +142,7 @@ impl Default for PersistenceConfig {
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::persistence::PersistenceBackend;
+/// use commons::util::config::persistance::PersistenceBackend;
 ///
 /// // PostgreSQL for production with strong consistency
 /// let postgres = PersistenceBackend::Postgres;
@@ -212,7 +212,7 @@ impl Default for BackendSpecificConfig {
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::persistence::{PostgresConfig, PostgresSslMode};
+/// use commons::util::config::persistance::{PostgresConfig, PostgresSslMode};
 ///
 /// // Production PostgreSQL configuration
 /// let prod_config = PostgresConfig {
@@ -266,7 +266,7 @@ impl Default for PostgresConfig {
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::persistence::PostgresSslMode;
+/// use commons::util::config::persistance::PostgresSslMode;
 ///
 /// // Require SSL for all connections (production)
 /// let require_ssl = PostgresSslMode::Require;
@@ -306,7 +306,7 @@ impl Default for PostgresSslMode {
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::persistence::{SqliteConfig, SqliteJournalMode, SqliteSynchronousMode};
+/// use commons::util::config::persistance::{SqliteConfig, SqliteJournalMode, SqliteSynchronousMode};
 ///
 /// // High-performance SQLite configuration
 /// let perf_config = SqliteConfig {
@@ -382,7 +382,7 @@ impl Default for SqliteConfig {
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::persistence::SqliteJournalMode;
+/// use commons::util::config::persistance::SqliteJournalMode;
 ///
 /// // Write-ahead logging (recommended for concurrent access)
 /// let wal = SqliteJournalMode::Wal;
@@ -422,7 +422,7 @@ impl Default for SqliteJournalMode {
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::persistence::SqliteSynchronousMode;
+/// use commons::util::config::persistance::SqliteSynchronousMode;
 ///
 /// // Full synchronization (maximum durability, slowest)
 /// let full = SqliteSynchronousMode::Full;

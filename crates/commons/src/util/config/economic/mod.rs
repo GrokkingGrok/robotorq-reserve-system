@@ -48,17 +48,14 @@ use serde::{Deserialize, Serialize};
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::economic::{EconomicConfig, DemurrageModel};
+/// use commons::util::config::economic::{EconomicConfig, DemurrageModel, UbdConfig};
 ///
 /// // Production economic configuration
 /// let prod_economic = EconomicConfig {
 ///     joule_per_ingot: 3600,  // Economic invariant
 ///     ingots_per_certificate: 1000,  // Economic invariant
-///     demurrage_model: DemurrageModel::Continuous {
-///         annual_rate: 0.02,  // 2% annual demurrage
-///     },
-///     ubd_enabled: true,
-///     ubd_interval_hours: 24,  // Daily UBD
+///     demurrage_model: DemurrageModel::Continuous { annual_rate: 0.02 },
+///     ubd: UbdConfig { enabled: true, interval_hours: 24, ..Default::default() },
 ///     ..Default::default()
 /// };
 /// ```

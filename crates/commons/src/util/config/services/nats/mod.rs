@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::nats::{NatsConfig, NatsAuthConfig, NatsAuthMethod};
+/// use commons::util::config::services::nats::{NatsConfig, NatsAuthConfig, NatsAuthMethod};
 ///
 /// // Development single-server configuration
 /// let dev_config = NatsConfig {
@@ -124,7 +124,7 @@ impl Default for NatsConfig {
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::nats::{NatsAuthConfig, NatsAuthMethod};
+/// use commons::util::config::services::nats::{NatsAuthConfig, NatsAuthMethod};
 ///
 /// // No authentication (development)
 /// let no_auth = NatsAuthConfig {
@@ -196,7 +196,7 @@ impl Default for NatsAuthConfig {
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::nats::NatsAuthMethod;
+/// use commons::util::config::services::nats::NatsAuthMethod;
 ///
 /// // No authentication required (insecure, development only)
 /// let none = NatsAuthMethod::None;
@@ -236,7 +236,7 @@ impl Default for NatsAuthMethod {
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::nats::{JetStreamConfig, StreamDefaultsConfig, ConsumerDefaultsConfig};
+/// use commons::util::config::services::nats::{JetStreamConfig, StreamDefaultsConfig, ConsumerDefaultsConfig};
 ///
 /// // Basic JetStream configuration
 /// let basic_jetstream = JetStreamConfig {
@@ -373,7 +373,7 @@ impl Default for ConsumerDefaultsConfig {
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::nats::StreamRetentionPolicy;
+/// use commons::util::config::services::nats::StreamRetentionPolicy;
 ///
 /// // Keep messages until stream limits are reached
 /// let limits = StreamRetentionPolicy::Limits;
@@ -408,7 +408,7 @@ impl Default for StreamRetentionPolicy {
 /// # Examples
 ///
 /// ```rust
-/// use commons::util::config::nats::StreamStorageType;
+/// use commons::util::config::services::nats::StreamStorageType;
 ///
 /// // File-based storage (persistent, survives restarts)
 /// let file_storage = StreamStorageType::File;

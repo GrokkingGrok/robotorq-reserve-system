@@ -85,7 +85,9 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// // - Ready to start processing
     /// # Ok::<(), commons::util::error::InvariantError>(())
     /// ```
-    async fn initialize(&mut self, config: &RoboTorqConfig) -> Result<(), InvariantError>;
+    async fn initialize(&mut self, _config: &RoboTorqConfig) -> Result<(), InvariantError> {
+        Ok(())
+    }
 
     /// Transition from initialized to running.
     ///
@@ -125,7 +127,9 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// // - Ready to serve clients
     /// # Ok::<(), commons::util::error::InvariantError>(())
     /// ```
-    async fn start(&self) -> Result<(), InvariantError>;
+    async fn start(&self) -> Result<(), InvariantError> {
+        Ok(())
+    }
 
     /// Gracefully stop processing while keeping resources allocated.
     ///
@@ -165,7 +169,9 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// // - Can be restarted quickly
     /// # Ok::<(), commons::util::error::InvariantError>(())
     /// ```
-    async fn stop(&self) -> Result<(), InvariantError>;
+    async fn stop(&self) -> Result<(), InvariantError> {
+        Ok(())
+    }
 
     /// Final cleanup; release all resources.
     ///
@@ -206,7 +212,9 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// // - Service cannot be restarted
     /// # Ok::<(), commons::util::error::InvariantError>(())
     /// ```
-    async fn shutdown(&self) -> Result<(), InvariantError>;
+    async fn shutdown(&self) -> Result<(), InvariantError> {
+        Ok(())
+    }
 }
 
 /// Lightweight Axum server exposing standardized endpoints for a service.
@@ -373,7 +381,10 @@ impl<S: RoboTorqService> HttpServer<S> {
         }
 
         if let Some(timeout_secs) = self.config.timeout_seconds {
-            app = app.layer(TimeoutLayer::new(std::time::Duration::from_secs(timeout_secs)));
+            app = app.layer(TimeoutLayer::with_status_code(
+                axum::http::StatusCode::REQUEST_TIMEOUT,
+                std::time::Duration::from_secs(timeout_secs),
+            ));
         }
 
         if self.config.cors_permissive {

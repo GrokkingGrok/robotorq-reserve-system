@@ -30,35 +30,10 @@ use thiserror::Error;
 
 /// Errors that occur during token validation and processing.
 ///
-/// These errors represent violations of token specification invariants
+//// These errors represent violations of token specification invariants
 /// that would compromise the economic integrity of the RoboTorq system.
 #[derive(Debug, Error)]
 pub enum TokenError {
-    /// The energy value is negative, violating conservation of energy.
-    ///
-    /// Energy values must always be positive as they represent actual
-    /// electrical work performed by robots. Negative energy would
-    /// violate physical laws and economic invariants.
-    ///
-    /// # Parameters
-    /// - `f64`: The invalid (negative) energy value
-    ///
-    /// # Causes
-    /// - Calculation errors in energy accounting
-    /// - Invalid sensor readings
-    /// - Data corruption during transmission
-    ///
-    /// # Examples
-    /// ```rust
-    /// # use commons::util::error::token_error::TokenError;
-    /// let error = TokenError::NegativeEnergy(-5.0);
-    /// if let TokenError::NegativeEnergy(value) = error {
-    ///     assert_eq!(value, -5.0);
-    /// }
-    /// ```
-    #[error("Energy value must be positive: {0}")]
-    NegativeEnergy(f64),
-
     /// The joule count is zero or negative.
     ///
     /// Tokens must represent positive work performed. Zero joules would
