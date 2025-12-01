@@ -97,11 +97,11 @@ pub struct HttpConfig {
     pub cors: CorsConfig,
 
     /// Health check endpoint configuration.
-    #[serde(default)]
+    #[serde(default = "default_health_endpoint_config")]
     pub health: EndpointConfig,
 
     /// Metrics endpoint configuration.
-    #[serde(default)]
+    #[serde(default = "default_metrics_endpoint_config")]
     pub metrics: EndpointConfig,
 }
 
@@ -114,8 +114,8 @@ impl Default for HttpConfig {
             request_timeout_seconds: default_request_timeout_seconds(),
             max_body_size_bytes: default_max_body_size_bytes(),
             cors: CorsConfig::default(),
-            health: EndpointConfig::default(),
-            metrics: EndpointConfig::default(),
+            health: default_health_endpoint_config(),
+            metrics: default_metrics_endpoint_config(),
         }
     }
 }
@@ -357,3 +357,19 @@ fn default_endpoint_path() -> String { "/health".to_string() }
 /// Returns `true` to enable endpoints by default, ensuring monitoring
 /// and health check capabilities are available.
 fn default_endpoint_enabled() -> bool { true }
+
+fn default_health_endpoint_config() -> EndpointConfig {
+    EndpointConfig {
+        path: default_endpoint_path(),
+        enabled: default_endpoint_enabled(),
+    }
+}
+
+fn default_metrics_endpoint_config() -> EndpointConfig {
+    EndpointConfig {
+        path: default_metrics_endpoint_path(),
+        enabled: default_endpoint_enabled(),
+    }
+}
+
+fn default_metrics_endpoint_path() -> String { "/metrics".to_string() }
