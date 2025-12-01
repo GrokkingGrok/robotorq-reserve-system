@@ -2,7 +2,7 @@
 //!
 //! These helpers make it easy to hook a service `stop`/`shutdown` sequence into
 //! a signal such as Ctrl+C so the service can release resources cleanly.
-use crate::services::http::RoboTorqService;
+use super::robotorq_service;
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -13,24 +13,23 @@ use tracing::{info, warn};
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use std::sync::Arc;
-/// use commons::services::http::{HttpServer, HttpServerConfig, RoboTorqService, ctrl_c_signal};
-///
+/// use tokio::sync::Mutex;
+/// use commons::services::robotorq_service::{HttpServer, HttpServerConfig, robotorq_service};
+/// use commons::services::robotorq_service::shutdown::ctrl_c_signal;
+/// use commons::util::config::load_robotorq_config;
+/// use commons::util::error::InvariantError;
 /// struct MyService;
-/// impl RoboTorqService for MyService {
-///     fn health_check(&self) -> Result<String, commons::util::error::InvariantError> {
-///         Ok("ok".to_string())
-///     }
-///
-///     fn export_metrics(&self) -> String { String::new() }
+/// impl robotorq_service for MyService {}
+/// #[tokio::main]
+/// async fn main() -> Result<(), InvariantError> {
+///     let svc = Arc::new(Mutex::new(MyService));
+///     let _server = HttpServer::new(svc, HttpServerConfig::local_defaults(0));
+///     let _cfg = load_robotorq_config(None).unwrap();
+///     let _shutdown_future = ctrl_c_signal();
+///     Ok(())
 /// }
-///
-/// let svc = Arc::new(MyService);
-/// let config = HttpServerConfig::local_defaults(8080);
-/// HttpServer::new(svc, config)
-///     .start_with_shutdown(ctrl_c_signal())
-///     .await?;
 /// ```
 pub async fn ctrl_c_signal() {
     tokio::signal::ctrl_c()
@@ -46,7 +45,7 @@ pub async fn ctrl_c_signal() {
 /// shutdown are logged but do not stop the signal propagation.
 pub async fn ctrl_c_signal_with_service_shutdown<S>(service: Arc<tokio::sync::Mutex<S>>)
 where
-    S: RoboTorqService,
+    S: robotorq_service,
 {
     ctrl_c_signal().await;
     let svc = service.lock().await;

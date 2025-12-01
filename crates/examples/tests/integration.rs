@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use commons::{
-    services::http::{HttpServer, HttpServerConfig, label_source::build_label_set, RoboTorqService},
+    services::robotorq_service::{HttpServer, HttpServerConfig, label_source::build_label_set, robotorq_service},
     util::config::load_robotorq_config,
     util::error::InvariantError,
     util::metrics::{MetricsRegistry, PrometheusRegistry},
@@ -20,7 +20,7 @@ struct TestService {
 }
 
 impl TestService {
-    fn new(labels: &commons::services::http::label_source::LabelSet) -> Self {
+    fn new(labels: &commons::services::robotorq_service::label_source::LabelSet) -> Self {
         let registry = Arc::new(PrometheusRegistry::new(&labels.service, &labels.component, &labels.version));
         let health_counter = registry.counter("test_health_checks_total", "Test health checks", &[]);
         Self {
@@ -30,7 +30,7 @@ impl TestService {
     }
 }
 
-impl RoboTorqService for TestService {
+impl robotorq_service for TestService {
     fn health_check(&self) -> Result<String, InvariantError> {
         self.health_counter.inc();
         Ok("Test service healthy".to_string())

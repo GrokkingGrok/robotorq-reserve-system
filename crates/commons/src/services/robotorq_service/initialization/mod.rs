@@ -1,10 +1,10 @@
-//! Initialization helper wrapping `RoboTorqService::initialize`.
+//! Initialization helper wrapping `robotorq_service::initialize`.
 //!
 //! Intended for use in service lifecycle orchestration where a concrete
-//! `RoboTorqService` must be initialized with a `RoboTorqConfig` before
+//! `robotorq_service` must be initialized with a `RoboTorqConfig` before
 //! becoming ready.
-use crate::services::http::RoboTorqService;
 use crate::util::config::RoboTorqConfig;
+use crate::services::robotorq_service::robotorq_service;
 use crate::util::config::load_robotorq_config;
 use crate::util::error::InvariantError;
 use crate::util::error::config_error::ConfigError;
@@ -16,7 +16,7 @@ use tracing::info;
 /// service implementation.
 ///
 /// # Arguments
-/// - `svc`: Mutable reference to the service implementing `RoboTorqService`.
+/// - `svc`: Mutable reference to the service implementing `robotorq_service`.
 /// - `cfg`: Immutable reference to `RoboTorqConfig` used during init.
 ///
 /// # Returns
@@ -32,28 +32,20 @@ use tracing::info;
 /// - Not expected to panic.
 ///
 /// # Examples
-/// ```rust,ignore
-/// use commons::services::http::initialization::initialize_service;
-/// use commons::services::http::RoboTorqService;
-/// use commons::util::config::RoboTorqConfig;
-///
-/// # struct MySvc; /* impl RoboTorqService for MySvc { ... } */
-/// # impl commons::services::http::RoboTorqService for MySvc {
-/// #     fn export_metrics(&self) -> String { String::new() }
-/// #     fn health_check(&self) -> Result<String, commons::util::error::InvariantError> { Ok("OK".into()) }
-/// #     fn shutdown<'a>(&'a self) -> core::pin::Pin<Box<dyn core::future::Future<Output = Result<(), commons::util::error::InvariantError>> + Send + 'a>> { Box::pin(async { Ok(()) }) }
-/// #     fn initialize<'a>(&'a mut self, _cfg: &commons::util::config::RoboTorqConfig) -> core::pin::Pin<Box<dyn core::future::Future<Output = Result<(), commons::util::error::InvariantError>> + Send + 'a>> { Box::pin(async { Ok(()) }) }
-/// # }
-///
+/// ```rust,no_run
+/// use commons::services::robotorq_service::{initialize_service, robotorq_service};
+/// use commons::util::error::InvariantError;
+/// struct MySvc;
+/// impl robotorq_service for MySvc {}
 /// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// async fn main() -> Result<(), InvariantError> {
 ///     let mut svc = MySvc;
-///     let cfg = RoboTorqConfig::default();
+///     let cfg = commons::util::config::load_robotorq_config(None).unwrap();
 ///     initialize_service(&mut svc, &cfg).await?;
 ///     Ok(())
 /// }
 /// ```
-pub async fn initialize_service<S: RoboTorqService>(
+pub async fn initialize_service<S: robotorq_service>(
     svc: &mut S,
     cfg: &RoboTorqConfig,
 ) -> Result<(), InvariantError> {
@@ -63,7 +55,7 @@ pub async fn initialize_service<S: RoboTorqService>(
 /// Load `RoboTorqConfig` and initialize a service.
 ///
 /// Centralizes config loading inside commons to keep callers clean.
-pub async fn load_and_initialize_service<S: RoboTorqService>(
+pub async fn load_and_initialize_service<S: robotorq_service>(
     svc: &mut S,
 ) -> Result<RoboTorqConfig, InvariantError> {
     let cfg = load_robotorq_config(None).map_err(ConfigError::Invalid)?;
@@ -88,7 +80,7 @@ mod tests {
         should_fail: bool,
     }
 
-    impl RoboTorqService for MockService {
+    impl robotorq_service for MockService {
         fn export_metrics(&self) -> String {
             String::new()
         }

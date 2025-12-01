@@ -2,4 +2,5 @@
 //!
 //! This module hosts HTTP server utilities and traits for exposing services
 //! without coupling business logic to specific transports.
-pub mod http;
+pub mod robotorq_service;
+

@@ -6,10 +6,10 @@
 use std::{sync::Arc, time::Instant};
 
 use commons::{
-    services::http::{HttpServerConfig, RoboTorqService},
+    services::robotorq_service::{HttpServerConfig, robotorq_service},
     util::error::InvariantError,
     util::metrics::{MetricCounter, MetricsRegistry, PrometheusRegistry},
-    services::http::label_source::LabelSet,
+    services::robotorq_service::label_source::LabelSet,
 };
 
 /// Lightweight service used for playground demos.
@@ -39,7 +39,7 @@ impl SandboxService {
     }
 }
 
-impl RoboTorqService for SandboxService {
+impl robotorq_service for SandboxService {
     fn health_check(&self) -> Result<String, InvariantError> {
         self.health_checks.inc();
         Ok(format!(

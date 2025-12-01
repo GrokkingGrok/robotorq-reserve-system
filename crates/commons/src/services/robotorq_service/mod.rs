@@ -1,4 +1,4 @@
-//! Axum HTTP utilities for exposing `RoboTorqService` implementations.
+//! Axum HTTP utilities for exposing `robotorq_service` implementations.
 //!
 //! Handlers and lifecycle helpers live in focused submodules: `healthz`,
 //! `readyz`, `metrics`, `initialization`, and `shutdown`. Prefer those over
@@ -22,21 +22,26 @@ use tower_http::timeout::TimeoutLayer;
 
 pub mod healthz;
 mod initialization;
-mod metrics;
+pub mod service_metrics;
 pub mod middleware;
 pub mod readyz;
-mod shutdown;
+pub mod shutdown;
 pub use healthz::health_handler;
 pub use initialization::{initialize_service, load_and_initialize_service};
-pub use metrics::metrics_handler;
+pub use service_metrics::metrics_handler;
 pub use shutdown::{ctrl_c_signal, ctrl_c_signal_with_service_shutdown};
-mod service_metrics_context;
-pub use service_metrics_context::ServiceMetricsContext;
+pub mod service_metrics_context;
 pub mod label_source;
 pub use label_source::{build_label_set, LabelSet};
 
 /// Core trait for services exposed via standardized HTTP endpoints.
-pub trait RoboTorqService: Send + Sync + 'static {
+///
+/// Intentionally uses snake_case naming to align with RoboTorq's
+/// internal service taxonomy and avoid conflating trait names with
+/// concrete service structs. Clippy's `non_camel_case_types` lint
+/// is explicitly allowed here.
+#[allow(non_camel_case_types)]
+pub trait robotorq_service: Send + Sync + 'static {
     /// Liveness check; `GET /healthz` returns 200 when this is Ok.
     ///
     /// # Errors
@@ -80,25 +85,19 @@ pub trait RoboTorqService: Send + Sync + 'static {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
-    /// use commons::types::ids::RobotId;
-    /// use commons::util::config::RoboTorqConfig;
-    ///
-    /// let mut gateway = RobotGateway::single(RobotId::new());
-    ///
-    /// // Before: Service exists but resources not allocated
-    /// // Configuration not loaded, connections not established
-    ///
-    /// let config = RoboTorqConfig::default();
-    /// gateway.initialize(&config).await?;
-    ///
-    /// // After: Service is initialized
-    /// // - Configuration validated and applied
-    /// // - Database connections established
-    /// // - Metrics initialized
-    /// // - Ready to start processing
-    /// # Ok::<(), commons::util::error::InvariantError>(())
+    /// ```rust,no_run
+    /// use commons::services::robotorq_service::robotorq_service;
+    /// use commons::util::config::load_robotorq_config;
+    /// use commons::util::error::InvariantError;
+    /// struct MySvc;
+    /// impl robotorq_service for MySvc {}
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), InvariantError> {
+    ///     let mut svc = MySvc;
+    ///     let cfg = load_robotorq_config(None).unwrap();
+    ///     svc.initialize(&cfg).await?;
+    ///     Ok(())
+    /// }
     /// ```
     async fn initialize(&mut self, _config: &RoboTorqConfig) -> Result<(), InvariantError> {
         Ok(())
@@ -118,29 +117,20 @@ pub trait RoboTorqService: Send + Sync + 'static {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
-    /// use commons::types::ids::RobotId;
-    /// use commons::util::config::RoboTorqConfig;
-    ///
-    /// let mut gateway = RobotGateway::single(RobotId::new());
-    /// let config = RoboTorqConfig::default();
-    ///
-    /// // Initialize first
-    /// gateway.initialize(&config).await?;
-    ///
-    /// // Before: Service is initialized but not processing requests
-    /// // No background tasks running, no request handling
-    ///
-    /// // Start the service
-    /// gateway.start().await?;
-    ///
-    /// // After: Service is running
-    /// // - Background processing tasks started
-    /// // - Request handling active
-    /// // - Metrics collection running
-    /// // - Ready to serve clients
-    /// # Ok::<(), commons::util::error::InvariantError>(())
+    /// ```rust,no_run
+    /// use commons::services::robotorq_service::robotorq_service;
+    /// use commons::util::config::load_robotorq_config;
+    /// use commons::util::error::InvariantError;
+    /// struct MySvc;
+    /// impl robotorq_service for MySvc {}
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), InvariantError> {
+    ///     let mut svc = MySvc;
+    ///     let cfg = load_robotorq_config(None).unwrap();
+    ///     svc.initialize(&cfg).await?;
+    ///     svc.start().await?;
+    ///     Ok(())
+    /// }
     /// ```
     async fn start(&self) -> Result<(), InvariantError> {
         Ok(())
@@ -160,29 +150,18 @@ pub trait RoboTorqService: Send + Sync + 'static {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
-    /// use commons::types::ids::RobotId;
-    /// use commons::util::config::RoboTorqConfig;
-    ///
-    /// let mut gateway = RobotGateway::single(RobotId::new());
-    /// let config = RoboTorqConfig::default();
-    ///
-    /// gateway.initialize(&config).await?;
-    /// gateway.start().await?;
-    ///
-    /// // Service is running and processing requests
-    /// assert!(gateway.health_check().is_ok());
-    ///
-    /// // Stop processing
-    /// gateway.stop().await?;
-    ///
-    /// // After: Service is stopped
-    /// // - No longer accepting new requests
-    /// - Completed in-flight operations
-    /// // - Resources still allocated
-    /// // - Can be restarted quickly
-    /// # Ok::<(), commons::util::error::InvariantError>(())
+    /// ```rust,no_run
+    /// use commons::services::robotorq_service::robotorq_service;
+    /// use commons::util::error::InvariantError;
+    /// struct MySvc;
+    /// impl robotorq_service for MySvc {}
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), InvariantError> {
+    ///     let svc = MySvc;
+    ///     svc.start().await?;
+    ///     svc.stop().await?;
+    ///     Ok(())
+    /// }
     /// ```
     async fn stop(&self) -> Result<(), InvariantError> {
         Ok(())
@@ -202,30 +181,17 @@ pub trait RoboTorqService: Send + Sync + 'static {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
-    /// use commons::types::ids::RobotId;
-    /// use commons::util::config::RoboTorqConfig;
-    ///
-    /// let mut gateway = RobotGateway::single(RobotId::new());
-    /// let config = RoboTorqConfig::default();
-    ///
-    /// gateway.initialize(&config).await?;
-    /// gateway.start().await?;
-    /// gateway.stop().await?;
-    ///
-    /// // Before: Service is stopped but resources allocated
-    /// // Connections open, memory allocated, files open
-    ///
-    /// // Complete shutdown
-    /// gateway.shutdown().await?;
-    ///
-    /// // After: Service is fully shut down
-    /// // - All connections closed
-    /// // - Memory deallocated
-    /// // - Files closed
-    /// // - Service cannot be restarted
-    /// # Ok::<(), commons::util::error::InvariantError>(())
+    /// ```rust,no_run
+    /// use commons::services::robotorq_service::robotorq_service;
+    /// use commons::util::error::InvariantError;
+    /// struct MySvc;
+    /// impl robotorq_service for MySvc {}
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), InvariantError> {
+    ///     let svc = MySvc;
+    ///     svc.shutdown().await?;
+    ///     Ok(())
+    /// }
     /// ```
     async fn shutdown(&self) -> Result<(), InvariantError> {
         Ok(())
@@ -241,20 +207,20 @@ pub trait RoboTorqServiceMetricsExt {
     ///
     /// Services can store this context to emit standardized lifecycle metrics.
     /// Default implementation is a no-op, so adoption is opt-in.
-    fn set_metrics_context(&mut self, _ctx: Option<std::sync::Arc<ServiceMetricsContext>>) {}
+    fn set_metrics_context(&mut self, _ctx: Option<std::sync::Arc<service_metrics_context::ServiceMetricsContext>>) {}
 }
 
-impl<T: RoboTorqService> RoboTorqServiceMetricsExt for T {}
+impl<T: robotorq_service> RoboTorqServiceMetricsExt for T {}
 
 /// Lightweight Axum server exposing standardized endpoints for a service.
 ///
 /// The HttpServer automatically creates HTTP endpoints for any service that
-/// implements `RoboTorqService`. It provides standard `/health` and `/metrics`
+/// implements `robotorq_service`. It provides standard `/health` and `/metrics`
 /// endpoints, CORS support, and proper error handling.
 ///
 /// # Type Parameters
 ///
-/// * `S` - The service type that implements `RoboTorqService`
+/// * `S` - The service type that implements `robotorq_service`
 ///
 /// # Fields
 ///
@@ -263,29 +229,24 @@ impl<T: RoboTorqService> RoboTorqServiceMetricsExt for T {}
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use std::sync::Arc;
 /// use tokio::sync::Mutex;
-/// use commons::services::http::{HttpServer, HttpServerConfig};
-/// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
-/// use commons::types::ids::RobotId;
-/// use commons::util::config::RoboTorqConfig;
-///
+/// use commons::services::robotorq_service::{HttpServer, HttpServerConfig, robotorq_service};
+/// use commons::util::config::load_robotorq_config;
+/// use commons::util::error::InvariantError;
+/// struct MySvc;
+/// impl robotorq_service for MySvc {}
 /// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     // Before: Service exists but is not exposed via HTTP
-///     let metrics = RobotGatewayMetrics::new("gateway");
-///     let mut gateway = RobotGateway::single(RobotId::new()).with_metrics(metrics);
-///     let config = RoboTorqConfig::default();
-///
-///     // After: HTTP server is created and ready to expose the service
-///     let server = HttpServer::new(Arc::new(Mutex::new(gateway)), HttpServerConfig::local_defaults(8080));
-///     server.start(&config).await?;
-///
+/// async fn main() -> Result<(), InvariantError> {
+///     let svc = Arc::new(Mutex::new(MySvc));
+///     let server = HttpServer::new(svc, HttpServerConfig::local_defaults(0));
+///     let cfg = load_robotorq_config(None).unwrap();
+///     // Normally: server.start(&cfg).await?; (omit to avoid binding a port during doc test)
 ///     Ok(())
 /// }
 /// ```
-pub struct HttpServer<S: RoboTorqService> {
+pub struct HttpServer<S: robotorq_service> {
     /// The service instance wrapped in an Arc<Mutex> for thread-safe mutable access across HTTP requests.
     service: Arc<Mutex<S>>,
     /// Configuration specifying network address, port, and endpoint paths.
@@ -296,7 +257,7 @@ pub struct HttpServer<S: RoboTorqService> {
     // (Will be extended in Phase 1 wiring.)
 }
 
-impl<S: RoboTorqService> HttpServer<S> {
+impl<S: robotorq_service> HttpServer<S> {
     /// Create a new server for the given service and config.
     ///
     /// This constructor wraps the service in an Arc<Mutex> for thread-safe mutable access
@@ -313,21 +274,13 @@ impl<S: RoboTorqService> HttpServer<S> {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use std::sync::Arc;
-    /// use tokio::sync::Mutex;
-    /// use commons::services::http::{HttpServer, HttpServerConfig};
-    /// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
-    /// use commons::types::ids::RobotId;
-    ///
-    /// // Before: Service exists in memory
-    /// let metrics = RobotGatewayMetrics::new("gateway");
-    /// let gateway = RobotGateway::single(RobotId::new()).with_metrics(metrics);
-    ///
-    /// // After: HTTP server is created and ready to expose the service
-    /// let server = HttpServer::new(Arc::new(Mutex::new(gateway)), HttpServerConfig::local_defaults(8080));
-    /// // The service is now wrapped and configured for HTTP exposure
-    /// ```
+        /// ```rust,no_run
+        /// use std::sync::Arc;
+        /// use tokio::sync::Mutex;
+        /// use commons::services::robotorq_service::{HttpServer, HttpServerConfig, robotorq_service};
+        /// struct MySvc; impl robotorq_service for MySvc {}
+        /// let server = HttpServer::new(Arc::new(Mutex::new(MySvc)), HttpServerConfig::local_defaults(0));
+        /// ```
     pub fn new(service: Arc<Mutex<S>>, config: HttpServerConfig) -> Self {
         Self {
             service,
@@ -369,33 +322,22 @@ impl<S: RoboTorqService> HttpServer<S> {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use std::sync::Arc;
-    /// use tokio::sync::Mutex;
-    /// use commons::services::http::{HttpServer, HttpServerConfig};
-    /// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
-    /// use commons::types::ids::RobotId;
-    /// use commons::util::config::RoboTorqConfig;
-    ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let metrics = RobotGatewayMetrics::new("gateway");
-    ///     let gateway = RobotGateway::single(RobotId::new()).with_metrics(metrics);
-    ///     let http_config = HttpServerConfig::local_defaults(8080);
-    ///     let robo_config = RoboTorqConfig::default();
-    ///     let server = HttpServer::new(Arc::new(Mutex::new(gateway)), http_config);
-    ///
-    ///     // Before: Server is configured but not running
-    ///     // Network port 8080 is available
-    ///
-    ///     // After: Server is running and accepting connections
-    ///     // GET http://127.0.0.1:8080/health returns health status
-    ///     // GET http://127.0.0.1:8080/metrics returns Prometheus metrics
-    ///     server.start(&robo_config).await?;
-    ///
-    ///     Ok(())
-    /// }
-    /// ```
+        /// ```rust,no_run
+        /// use std::sync::Arc;
+        /// use tokio::sync::Mutex;
+        /// use commons::services::robotorq_service::{HttpServer, HttpServerConfig, robotorq_service};
+        /// use commons::util::config::load_robotorq_config;
+        /// use commons::util::error::InvariantError;
+        /// struct MySvc; impl robotorq_service for MySvc {}
+        /// #[tokio::main]
+        /// async fn main() -> Result<(), InvariantError> {
+        ///     let http_config = HttpServerConfig::local_defaults(0);
+        ///     let cfg = load_robotorq_config(None).unwrap();
+        ///     let server = HttpServer::new(Arc::new(Mutex::new(MySvc)), http_config);
+        ///     // server.start(&cfg).await?;  // omitted to keep doc test fast
+        ///     Ok(())
+        /// }
+        /// ```
     pub async fn start(mut self, config: &RoboTorqConfig) -> Result<(), InvariantError> {
         // Initialize the service
         {
@@ -413,7 +355,7 @@ impl<S: RoboTorqService> HttpServer<S> {
                 self.config.metrics_registry = Some(std::sync::Arc::clone(&r));
                 r
             };
-            let ctx = ServiceMetricsContext::new(std::sync::Arc::clone(&registry_arc), labels);
+            let ctx = service_metrics_context::ServiceMetricsContext::new(std::sync::Arc::clone(&registry_arc), labels);
             service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
             if let Err(err) = service.initialize(config).await {
                 tracing::warn!(error = ?err, "service initialize failed, continuing");
@@ -456,7 +398,7 @@ impl<S: RoboTorqService> HttpServer<S> {
                         self.config.metrics_registry = Some(std::sync::Arc::clone(&r));
                         r
                     };
-                    let ctx = ServiceMetricsContext::new(std::sync::Arc::clone(&registry_arc), labels);
+                    let ctx = service_metrics_context::ServiceMetricsContext::new(std::sync::Arc::clone(&registry_arc), labels);
                     service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
                 }
                 Err(err) => {
@@ -489,7 +431,7 @@ impl<S: RoboTorqService> HttpServer<S> {
                         self.config.metrics_registry = Some(std::sync::Arc::clone(&r));
                         r
                     };
-                    let ctx = ServiceMetricsContext::new(std::sync::Arc::clone(&registry_arc), labels);
+                    let ctx = service_metrics_context::ServiceMetricsContext::new(std::sync::Arc::clone(&registry_arc), labels);
                     service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
                 }
             }
@@ -617,8 +559,8 @@ impl<S: RoboTorqService> HttpServer<S> {
 ///
 /// # Examples
 ///
-/// ```rust,ignore
-/// use commons::services::http::HttpService;
+/// ```rust,no_run
+/// use commons::services::robotorq_service::HttpService;
 ///
 /// // Before: No network configuration exists
 ///
@@ -668,8 +610,8 @@ impl HttpService {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use commons::services::http::HttpService;
+    /// ```rust,no_run
+    /// use commons::services::robotorq_service::HttpService;
     ///
     /// // Before: No HTTP service configuration exists
     ///
@@ -706,8 +648,8 @@ impl HttpService {
 ///
 /// # Examples
 ///
-/// ```rust,ignore
-/// use commons::services::http::HttpEndpoint;
+/// ```rust,no_run
+/// use commons::services::robotorq_service::HttpEndpoint;
 ///
 /// // Before: No endpoint path is defined
 ///
@@ -740,7 +682,7 @@ impl HttpEndpoint {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use commons::services::http::HttpEndpoint;
+    /// use commons::services::robotorq_service::HttpEndpoint;
     ///
     /// // Before: No endpoint configuration exists
     ///
@@ -776,7 +718,7 @@ impl HttpEndpoint {
 /// # Examples
 ///
 /// ```rust
-/// use commons::services::http::{HttpServerConfig, HttpService, HttpEndpoint};
+/// use commons::services::robotorq_service::{HttpServerConfig, HttpService, HttpEndpoint};
 ///
 /// // Before: No HTTP server configuration exists
 ///
@@ -845,7 +787,7 @@ impl HttpServerConfig {
     /// # Examples
     ///
     /// ```rust
-    /// use commons::services::http::{HttpServerConfig, HttpService, HttpEndpoint};
+    /// use commons::services::robotorq_service::{HttpServerConfig, HttpService, HttpEndpoint};
     ///
     /// // Before: Individual configuration components exist
     /// let service = HttpService::new("0.0.0.0", 80);
@@ -890,7 +832,7 @@ impl HttpServerConfig {
     /// # Examples
     ///
     /// ```rust
-    /// use commons::services::http::HttpServerConfig;
+    /// use commons::services::robotorq_service::HttpServerConfig;
     ///
     /// // Before: No configuration exists
     ///
@@ -939,7 +881,7 @@ mod tests {
         handler: Arc<MetricsHandler>,
     }
 
-    impl RoboTorqService for TestService {
+    impl robotorq_service for TestService {
         fn health_check(&self) -> Result<String, InvariantError> {
             Ok("OK".to_string())
         }

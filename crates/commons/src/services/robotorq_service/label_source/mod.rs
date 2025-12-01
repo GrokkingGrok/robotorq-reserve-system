@@ -27,7 +27,7 @@ pub struct LabelSet {
 ///
 /// ```rust,no_run
 /// use commons::util::config::RoboTorqConfig;
-/// use commons::services::http::label_source::derive_service_label;
+/// use commons::services::robotorq_service::label_source::derive_service_label;
 ///
 /// let cfg = RoboTorqConfig {
 ///     schema_version: 1,
@@ -62,7 +62,7 @@ pub fn derive_service_label(cfg: &RoboTorqConfig) -> String {
 ///
 /// ```
 /// use commons::util::config::RoboTorqConfig;
-/// use commons::services::http::label_source::derive_component_label;
+/// use commons::services::robotorq_service::label_source::derive_component_label;
 ///
 /// let cfg = RoboTorqConfig {
 ///     schema_version: 1,
@@ -91,7 +91,7 @@ pub fn derive_component_label(_cfg: &RoboTorqConfig) -> String {
 ///
 /// ```
 /// use commons::util::config::RoboTorqConfig;
-/// use commons::services::http::label_source::derive_version_label;
+/// use commons::services::robotorq_service::label_source::derive_version_label;
 ///
 /// let cfg = RoboTorqConfig {
 ///     schema_version: 1,
@@ -121,7 +121,7 @@ pub fn derive_version_label(cfg: &RoboTorqConfig) -> String {
 ///
 /// ```
 /// use commons::util::config::RoboTorqConfig;
-/// use commons::services::http::label_source::derive_subject_label;
+/// use commons::services::robotorq_service::label_source::derive_subject_label;
 ///
 /// let cfg = RoboTorqConfig {
 ///     schema_version: 1,
@@ -152,7 +152,7 @@ pub fn derive_subject_label(cfg: &RoboTorqConfig) -> String {
 ///
 /// ```
 /// use commons::util::config::RoboTorqConfig;
-/// use commons::services::http::label_source::{build_label_set, LabelSet};
+/// use commons::services::robotorq_service::label_source::{build_label_set, LabelSet};
 ///
 /// let cfg = RoboTorqConfig {
 ///     schema_version: 1,

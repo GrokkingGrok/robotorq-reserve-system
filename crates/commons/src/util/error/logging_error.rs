@@ -92,7 +92,7 @@ mod tests {
     /// Test that LoggingError can be created from a Box<dyn std::error::Error>.
     #[test]
     fn test_from_box_dyn_error() {
-        let original_error = std::io::Error::new(std::io::ErrorKind::Other, "io error");
+        let original_error = std::io::Error::other("io error");
         let boxed_error: Box<dyn std::error::Error> = Box::new(original_error);
         let error: LoggingError = boxed_error.into();
         match error {

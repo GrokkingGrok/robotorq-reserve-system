@@ -17,11 +17,11 @@
 //! # Example
 //! ```rust
 //! use std::sync::Arc;
-//! use commons::services::http::ServiceMetricsContext;
+//! use commons::services::robotorq_service::service_metrics_context::ServiceMetricsContext;
 //! use commons::util::metrics::{PrometheusRegistry, MetricsRegistry};
 //!
 //! let registry: Arc<dyn MetricsRegistry> = Arc::new(PrometheusRegistry::new("sandbox", "http", "dev"));
-//! let ctx = ServiceMetricsContext::new(registry, commons::services::http::label_source::LabelSet {
+//! let ctx = ServiceMetricsContext::new(registry, commons::services::robotorq_service::label_source::LabelSet {
 //!     service: "sandbox".to_string(),
 //!     component: "http".to_string(),
 //!     version: "dev".to_string(),
@@ -109,7 +109,7 @@ impl ServiceMetricsContext {
 mod tests {
     use super::*;
     use crate::util::metrics::{PrometheusRegistry, MetricsRegistry};
-    use crate::services::http::label_source::build_label_set;
+    use crate::services::robotorq_service::label_source::build_label_set;
 
     #[test]
     fn context_registers_and_updates() {

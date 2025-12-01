@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use commons::{
-    services::http::{HttpServer, HttpServerConfig, label_source::build_label_set},
+    services::robotorq_service::{HttpServer, HttpServerConfig, label_source::build_label_set},
     util::config::load_robotorq_config,
     util::error::InvariantError,
 };
@@ -48,9 +48,9 @@ async fn main() -> Result<(), InvariantError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commons::services::http::{HttpEndpoint, HttpService, RoboTorqService};
+    use commons::services::robotorq_service::{HttpEndpoint, HttpService};
     use commons::util::config::load_robotorq_config;
-    use commons::services::http::label_source::build_label_set;
+    use commons::services::robotorq_service::label_source::build_label_set;
 
     #[test]
     fn health_counter_increments() {
@@ -64,7 +64,7 @@ mod tests {
             metrics_registry: None,
         };
         // Create test labels
-        let test_labels = commons::services::http::label_source::LabelSet {
+        let test_labels = commons::services::robotorq_service::label_source::LabelSet {
             service: "test".to_string(),
             component: "http".to_string(),
             version: "0.0.1".to_string(),
@@ -89,6 +89,8 @@ mod tests {
                 .next()
         }
 
+        // Bring trait into scope for method resolution
+        use commons::services::robotorq_service::robotorq_service;
         service.health_check().unwrap();
         let first = extract_metric_value(&service.export_metrics(), "sandbox_health_checks_total");
         assert_eq!(first, Some(1.0));
