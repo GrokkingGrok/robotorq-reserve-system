@@ -643,79 +643,105 @@ pub enum SecretsBackend {
 ///
 /// Returns `false` to disable TLS by default for development.
 /// Enable TLS in production environments.
-fn default_tls_http_enabled() -> bool { false }
+fn default_tls_http_enabled() -> bool {
+    false
+}
 
 /// Default TLS enablement for NATS connections.
 ///
 /// Returns `false` to disable TLS by default for development.
 /// Enable TLS for secure inter-service communication.
-fn default_tls_nats_enabled() -> bool { false }
+fn default_tls_nats_enabled() -> bool {
+    false
+}
 
 /// Default TLS enablement for database connections.
 ///
 /// Returns `false` to disable TLS by default for development.
 /// Enable TLS for secure database communication.
-fn default_tls_database_enabled() -> bool { false }
+fn default_tls_database_enabled() -> bool {
+    false
+}
 
 /// Default cipher suites for TLS connections.
 ///
 /// Returns an empty vector, allowing the TLS library to choose secure defaults.
 /// Specify custom cipher suites for compliance requirements.
-fn default_cipher_suites() -> Vec<String> { Vec::new() }
+fn default_cipher_suites() -> Vec<String> {
+    Vec::new()
+}
 
 /// Default JWT leeway in seconds.
 ///
 /// Returns 30 seconds to allow for clock skew between systems.
 /// Adjust based on your infrastructure's time synchronization.
-fn default_jwt_leeway_seconds() -> u64 { 30 }
+fn default_jwt_leeway_seconds() -> u64 {
+    30
+}
 
 /// Default API key header name.
 ///
 /// Returns "X-API-Key" as the standard header for API keys.
 /// This follows common API key authentication conventions.
-fn default_api_key_header() -> String { "X-API-Key".to_string() }
+fn default_api_key_header() -> String {
+    "X-API-Key".to_string()
+}
 
 /// Default API key query parameter name.
 ///
 /// Returns "api_key" for URL query parameter authentication.
 /// Useful for API clients that can't set custom headers.
-fn default_api_key_query_param() -> String { "api_key".to_string() }
+fn default_api_key_query_param() -> String {
+    "api_key".to_string()
+}
 
 /// Default API key header allowance.
 ///
 /// Returns `true` to allow API keys in HTTP headers by default.
 /// This is the most common and secure method.
-fn default_api_key_allow_header() -> bool { true }
+fn default_api_key_allow_header() -> bool {
+    true
+}
 
 /// Default API key query parameter allowance.
 ///
 /// Returns `false` to disable query parameter API keys by default.
 /// Query parameters are less secure than headers.
-fn default_api_key_allow_query() -> bool { false }
+fn default_api_key_allow_query() -> bool {
+    false
+}
 
 /// Default session timeout in seconds.
 ///
 /// Returns 3600 seconds (1 hour) for session validity.
 /// Adjust based on your security and usability requirements.
-fn default_session_timeout_seconds() -> u64 { 3600 } // 1 hour
+fn default_session_timeout_seconds() -> u64 {
+    3600
+} // 1 hour
 
 /// Default secure cookie setting.
 ///
 /// Returns `false` to allow non-HTTPS cookies in development.
 /// Set to `true` in production with HTTPS.
-fn default_session_secure_cookies() -> bool { false }
+fn default_session_secure_cookies() -> bool {
+    false
+}
 
 /// Default session cookie name.
 ///
 /// Returns "robotorq_session" for session identification.
 /// Choose a unique name to avoid conflicts with other applications.
-fn default_session_cookie_name() -> String { "robotorq_session".to_string() }
+fn default_session_cookie_name() -> String {
+    "robotorq_session".to_string()
+}
 
 /// Default RBAC role for authenticated users.
 ///
 /// Returns "user" as the baseline role for authenticated users.
 /// Define roles based on your application's permission model.
-fn default_rbac_default_role() -> String { "user".to_string() }
+fn default_rbac_default_role() -> String {
+    "user".to_string()
+}
 
 /// Default RBAC role definitions.
 ///
@@ -732,4 +758,6 @@ fn default_rbac_roles() -> std::collections::HashMap<String, Vec<String>> {
 ///
 /// Returns "robotorq" as the namespace for secrets.
 /// Use different prefixes for different environments or applications.
-fn default_secrets_prefix() -> String { "robotorq".to_string() }
+fn default_secrets_prefix() -> String {
+    "robotorq".to_string()
+}

@@ -4,34 +4,31 @@
 //! `readyz`, `metrics`, `initialization`, and `shutdown`. Prefer those over
 //! adding logic here.
 #![allow(async_fn_in_trait)]
-use std::sync::Arc;
-use axum::{
-    routing::get,
-    Router,
-};
-use tower_http::cors::CorsLayer;
-use tower_http::timeout::TimeoutLayer;
-use tower_http::limit::RequestBodyLimitLayer;
-use tokio::net::TcpListener;
-use std::sync::atomic::{AtomicBool, Ordering};
-use crate::util::error::{InvariantError, logging_error::LoggingError};
 use crate::util::config::RoboTorqConfig;
+use crate::util::error::{InvariantError, logging_error::LoggingError};
+use axum::{Router, routing::get};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::net::TcpListener;
+use tower_http::cors::CorsLayer;
+use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::timeout::TimeoutLayer;
 // Metrics abstraction for HTTP middleware wiring
-use crate::util::metrics::PrometheusRegistry;
 use crate::services::http::middleware::HttpMetricsLayer;
+use crate::util::metrics::PrometheusRegistry;
 // Metrics abstraction imported when wiring middleware
 // use crate::util::metrics::{MetricsRegistry, Histogram, Counter, Gauge};
 // use std::time::Duration;
 
 pub mod healthz;
-pub mod readyz;
-mod metrics;
 mod initialization;
-mod shutdown;
+mod metrics;
 pub mod middleware;
+pub mod readyz;
+mod shutdown;
 pub use healthz::health_handler;
-pub use metrics::metrics_handler;
 pub use initialization::initialize_service;
+pub use metrics::metrics_handler;
 pub use shutdown::shutdown_service;
 
 /// Core trait for services exposed via standardized HTTP endpoints.
@@ -310,7 +307,11 @@ impl<S: RoboTorqService> HttpServer<S> {
     /// // The service is now wrapped and configured for HTTP exposure
     /// ```
     pub fn new(service: Arc<S>, config: HttpServerConfig) -> Self {
-        Self { service, config, ready: Arc::new(AtomicBool::new(false)) }
+        Self {
+            service,
+            config,
+            ready: Arc::new(AtomicBool::new(false)),
+        }
     }
 
     /// Bind, route, and serve until shutdown.
@@ -366,7 +367,10 @@ impl<S: RoboTorqService> HttpServer<S> {
     /// }
     /// ```
     pub async fn start(self) -> Result<(), InvariantError> {
-        let addr = format!("{}:{}", self.config.service.address, self.config.service.port);
+        let addr = format!(
+            "{}:{}",
+            self.config.service.address, self.config.service.port
+        );
 
         // Build the application with routes
         let ready_flag = Arc::clone(&self.ready);
@@ -374,15 +378,21 @@ impl<S: RoboTorqService> HttpServer<S> {
         let registry = std::sync::Arc::new(PrometheusRegistry::new("robotorq", "http", "dev"));
         let mut app = Router::new()
             .route("/healthz", get(health_handler))
-            .route("/readyz", get(move || readyz::readyz_handler(Arc::clone(&ready_flag))))
-            .route(self.config.metrics.0.as_str(), get({
-                let r = std::sync::Arc::clone(&registry);
-                move || async move {
-                    use axum::http::StatusCode;
-                    use crate::util::metrics::MetricsRegistry;
-                    (StatusCode::OK, r.export_text())
-                }
-            }))
+            .route(
+                "/readyz",
+                get(move || readyz::readyz_handler(Arc::clone(&ready_flag))),
+            )
+            .route(
+                self.config.metrics.0.as_str(),
+                get({
+                    let r = std::sync::Arc::clone(&registry);
+                    move || async move {
+                        use crate::util::metrics::MetricsRegistry;
+                        use axum::http::StatusCode;
+                        (StatusCode::OK, r.export_text())
+                    }
+                }),
+            )
             .layer(HttpMetricsLayer::new(registry))
             .with_state(self.service);
 
@@ -403,14 +413,16 @@ impl<S: RoboTorqService> HttpServer<S> {
         }
 
         // Create listener
-        let listener = TcpListener::bind(&addr).await
+        let listener = TcpListener::bind(&addr)
+            .await
             .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
 
         tracing::info!("HTTP server listening on {}", addr);
 
         // Mark ready and start serving
         self.ready.store(true, Ordering::Relaxed);
-        axum::serve(listener, app).await
+        axum::serve(listener, app)
+            .await
             .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
 
         // After shutdown, mark not ready
@@ -505,7 +517,10 @@ impl HttpService {
     /// let service3 = HttpService::new(addr_ref, 8081);
     /// ```
     pub fn new<S: Into<String>>(address: S, port: u16) -> Self {
-        Self { address: address.into(), port }
+        Self {
+            address: address.into(),
+            port,
+        }
     }
 }
 
@@ -570,7 +585,9 @@ impl HttpEndpoint {
     /// let service_name = "robot-gateway";
     /// let dynamic_endpoint = HttpEndpoint::new(format!("/services/{}", service_name));
     /// ```
-    pub fn new<S: Into<String>>(path: S) -> Self { Self(path.into()) }
+    pub fn new<S: Into<String>>(path: S) -> Self {
+        Self(path.into())
+    }
 }
 
 /// Legacy helpers exist for minimal servers; prefer `HttpServer` for new code.
@@ -657,13 +674,13 @@ impl HttpServerConfig {
     /// ```
     #[must_use]
     pub fn new(service: HttpService, health: HttpEndpoint, metrics: HttpEndpoint) -> Self {
-        Self { 
-            service, 
-            health, 
-            metrics, 
-            timeout_seconds: None, 
-            max_body_size_bytes: None, 
-            cors_permissive: true 
+        Self {
+            service,
+            health,
+            metrics,
+            timeout_seconds: None,
+            max_body_size_bytes: None,
+            cors_permissive: true,
         }
     }
 
@@ -716,11 +733,6 @@ impl HttpServerConfig {
     }
 }
 
-
-
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -735,12 +747,22 @@ mod tests {
             Ok("OK".to_string())
         }
 
-        fn export_metrics(&self) -> String { self.handler.export_text() }
+        fn export_metrics(&self) -> String {
+            self.handler.export_text()
+        }
 
-        async fn initialize(&mut self, _config: &RoboTorqConfig) -> Result<(), InvariantError> { Ok(()) }
-        async fn start(&self) -> Result<(), InvariantError> { Ok(()) }
-        async fn stop(&self) -> Result<(), InvariantError> { Ok(()) }
-        async fn shutdown(&self) -> Result<(), InvariantError> { Ok(()) }
+        async fn initialize(&mut self, _config: &RoboTorqConfig) -> Result<(), InvariantError> {
+            Ok(())
+        }
+        async fn start(&self) -> Result<(), InvariantError> {
+            Ok(())
+        }
+        async fn stop(&self) -> Result<(), InvariantError> {
+            Ok(())
+        }
+        async fn shutdown(&self) -> Result<(), InvariantError> {
+            Ok(())
+        }
     }
 
     #[test]
@@ -786,5 +808,3 @@ mod tests {
         assert!(!handler.export_text().is_empty());
     }
 }
-
-

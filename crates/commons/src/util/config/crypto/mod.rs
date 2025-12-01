@@ -401,23 +401,31 @@ pub struct KmsConfig {
 ///
 /// Returns `false` to allow certificates that cannot be checked,
 /// logging warnings instead of rejecting them.
-fn default_revocation_required() -> bool { false }
+fn default_revocation_required() -> bool {
+    false
+}
 
 /// Default key rotation enablement.
 ///
 /// Returns `true` to enable automatic key rotation for security.
-fn default_rotation_enabled() -> bool { true }
+fn default_rotation_enabled() -> bool {
+    true
+}
 
 /// Default key rotation interval.
 ///
 /// Returns 90 days for key rotation, balancing security and operational overhead.
-fn default_rotation_interval_days() -> u32 { 90 }
+fn default_rotation_interval_days() -> u32 {
+    90
+}
 
 /// Default key overlap period.
 ///
 /// Returns 30 days to allow time for old signatures to be verified
 /// and systems to update to new keys.
-fn default_rotation_overlap_days() -> u32 { 30 }
+fn default_rotation_overlap_days() -> u32 {
+    30
+}
 
 #[cfg(test)]
 mod tests {
@@ -454,10 +462,16 @@ mod tests {
 
         // Test deserialization
         let deserialized: CryptoConfig = toml::from_str(&toml).unwrap();
-        assert_eq!(deserialized.signature_algorithm, SignatureAlgorithm::Sphincs);
+        assert_eq!(
+            deserialized.signature_algorithm,
+            SignatureAlgorithm::Sphincs
+        );
         assert_eq!(deserialized.key_backend, KeyBackend::Hsm);
         assert_eq!(deserialized.key_path, Some("/etc/keys".to_string()));
-        assert_eq!(deserialized.certificate_path, Some("/etc/cert.pem".to_string()));
+        assert_eq!(
+            deserialized.certificate_path,
+            Some("/etc/cert.pem".to_string())
+        );
     }
 
     #[test]
@@ -522,7 +536,10 @@ mod tests {
         let toml = toml::to_string(&config).unwrap();
         let deserialized: CryptoConfig = toml::from_str(&toml).unwrap();
         assert_eq!(deserialized.revocation.method, RevocationMethod::Ocsp);
-        assert_eq!(deserialized.revocation.ocsp_url, Some("http://ocsp.example.com".to_string()));
+        assert_eq!(
+            deserialized.revocation.ocsp_url,
+            Some("http://ocsp.example.com".to_string())
+        );
         assert!(deserialized.revocation.required);
     }
 

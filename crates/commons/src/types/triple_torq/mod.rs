@@ -12,14 +12,14 @@
 //! Balances are kept in canonical form where sub-level balances never exceed their
 //! maximum values, automatically rolling over excess to higher-level units.
 
-use serde::{Serialize, Deserialize};
-use core::cmp::Ordering;
 use crate::types::ids::TripleTorqId;
-use crate::util::error::triple_torq_error::TripleTorqError;
 use crate::util::error::InvariantError;
 use crate::util::error::config_error::ConfigError;
+use crate::util::error::triple_torq_error::TripleTorqError;
 use crate::util::hashing::hash_struct;
 use crate::util::schema::TRIPLE_TORQ_SCHEMA_VERSION;
+use core::cmp::Ordering;
+use serde::{Deserialize, Serialize};
 
 // TripleTorq accounting math (inlined from former `triple_torq_math` module).
 // These helpers operate on monetary circulation balances (not raw ore measurement).
@@ -49,17 +49,17 @@ pub const JOULE_TORQS_PER_TOKEN_TORQ: u128 = 3_600;
 pub const JOULE_TORQS_PER_ROBOTORQ: u128 = TOKEN_TORQS_PER_ROBOTORQ * JOULE_TORQS_PER_TOKEN_TORQ; // 3_600_000
 
 /// Normalize raw (robot, token, joule) balances into canonical bounded representation.
-/// 
+///
 /// This function enforces the TripleTorq invariants by rolling over excess
 /// sub-level balances to higher-level units:
 /// - Excess JouleTorq (> 3,600) rolls into TokenTorq
 /// - Excess TokenTorq (> 1,000) rolls into RoboTorq
-/// 
+///
 /// # Arguments
 /// * `robotorq` - Raw RoboTorq balance
 /// * `tokentorq` - Raw TokenTorq balance (may exceed 1,000)
 /// * `jouletorq` - Raw JouleTorq balance (may exceed 3,600)
-/// 
+///
 /// # Returns
 /// Returns a tuple `(robotorq, tokentorq, jouletorq)` in canonical form where
 /// tokentorq < 1,000 and jouletorq < 3,600.
@@ -95,7 +95,9 @@ fn normalize(mut robotorq: u128, mut tokentorq: u128, mut jouletorq: u128) -> (u
 /// Returns the total JouleTorq units represented by the triple.
 #[allow(clippy::arithmetic_side_effects)]
 fn to_smallest_units(robotorq: u128, tokentorq: u16, jouletorq: u16) -> u128 {
-    robotorq * JOULE_TORQS_PER_ROBOTORQ + (tokentorq as u128) * JOULE_TORQS_PER_TOKEN_TORQ + (jouletorq as u128)
+    robotorq * JOULE_TORQS_PER_ROBOTORQ
+        + (tokentorq as u128) * JOULE_TORQS_PER_TOKEN_TORQ
+        + (jouletorq as u128)
 }
 
 /// Decompose total JouleTorq units into canonical triple balances.
@@ -178,12 +180,34 @@ impl TripleTorq {
     /// assert_eq!(account.tokentorq_balance, 500);
     /// assert_eq!(account.jouletorq_balance, 1800);
     /// ```
-    pub fn new(robotorq_balance: u128, tokentorq_balance: u16, jouletorq_balance: u16) -> Result<Self, InvariantError> {
-        if tokentorq_balance >= 1000 { return Err(InvariantError::from(TripleTorqError::TokenTorqRolloverError)); }
-        if jouletorq_balance >= 3600 { return Err(InvariantError::from(TripleTorqError::JouleTorqRolloverError)); }
-        let provisional = Self { id: TripleTorqId::new(), robotorq_balance, tokentorq_balance, jouletorq_balance, schema_version: TRIPLE_TORQ_SCHEMA_VERSION, hash: [0u8;32] };
+    pub fn new(
+        robotorq_balance: u128,
+        tokentorq_balance: u16,
+        jouletorq_balance: u16,
+    ) -> Result<Self, InvariantError> {
+        if tokentorq_balance >= 1000 {
+            return Err(InvariantError::from(
+                TripleTorqError::TokenTorqRolloverError,
+            ));
+        }
+        if jouletorq_balance >= 3600 {
+            return Err(InvariantError::from(
+                TripleTorqError::JouleTorqRolloverError,
+            ));
+        }
+        let provisional = Self {
+            id: TripleTorqId::new(),
+            robotorq_balance,
+            tokentorq_balance,
+            jouletorq_balance,
+            schema_version: TRIPLE_TORQ_SCHEMA_VERSION,
+            hash: [0u8; 32],
+        };
         let hash = hash_struct(&provisional);
-        Ok(Self { hash, ..provisional })
+        Ok(Self {
+            hash,
+            ..provisional
+        })
     }
 
     /// Creates a TripleTorq from raw components with automatic normalization.
@@ -210,10 +234,20 @@ impl TripleTorq {
     /// ```
     #[must_use]
     pub fn from_components_unchecked(robot: u128, token: u128, joule: u128) -> Self {
-        let (r,t,j) = normalize(robot, token, joule);
-        let provisional = Self { id: TripleTorqId::new(), robotorq_balance: r, tokentorq_balance: t, jouletorq_balance: j, schema_version: TRIPLE_TORQ_SCHEMA_VERSION, hash: [0u8;32] };
+        let (r, t, j) = normalize(robot, token, joule);
+        let provisional = Self {
+            id: TripleTorqId::new(),
+            robotorq_balance: r,
+            tokentorq_balance: t,
+            jouletorq_balance: j,
+            schema_version: TRIPLE_TORQ_SCHEMA_VERSION,
+            hash: [0u8; 32],
+        };
         let hash = hash_struct(&provisional);
-        Self { hash, ..provisional }
+        Self {
+            hash,
+            ..provisional
+        }
     }
 
     /// Creates a TripleTorq from total JouleTorq units.
@@ -238,10 +272,20 @@ impl TripleTorq {
     /// ```
     #[must_use]
     pub fn from_smallest_units(total: u128) -> Self {
-        let (r,t,j) = from_smallest_units(total);
-        let provisional = Self { id: TripleTorqId::new(), robotorq_balance: r, tokentorq_balance: t, jouletorq_balance: j, schema_version: TRIPLE_TORQ_SCHEMA_VERSION, hash: [0u8;32] };
+        let (r, t, j) = from_smallest_units(total);
+        let provisional = Self {
+            id: TripleTorqId::new(),
+            robotorq_balance: r,
+            tokentorq_balance: t,
+            jouletorq_balance: j,
+            schema_version: TRIPLE_TORQ_SCHEMA_VERSION,
+            hash: [0u8; 32],
+        };
         let hash = hash_struct(&provisional);
-        Self { hash, ..provisional }
+        Self {
+            hash,
+            ..provisional
+        }
     }
 
     /// Returns the total JouleTorq units represented by this TripleTorq.
@@ -261,7 +305,11 @@ impl TripleTorq {
     /// assert_eq!(total, 3_600_000 + 500 * 3_600 + 1800);
     /// ```
     pub fn total_smallest_units(&self) -> u128 {
-        to_smallest_units(self.robotorq_balance, self.tokentorq_balance, self.jouletorq_balance)
+        to_smallest_units(
+            self.robotorq_balance,
+            self.tokentorq_balance,
+            self.jouletorq_balance,
+        )
     }
 
     /// Adds another TripleTorq balance, returning the normalized sum.
@@ -347,7 +395,11 @@ impl TripleTorq {
     pub fn subtract(&self, other: &TripleTorq) -> Result<TripleTorq, InvariantError> {
         let self_total = self.total_smallest_units();
         let other_total = other.total_smallest_units();
-        if other_total > self_total { return Err(InvariantError::from(TripleTorqError::NegativeTripleTorqError)); }
+        if other_total > self_total {
+            return Err(InvariantError::from(
+                TripleTorqError::NegativeTripleTorqError,
+            ));
+        }
         Ok(TripleTorq::from_smallest_units(self_total - other_total))
     }
 
@@ -400,9 +452,13 @@ impl TripleTorq {
     #[allow(clippy::arithmetic_side_effects)]
     pub fn div_floor(&self, divisor: u128) -> Result<TripleTorq, InvariantError> {
         if divisor == 0 {
-            return Err(InvariantError::from(ConfigError::Invalid("division by zero".to_string())));
+            return Err(InvariantError::from(ConfigError::Invalid(
+                "division by zero".to_string(),
+            )));
         }
-        Ok(TripleTorq::from_smallest_units(self.total_smallest_units() / divisor))
+        Ok(TripleTorq::from_smallest_units(
+            self.total_smallest_units() / divisor,
+        ))
     }
 
     /// Returns the absolute difference between two TripleTorq balances.
@@ -453,7 +509,8 @@ impl TripleTorq {
     /// assert_eq!(a.compare(&b), Ordering::Less);
     /// ```
     pub fn compare(&self, other: &TripleTorq) -> Ordering {
-        self.total_smallest_units().cmp(&other.total_smallest_units())
+        self.total_smallest_units()
+            .cmp(&other.total_smallest_units())
     }
 
     /// Returns the minimum of two TripleTorq balances by total value.
@@ -474,7 +531,11 @@ impl TripleTorq {
     /// ```
     #[must_use]
     pub fn min(&self, other: &TripleTorq) -> TripleTorq {
-        if self.total_smallest_units() <= other.total_smallest_units() { self.clone() } else { other.clone() }
+        if self.total_smallest_units() <= other.total_smallest_units() {
+            self.clone()
+        } else {
+            other.clone()
+        }
     }
 
     /// Returns the maximum of two TripleTorq balances by total value.
@@ -495,7 +556,11 @@ impl TripleTorq {
     /// ```
     #[must_use]
     pub fn max(&self, other: &TripleTorq) -> TripleTorq {
-        if self.total_smallest_units() >= other.total_smallest_units() { self.clone() } else { other.clone() }
+        if self.total_smallest_units() >= other.total_smallest_units() {
+            self.clone()
+        } else {
+            other.clone()
+        }
     }
 }
 
@@ -505,31 +570,31 @@ mod tests {
 
     #[test]
     /// Tests that the normalize function correctly rolls up excess balances across levels.
-    /// 
+    ///
     /// Verifies the economic invariant that excess JouleTorq (> 3,600) rolls into TokenTorq,
     /// and excess TokenTorq (> 1,000) rolls into RoboTorq.
     fn normalize_rolls_up() {
-        let (r,t,j) = normalize(0, 1_500, 7_500); // 1500 tokens, 7500 joules
+        let (r, t, j) = normalize(0, 1_500, 7_500); // 1500 tokens, 7500 joules
         // 1500 tokens -> 1 robot + 500 tokens; 7500 joules -> 2 tokens + 300 joules
         // Combined before final token normalization: robot=0+1=1, token=500+2=502, joule=300
-        assert_eq!((r,t,j), (1, 502, 300));
+        assert_eq!((r, t, j), (1, 502, 300));
     }
 
     #[test]
     /// Tests round-trip conversion between hierarchical balances and total JouleTorq units.
-    /// 
+    ///
     /// Ensures that `to_smallest_units` and `from_smallest_units` are inverses of each other,
     /// maintaining data integrity across the normalization process.
     fn round_trip_smallest_units() {
-        let (r,t,j) = normalize(2, 1234, 9999);
+        let (r, t, j) = normalize(2, 1234, 9999);
         let total = to_smallest_units(r, t, j);
-        let (r2,t2,j2) = from_smallest_units(total);
-        assert_eq!((r,t,j), (r2,t2,j2));
+        let (r2, t2, j2) = from_smallest_units(total);
+        assert_eq!((r, t, j), (r2, t2, j2));
     }
 
     #[test]
     /// Tests successful creation of TripleTorq with valid canonical balances.
-    /// 
+    ///
     /// Verifies that `TripleTorq::new` accepts balances within the economic bounds
     /// (tokentorq < 1,000, jouletorq < 3,600) and creates the expected account.
     fn triple_torq_ok() {
@@ -541,27 +606,33 @@ mod tests {
 
     #[test]
     /// Tests error handling when TokenTorq balance exceeds the rollover threshold.
-    /// 
+    ///
     /// Ensures that `TripleTorq::new` rejects balances where tokentorq_balance >= 1,000,
     /// enforcing the economic invariant that TokenTorq must rollover to RoboTorq.
     fn triple_torq_token_rollover_error() {
         let err = TripleTorq::new(0, 1000, 0).unwrap_err();
-        matches!(err, InvariantError::TripleTorq(TripleTorqError::TokenTorqRolloverError));
+        matches!(
+            err,
+            InvariantError::TripleTorq(TripleTorqError::TokenTorqRolloverError)
+        );
     }
 
     #[test]
     /// Tests error handling when JouleTorq balance exceeds the rollover threshold.
-    /// 
+    ///
     /// Ensures that `TripleTorq::new` rejects balances where jouletorq_balance >= 3,600,
     /// enforcing the economic invariant that JouleTorq must rollover to TokenTorq.
     fn triple_torq_joule_rollover_error() {
         let err = TripleTorq::new(0, 0, 3600).unwrap_err();
-        matches!(err, InvariantError::TripleTorq(TripleTorqError::JouleTorqRolloverError));
+        matches!(
+            err,
+            InvariantError::TripleTorq(TripleTorqError::JouleTorqRolloverError)
+        );
     }
 
     #[test]
     /// Tests addition and subtraction operations with automatic normalization.
-    /// 
+    ///
     /// Verifies that `add` correctly sums balances with rollover, and `subtract`
     /// correctly computes differences with borrowing across balance levels.
     fn triple_torq_add_and_subtract() {
@@ -581,19 +652,22 @@ mod tests {
 
     #[test]
     /// Tests error handling for negative results in subtraction.
-    /// 
+    ///
     /// Ensures that `subtract` returns an error when attempting to subtract
     /// a larger balance from a smaller one, preventing negative monetary values.
     fn triple_torq_subtract_negative_error() {
-        let a = TripleTorq::new(0,10,0).unwrap();
-        let b = TripleTorq::new(0,11,0).unwrap();
+        let a = TripleTorq::new(0, 10, 0).unwrap();
+        let b = TripleTorq::new(0, 11, 0).unwrap();
         let err = a.subtract(&b).unwrap_err();
-        matches!(err, InvariantError::TripleTorq(TripleTorqError::NegativeTripleTorqError));
+        matches!(
+            err,
+            InvariantError::TripleTorq(TripleTorqError::NegativeTripleTorqError)
+        );
     }
 
     #[test]
     /// Tests scalar multiplication, division, and absolute difference operations.
-    /// 
+    ///
     /// Verifies that `mul` scales balances correctly, `div_floor` performs floor division,
     /// and `abs_diff` computes the absolute difference between balances.
     fn triple_torq_mul_div_absdiff() {
@@ -607,7 +681,10 @@ mod tests {
         assert_eq!(half.jouletorq_balance, t.jouletorq_balance);
 
         let zero = t.div_floor(u128::MAX).unwrap();
-        assert_eq!(zero.total_smallest_units(), t.total_smallest_units() / u128::MAX);
+        assert_eq!(
+            zero.total_smallest_units(),
+            t.total_smallest_units() / u128::MAX
+        );
 
         let _err = t.div_floor(0).unwrap_err();
 
@@ -620,7 +697,7 @@ mod tests {
 
     #[test]
     /// Tests comparison operations and min/max functions.
-    /// 
+    ///
     /// Verifies that `compare`, `min`, and `max` work correctly based on total
     /// JouleTorq value, and that round-trip conversions maintain equality.
     fn triple_torq_comparisons() {

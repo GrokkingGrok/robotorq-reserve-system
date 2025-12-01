@@ -497,25 +497,33 @@ impl Default for HealthConfig {
 ///
 /// Returns `"robotorq-service"` as a generic service identifier.
 /// Should be overridden with specific service names in configuration.
-fn default_service_name() -> String { "robotorq-service".to_string() }
+fn default_service_name() -> String {
+    "robotorq-service".to_string()
+}
 
 /// Returns the default service instance identifier.
 ///
 /// Returns `"default"` for single-instance deployments.
 /// Should be overridden with unique identifiers in multi-instance setups.
-fn default_service_instance() -> String { "default".to_string() }
+fn default_service_instance() -> String {
+    "default".to_string()
+}
 
 /// Returns the default service version.
 ///
 /// Returns the Cargo package version from build environment.
 /// Automatically tracks deployed version for observability.
-fn default_service_version() -> String { env!("CARGO_PKG_VERSION").to_string() }
+fn default_service_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
 
 /// Returns the default metrics enabled state.
 ///
 /// Returns `true` to enable metrics collection by default.
 /// Essential for monitoring and alerting in production.
-fn default_metrics_enabled() -> bool { true }
+fn default_metrics_enabled() -> bool {
+    true
+}
 
 /// Returns the default common metric labels.
 ///
@@ -531,37 +539,49 @@ fn default_common_labels() -> std::collections::HashMap<String, String> {
 ///
 /// Returns `"/metrics"` to match standard Prometheus scraping expectations.
 /// Must align with HTTP server endpoint configuration.
-fn default_metrics_path() -> String { "/metrics".to_string() }
+fn default_metrics_path() -> String {
+    "/metrics".to_string()
+}
 
 /// Returns the default metrics collection interval.
 ///
 /// Returns `60` seconds for periodic gauge updates.
 /// Balances monitoring freshness with performance overhead.
-fn default_collection_interval_seconds() -> u64 { 60 }
+fn default_collection_interval_seconds() -> u64 {
+    60
+}
 
 /// Returns the default tracing enabled state.
 ///
 /// Returns `true` to enable tracing by default.
 /// Critical for debugging distributed systems.
-fn default_tracing_enabled() -> bool { true }
+fn default_tracing_enabled() -> bool {
+    true
+}
 
 /// Returns the default tracing sampling rate.
 ///
 /// Returns `1.0` (100% sampling) for complete trace capture.
 /// Should be reduced in high-traffic production systems.
-fn default_sampling_rate() -> f64 { 1.0 }
+fn default_sampling_rate() -> f64 {
+    1.0
+}
 
 /// Returns the default log timestamp inclusion.
 ///
 /// Returns `true` to include timestamps in all log messages.
 /// Essential for log aggregation and debugging.
-fn default_log_timestamps() -> bool { true }
+fn default_log_timestamps() -> bool {
+    true
+}
 
 /// Returns the default source location inclusion in logs.
 ///
 /// Returns `false` to exclude source locations by default.
 /// Can be enabled for detailed debugging but adds verbosity.
-fn default_log_source_location() -> bool { false }
+fn default_log_source_location() -> bool {
+    false
+}
 
 /// Returns the default additional log fields.
 ///
@@ -575,22 +595,30 @@ fn default_log_fields() -> std::collections::HashMap<String, String> {
 ///
 /// Returns `30` seconds between health checks.
 /// Balances monitoring frequency with system overhead.
-fn default_health_check_interval_seconds() -> u64 { 30 }
+fn default_health_check_interval_seconds() -> u64 {
+    30
+}
 
 /// Returns the default health check timeout.
 ///
 /// Returns `5` seconds as the maximum time for health checks.
 /// Prevents health checks from blocking service operation.
-fn default_health_check_timeout_seconds() -> u64 { 5 }
+fn default_health_check_timeout_seconds() -> u64 {
+    5
+}
 
 /// Returns the default health check failure threshold.
 ///
 /// Returns `3` consecutive failures before marking unhealthy.
 /// Provides resilience against transient failures.
-fn default_health_failure_threshold() -> u32 { 3 }
+fn default_health_failure_threshold() -> u32 {
+    3
+}
 
 /// Returns the default initial health state.
 ///
 /// Returns `false` to start unhealthy until initialization completes.
 /// Ensures services aren't considered healthy before they're ready.
-fn default_health_initial_state() -> bool { false }
+fn default_health_initial_state() -> bool {
+    false
+}

@@ -6,12 +6,12 @@
 //! are created by robots during work execution and aggregated into batches
 //! for further processing in the economic hierarchy.
 
-use serde::{Serialize, Deserialize};
 use crate::types::ids::TokenId;
 use crate::util::error::InvariantError;
 use crate::util::error::token_error::TokenError;
 use crate::util::hashing::hash_struct;
 use crate::util::schema::TOKEN_SCHEMA_VERSION;
+use serde::{Deserialize, Serialize};
 
 /// An atomic unit of work proof representing robotic labor.
 ///
@@ -106,9 +106,12 @@ impl Token {
             id: TokenId::new(),
             joule_count,
             schema_version: TOKEN_SCHEMA_VERSION,
-            hash: [0u8;32],
+            hash: [0u8; 32],
         };
         let hash = hash_struct(&provisional);
-        Ok(Self { hash, ..provisional })
+        Ok(Self {
+            hash,
+            ..provisional
+        })
     }
 }

@@ -4,9 +4,9 @@
 //! `RoboTorqService::export_metrics()` on shared state.
 //!
 //! Typical use is to expose `GET /metrics` for scraping by Prometheus.
-use std::sync::Arc;
-use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use crate::services::http::RoboTorqService;
+use axum::{extract::State, http::StatusCode, response::IntoResponse};
+use std::sync::Arc;
 
 /// Handler for Prometheus metrics.
 /// # Arguments
@@ -42,6 +42,5 @@ use crate::services::http::RoboTorqService;
 pub async fn metrics_handler<S: RoboTorqService>(
     State(service): State<Arc<S>>,
 ) -> impl IntoResponse {
-    
     (StatusCode::OK, service.export_metrics())
 }

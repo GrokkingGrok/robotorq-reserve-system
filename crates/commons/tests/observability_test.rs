@@ -1,4 +1,6 @@
-use commons::util::config::observability::{TracingBackend, TracingConfig, MetricsRegistryType, MetricsConfig, ObservabilityConfig};
+use commons::util::config::observability::{
+    MetricsConfig, MetricsRegistryType, ObservabilityConfig, TracingBackend, TracingConfig,
+};
 
 #[test]
 fn tracing_config_variants_default_ok() {

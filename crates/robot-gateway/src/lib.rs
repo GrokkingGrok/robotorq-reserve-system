@@ -1,13 +1,13 @@
 pub mod metrics;
-use std::path::Path;
-use commons::types::ids::RobotId;
-use commons::types::token::Token;
-use commons::types::ore::UnmappedOreBatch;
-use commons::util::error::InvariantError;
-use commons::util::error::robot_gateway_error::RobotGatewayError;
 use crate::metrics::RobotGatewayMetrics;
 use commons::services::http::RoboTorqService;
+use commons::types::ids::RobotId;
+use commons::types::ore::UnmappedOreBatch;
+use commons::types::token::Token;
 use commons::util::config::RoboTorqConfig;
+use commons::util::error::InvariantError;
+use commons::util::error::robot_gateway_error::RobotGatewayError;
+use std::path::Path;
 
 /// Gateway coordinating one or more robots for batch capture.
 /// Maintains a list of registered robot IDs and provides helpers to produce unmapped ore batches.
@@ -20,13 +20,25 @@ impl RobotGateway {
     /// Create gateway from an iterator of robot IDs (deduplicated, order preserved by first occurrence).
     pub fn new<I: IntoIterator<Item = RobotId>>(ids: I) -> Self {
         let mut robots: Vec<RobotId> = Vec::new();
-        for id in ids { if !robots.contains(&id) { robots.push(id); } }
-        Self { robots, metrics: None }
+        for id in ids {
+            if !robots.contains(&id) {
+                robots.push(id);
+            }
+        }
+        Self {
+            robots,
+            metrics: None,
+        }
     }
 
     /// Convenience for single robot.
     #[must_use]
-    pub fn single(robot_id: RobotId) -> Self { Self { robots: vec![robot_id], metrics: None } }
+    pub fn single(robot_id: RobotId) -> Self {
+        Self {
+            robots: vec![robot_id],
+            metrics: None,
+        }
+    }
 
     /// Attach metrics to this gateway (builder-style). Updates registered robots gauge immediately.
     #[must_use]
@@ -52,12 +64,16 @@ impl RobotGateway {
     pub fn register_robot(&mut self, robot_id: RobotId) {
         if !self.robots.contains(&robot_id) {
             self.robots.push(robot_id);
-            if let Some(m) = &self.metrics { m.set_registered(self.robots.len()); }
+            if let Some(m) = &self.metrics {
+                m.set_registered(self.robots.len());
+            }
         }
     }
 
     /// All registered robots.
-    pub fn robots(&self) -> &[RobotId] { &self.robots }
+    pub fn robots(&self) -> &[RobotId] {
+        &self.robots
+    }
 
     /// Capture an unmapped batch for a specific robot.
     ///
@@ -65,13 +81,23 @@ impl RobotGateway {
     ///
     /// Returns `InvariantError::Gateway(RobotGatewayError::UnknownRobotId)` if the
     /// specified `robot_id` is not registered with this gateway.
-    pub fn capture_unmapped_batch_for(&self, robot_id: RobotId, tokens: Vec<Token>) -> Result<UnmappedOreBatch, InvariantError> {
+    pub fn capture_unmapped_batch_for(
+        &self,
+        robot_id: RobotId,
+        tokens: Vec<Token>,
+    ) -> Result<UnmappedOreBatch, InvariantError> {
         if !self.robots.contains(&robot_id) {
-            if let Some(m) = &self.metrics { m.inc_rejected(); }
+            if let Some(m) = &self.metrics {
+                m.inc_rejected();
+            }
             return Err(InvariantError::Gateway(RobotGatewayError::UnknownRobotId));
         }
         let res = UnmappedOreBatch::new(robot_id, tokens);
-        if res.is_ok() && let Some(m) = &self.metrics { m.inc_captured(); }
+        if res.is_ok()
+            && let Some(m) = &self.metrics
+        {
+            m.inc_captured();
+        }
         res
     }
 
@@ -81,13 +107,22 @@ impl RobotGateway {
     ///
     /// Returns `InvariantError::Gateway(RobotGatewayError::UnknownRobotId)` if no
     /// robots are registered with this gateway.
-    pub fn capture_unmapped_batch_any(&self, tokens: Vec<Token>) -> Result<UnmappedOreBatch, InvariantError> {
+    pub fn capture_unmapped_batch_any(
+        &self,
+        tokens: Vec<Token>,
+    ) -> Result<UnmappedOreBatch, InvariantError> {
         let robot_id = *self.robots.first().ok_or_else(|| {
-            if let Some(m) = &self.metrics { m.inc_rejected(); }
+            if let Some(m) = &self.metrics {
+                m.inc_rejected();
+            }
             InvariantError::Gateway(RobotGatewayError::UnknownRobotId)
         })?;
         let res = UnmappedOreBatch::new(robot_id, tokens);
-        if res.is_ok() && let Some(m) = &self.metrics { m.inc_captured(); }
+        if res.is_ok()
+            && let Some(m) = &self.metrics
+        {
+            m.inc_captured();
+        }
         res
     }
 }
@@ -108,13 +143,19 @@ impl RoboTorqService for RobotGateway {
             return Err(InvariantError::Gateway(RobotGatewayError::UnknownRobotId));
         }
         if self.metrics.is_none() {
-            return Err(InvariantError::Gateway(RobotGatewayError::MetricsNotConfigured));
+            return Err(InvariantError::Gateway(
+                RobotGatewayError::MetricsNotConfigured,
+            ));
         }
-        Ok(format!("RobotGateway healthy: {} robots registered", self.robots.len()))
+        Ok(format!(
+            "RobotGateway healthy: {} robots registered",
+            self.robots.len()
+        ))
     }
-    
+
     fn export_metrics(&self) -> String {
-        self.metrics.as_ref()
+        self.metrics
+            .as_ref()
             .map(|m| m.get_handler().export_text())
             .unwrap_or_else(|| "# No metrics configured\n".to_string())
     }
@@ -132,9 +173,11 @@ impl RoboTorqService for RobotGateway {
     async fn initialize(&mut self, config: &RoboTorqConfig) -> Result<(), InvariantError> {
         // Validate configuration for robot gateway
         if config.ports.robot_gateway_port == 0 {
-            return Err(InvariantError::Gateway(RobotGatewayError::InvalidConfiguration(
-                "robot_gateway_port cannot be 0".to_string()
-            )));
+            return Err(InvariantError::Gateway(
+                RobotGatewayError::InvalidConfiguration(
+                    "robot_gateway_port cannot be 0".to_string(),
+                ),
+            ));
         }
 
         // Initialize metrics if not already present
@@ -170,13 +213,15 @@ impl RoboTorqService for RobotGateway {
     async fn start(&self) -> Result<(), InvariantError> {
         // Validate that we're properly configured
         if self.robots.is_empty() {
-            return Err(InvariantError::Gateway(RobotGatewayError::InvalidConfiguration(
-                "No robots registered".to_string()
-            )));
+            return Err(InvariantError::Gateway(
+                RobotGatewayError::InvalidConfiguration("No robots registered".to_string()),
+            ));
         }
 
         if self.metrics.is_none() {
-            return Err(InvariantError::Gateway(RobotGatewayError::MetricsNotConfigured));
+            return Err(InvariantError::Gateway(
+                RobotGatewayError::MetricsNotConfigured,
+            ));
         }
 
         // Log that we're starting
@@ -250,7 +295,7 @@ mod tests {
         let r2 = RobotId::new();
         let gw = RobotGateway::new(vec![r1, r2]);
         let t = Token::new(10).unwrap();
-        let batch = gw.capture_unmapped_batch_for(r2,  vec![t]).unwrap();
+        let batch = gw.capture_unmapped_batch_for(r2, vec![t]).unwrap();
         assert_eq!(batch.tokens.len(), 1);
     }
 
@@ -260,7 +305,12 @@ mod tests {
         let gw = RobotGateway::single(r1);
         let r_unknown = RobotId::new();
         let t = Token::new(5).unwrap();
-        let err = gw.capture_unmapped_batch_for(r_unknown, vec![t]).unwrap_err();
-        matches!(err, InvariantError::Gateway(RobotGatewayError::UnknownRobotId));
+        let err = gw
+            .capture_unmapped_batch_for(r_unknown, vec![t])
+            .unwrap_err();
+        matches!(
+            err,
+            InvariantError::Gateway(RobotGatewayError::UnknownRobotId)
+        );
     }
 }

@@ -1,11 +1,11 @@
 //! HTTP observability middleware: request counters, durations, in-flight gauge.
+use crate::util::metrics::{MetricCounter, MetricGauge, MetricHistogram, MetricsRegistry};
+use axum::http::Request;
+use axum::response::Response;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Instant;
 use tower::{Layer, Service};
-use axum::http::Request;
-use axum::response::Response;
-use crate::util::metrics::{MetricsRegistry, MetricCounter, MetricGauge, MetricHistogram};
-use std::sync::Arc;
 
 /// Axum layer that wires HTTP metrics into the request pipeline.
 #[derive(Clone)]
@@ -15,31 +15,36 @@ pub struct HttpMetricsLayer {
 
 impl HttpMetricsLayer {
     /// Create a new metrics layer using the provided registry.
-    pub fn new(registry: Arc<dyn MetricsRegistry>) -> Self { Self { registry } }
+    pub fn new(registry: Arc<dyn MetricsRegistry>) -> Self {
+        Self { registry }
+    }
 }
 
 impl<S> Layer<S> for HttpMetricsLayer {
     type Service = HttpMetricsService<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        let requests_total = self.registry.counter(
-            "http_requests_total",
-            "Total HTTP requests",
-            &[],
-        );
-        let inflight = self.registry.gauge(
-            "http_inflight_requests",
-            "In-flight HTTP requests",
-            &[],
-        );
+        let requests_total =
+            self.registry
+                .counter("http_requests_total", "Total HTTP requests", &[]);
+        let inflight =
+            self.registry
+                .gauge("http_inflight_requests", "In-flight HTTP requests", &[]);
         let durations = self.registry.histogram(
             "http_request_duration_seconds",
             "HTTP request durations in seconds",
             &[],
-            Some(vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]),
+            Some(vec![
+                0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+            ]),
         );
 
-        HttpMetricsService { inner, requests_total: requests_total.into(), inflight: inflight.into(), durations: durations.into() }
+        HttpMetricsService {
+            inner,
+            requests_total: requests_total.into(),
+            inflight: inflight.into(),
+            durations: durations.into(),
+        }
     }
 }
 

@@ -8,11 +8,11 @@
 
 pub mod printer;
 
-use serde::{Serialize, Deserialize};
-use crate::types::ids::{RobotId, ContractId};
+use crate::types::ids::{ContractId, RobotId};
 use crate::util::error::InvariantError;
 use crate::util::error::robot_error::RobotError;
 use crate::util::schema::ROBOT_SCHEMA_VERSION;
+use serde::{Deserialize, Serialize};
 
 /// A robotic work-performing entity in the RoboTorq network.
 ///
@@ -114,11 +114,25 @@ impl Robot {
         active_contract: ContractId,
     ) -> Result<Self, InvariantError> {
         let name = name.into();
-        if name.trim().is_empty() { return Err(InvariantError::from(RobotError::InvalidRobotName)); }
-        if token_throughput_rating == 0 { return Err(InvariantError::from(RobotError::ZeroTokenThroughput)); }
-        if joule_throughput_rating == 0 { return Err(InvariantError::from(RobotError::ZeroJouleThroughput)); }
+        if name.trim().is_empty() {
+            return Err(InvariantError::from(RobotError::InvalidRobotName));
+        }
+        if token_throughput_rating == 0 {
+            return Err(InvariantError::from(RobotError::ZeroTokenThroughput));
+        }
+        if joule_throughput_rating == 0 {
+            return Err(InvariantError::from(RobotError::ZeroJouleThroughput));
+        }
 
-        Ok(Self { id, name, token_throughput_rating, joule_throughput_rating, is_working, active_contract, schema_version: ROBOT_SCHEMA_VERSION })
+        Ok(Self {
+            id,
+            name,
+            token_throughput_rating,
+            joule_throughput_rating,
+            is_working,
+            active_contract,
+            schema_version: ROBOT_SCHEMA_VERSION,
+        })
     }
 }
 

@@ -496,88 +496,118 @@ impl Default for ServiceSubjectPatterns {
 ///
 /// Returns `true` to enable NATS connectivity by default, supporting
 /// distributed service communication.
-fn default_nats_enabled() -> bool { true }
+fn default_nats_enabled() -> bool {
+    true
+}
 
 /// Returns the default NATS server URLs.
 ///
 /// Returns `["nats://localhost:4222"]` for local development.
 /// In production, this should be configured with cluster URLs.
-fn default_nats_servers() -> Vec<String> { vec!["nats://localhost:4222".to_string()] }
+fn default_nats_servers() -> Vec<String> {
+    vec!["nats://localhost:4222".to_string()]
+}
 
 /// Returns the default NATS connection timeout.
 ///
 /// Returns `10` seconds as a reasonable timeout for establishing
 /// initial connections to NATS servers.
-fn default_nats_connect_timeout_seconds() -> u64 { 10 }
+fn default_nats_connect_timeout_seconds() -> u64 {
+    10
+}
 
 /// Returns the default maximum reconnection attempts.
 ///
 /// Returns `60` attempts, allowing approximately 1 minute of reconnection
 /// attempts with the default delay before giving up.
-fn default_nats_max_reconnects() -> usize { 60 }
+fn default_nats_max_reconnects() -> usize {
+    60
+}
 
 /// Returns the default reconnection delay.
 ///
 /// Returns `1000` milliseconds (1 second) as the base delay between
 /// reconnection attempts, which may be increased exponentially.
-fn default_nats_reconnect_delay_ms() -> u64 { 1000 }
+fn default_nats_reconnect_delay_ms() -> u64 {
+    1000
+}
 
 /// Returns the default JetStream enabled state.
 ///
 /// Returns `true` to enable JetStream by default for durable messaging
 /// and event streaming capabilities.
-fn default_jetstream_enabled() -> bool { true }
+fn default_jetstream_enabled() -> bool {
+    true
+}
 
 /// Returns the default maximum messages per stream.
 ///
 /// Returns `1,000,000` messages as a reasonable default for most streams.
 /// This prevents unbounded growth while allowing sufficient history.
-fn default_stream_max_messages() -> i64 { 1_000_000 }
+fn default_stream_max_messages() -> i64 {
+    1_000_000
+}
 
 /// Returns the default maximum bytes per stream.
 ///
 /// Returns `1GB` as a reasonable storage limit for stream data.
 /// This balances storage requirements with retention needs.
-fn default_stream_max_bytes() -> i64 { 1_073_741_824 } // 1GB
+fn default_stream_max_bytes() -> i64 {
+    1_073_741_824
+} // 1GB
 
 /// Returns the default maximum unacknowledged messages per consumer.
 ///
 /// Returns `1000` messages to limit memory usage and prevent
 /// consumers from being overwhelmed with in-flight messages.
-fn default_consumer_max_ack_pending() -> i64 { 1000 }
+fn default_consumer_max_ack_pending() -> i64 {
+    1000
+}
 
 /// Returns the default acknowledgement wait time.
 ///
 /// Returns `30` seconds for consumers to acknowledge message processing.
 /// Messages not acknowledged within this time will be redelivered.
-fn default_consumer_ack_wait_seconds() -> i64 { 30 }
+fn default_consumer_ack_wait_seconds() -> i64 {
+    30
+}
 
 /// Returns the default maximum delivery attempts.
 ///
 /// Returns `3` attempts before giving up on message delivery.
 /// This prevents infinite redelivery of problematic messages.
-fn default_consumer_max_deliver() -> i64 { 3 }
+fn default_consumer_max_deliver() -> i64 {
+    3
+}
 
 /// Returns the default subject prefix.
 ///
 /// Returns `"rtq"` (RoboTorq) as the base prefix for all subjects,
 /// providing namespacing for the distributed system.
-fn default_subject_prefix() -> String { "rtq".to_string() }
+fn default_subject_prefix() -> String {
+    "rtq".to_string()
+}
 
 /// Returns the default command subject pattern.
 ///
 /// Returns `"cmd.*"` for command subjects that request actions.
 /// The `*` allows service-specific command routing.
-fn default_cmd_pattern() -> String { "cmd.*".to_string() }
+fn default_cmd_pattern() -> String {
+    "cmd.*".to_string()
+}
 
 /// Returns the default events subject pattern.
 ///
 /// Returns `"events.*"` for event subjects that publish state changes.
 /// The `*` allows event type-specific routing.
-fn default_events_pattern() -> String { "events.*".to_string() }
+fn default_events_pattern() -> String {
+    "events.*".to_string()
+}
 
 /// Returns the default query subject pattern.
 ///
 /// Returns `"query.*"` for query subjects that request data.
 /// The `*` allows query type-specific routing.
-fn default_query_pattern() -> String { "query.*".to_string() }
+fn default_query_pattern() -> String {
+    "query.*".to_string()
+}

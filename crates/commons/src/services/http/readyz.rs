@@ -7,9 +7,9 @@
 //! Intended to be toggled by the server lifecycle once dependencies (e.g.,
 //! storage, messaging, crypto material) are initialized and the service can
 //! safely accept traffic.
+use axum::{http::StatusCode, response::IntoResponse};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use axum::{http::StatusCode, response::IntoResponse};
 
 /// Readiness handler returning 200 when ready, 503 otherwise.
 ///
@@ -39,7 +39,6 @@ use axum::{http::StatusCode, response::IntoResponse};
 /// // ready.store(true, Ordering::Relaxed);
 /// ```
 pub async fn readyz_handler(flag: Arc<AtomicBool>) -> impl IntoResponse {
-
     if flag.load(Ordering::Relaxed) {
         (StatusCode::OK, "Ready")
     } else {

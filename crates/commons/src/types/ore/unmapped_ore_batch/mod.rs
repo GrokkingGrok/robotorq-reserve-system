@@ -8,14 +8,14 @@
 //! Each batch is cryptographically sealed with a hash and timestamped to ensure
 //! immutability and temporal ordering of work performed.
 
-use serde::{Serialize, Deserialize};
+use crate::types::Token;
 use crate::types::ids::{RobotId, UnmappedOreBatchId};
 use crate::util::error::InvariantError;
 use crate::util::error::batch_error::BatchError;
 use crate::util::hashing::hash_struct;
 use crate::util::schema::UNMAPPED_ORE_BATCH_SCHEMA_VERSION;
 use crate::util::timekeeping::now;
-use crate::types::Token;
+use serde::{Deserialize, Serialize};
 
 /// A batch of raw JouleTorqOre tokens produced by a robot.
 ///
@@ -85,16 +85,24 @@ impl UnmappedOreBatch {
     /// assert!(!batch.tokens.is_empty());
     /// ```
     pub fn new(robot_id: RobotId, tokens: Vec<Token>) -> Result<Self, InvariantError> {
-        if tokens.is_empty() { return Err(InvariantError::from(BatchError::EmptyBatch)); }
+        if tokens.is_empty() {
+            return Err(InvariantError::from(BatchError::EmptyBatch));
+        }
         let provisional = Self {
             id: UnmappedOreBatchId::new(),
             robot_id,
             schema_version: UNMAPPED_ORE_BATCH_SCHEMA_VERSION,
             tokens,
-            captured_at_ms: now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i128,
-            hash: [0u8;32],
+            captured_at_ms: now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as i128,
+            hash: [0u8; 32],
         };
         let hash = hash_struct(&provisional);
-        Ok(Self { hash, ..provisional })
+        Ok(Self {
+            hash,
+            ..provisional
+        })
     }
 }

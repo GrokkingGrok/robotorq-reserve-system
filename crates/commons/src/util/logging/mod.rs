@@ -20,9 +20,9 @@
 //! init_logging(true, "info", Some("/var/log/robotorq"))?;
 //! ```
 
-use tracing_subscriber::{EnvFilter, fmt};
-use tracing_subscriber::prelude::*;
 use tracing_appender::rolling;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{EnvFilter, fmt};
 
 /// Initialize tracing with optional JSON output and rolling file appender.
 ///
@@ -63,9 +63,13 @@ use tracing_appender::rolling;
 /// # Panics
 ///
 /// This function does not panic. All error conditions are returned as `Result` values.
-pub fn init_logging(json: bool, default_level: &str, rolling_dir: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(default_level));
+pub fn init_logging(
+    json: bool,
+    default_level: &str,
+    rolling_dir: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_level));
 
     // Optional rolling file sink
     let file_layer = rolling_dir.map(|dir| {
@@ -143,8 +147,8 @@ pub fn init_logging(json: bool, default_level: &str, rolling_dir: Option<&str>) 
 ///
 /// This function does not panic. All error conditions are returned as `Result` values.
 pub fn init_logging_pretty(default_level: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(default_level));
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_level));
     let stdout_layer = fmt::layer()
         .with_ansi(true)
         .with_target(true)

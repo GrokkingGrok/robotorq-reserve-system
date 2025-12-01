@@ -1,5 +1,5 @@
-use prometheus::{Counter, Gauge};
 use commons::util::metrics::MetricsHandler;
+use prometheus::{Counter, Gauge};
 use std::sync::Arc;
 
 pub struct RobotGatewayMetrics {
@@ -29,17 +29,28 @@ impl RobotGatewayMetrics {
             &format!("{}_batches_rejected_total", prefix),
             "total batch capture attempts rejected (e.g., unknown robot)",
         );
-        Self { handler, registered_robots, batches_captured_total, batches_rejected_total }
+        Self {
+            handler,
+            registered_robots,
+            batches_captured_total,
+            batches_rejected_total,
+        }
     }
 
-    pub fn set_registered(&self, n: usize) { 
+    pub fn set_registered(&self, n: usize) {
         #[allow(clippy::as_conversions)]
-        self.registered_robots.set(n as f64); 
+        self.registered_robots.set(n as f64);
     }
-    pub fn inc_captured(&self) { self.batches_captured_total.inc(); }
-    pub fn inc_rejected(&self) { self.batches_rejected_total.inc(); }
+    pub fn inc_captured(&self) {
+        self.batches_captured_total.inc();
+    }
+    pub fn inc_rejected(&self) {
+        self.batches_rejected_total.inc();
+    }
 
     /// Getter returning a cloned Arc to the underlying handler for server/export usage.
     #[must_use]
-    pub fn get_handler(&self) -> Arc<MetricsHandler> { Arc::clone(&self.handler) }
+    pub fn get_handler(&self) -> Arc<MetricsHandler> {
+        Arc::clone(&self.handler)
+    }
 }

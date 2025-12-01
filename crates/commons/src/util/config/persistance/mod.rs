@@ -427,76 +427,102 @@ pub enum SqliteSynchronousMode {
 ///
 /// Returns `"sqlite://robotorq.db"` as a safe default for development.
 /// This creates a local SQLite database file.
-fn default_database_url() -> String { "sqlite://robotorq.db".to_string() }
+fn default_database_url() -> String {
+    "sqlite://robotorq.db".to_string()
+}
 
 /// Returns the default maximum connection pool size.
 ///
 /// Returns `10` connections as a reasonable default for most applications.
 /// Higher values support more concurrent database operations.
-fn default_max_connections() -> u32 { 10 }
+fn default_max_connections() -> u32 {
+    10
+}
 
 /// Returns the default minimum connection pool size.
 ///
 /// Returns `1` connection to maintain a baseline connection and reduce
 /// connection establishment latency.
-fn default_min_connections() -> u32 { 1 }
+fn default_min_connections() -> u32 {
+    1
+}
 
 /// Returns the default connection timeout.
 ///
 /// Returns `30` seconds as a reasonable timeout for establishing
 /// new database connections.
-fn default_connect_timeout_seconds() -> u64 { 30 }
+fn default_connect_timeout_seconds() -> u64 {
+    30
+}
 
 /// Returns the default idle connection timeout.
 ///
 /// Returns `300` seconds (5 minutes) to close idle connections and
 /// manage connection pool size.
-fn default_idle_timeout_seconds() -> Option<u64> { Some(300) } // 5 minutes
+fn default_idle_timeout_seconds() -> Option<u64> {
+    Some(300)
+} // 5 minutes
 
 /// Returns the default maximum connection lifetime.
 ///
 /// Returns `3600` seconds (1 hour) to force connection renewal and
 /// prevent issues with stale connections.
-fn default_max_lifetime_seconds() -> Option<u64> { Some(3600) } // 1 hour
+fn default_max_lifetime_seconds() -> Option<u64> {
+    Some(3600)
+} // 1 hour
 
 /// Returns the default migration execution setting.
 ///
 /// Returns `true` to enable automatic migration execution during
 /// service startup in development environments.
-fn default_run_migrations() -> bool { true }
+fn default_run_migrations() -> bool {
+    true
+}
 
 /// Returns the default migration tracking table name.
 ///
 /// Returns `"_robotorq_migrations"` as the table name for tracking
 /// applied database migrations.
-fn default_migration_table() -> String { "_robotorq_migrations".to_string() }
+fn default_migration_table() -> String {
+    "_robotorq_migrations".to_string()
+}
 
 /// Returns the default PostgreSQL application name.
 ///
 /// Returns `"robotorq"` to identify connections in database logs
 /// and monitoring tools.
-fn default_postgres_application_name() -> String { "robotorq".to_string() }
+fn default_postgres_application_name() -> String {
+    "robotorq".to_string()
+}
 
 /// Returns the default PostgreSQL schema search path.
 ///
 /// Returns `"public"` as the default schema search path for
 /// PostgreSQL database objects.
-fn default_postgres_search_path() -> String { "public".to_string() }
+fn default_postgres_search_path() -> String {
+    "public".to_string()
+}
 
 /// Returns the default SQLite foreign key enforcement setting.
 ///
 /// Returns `true` to enable foreign key constraints for data integrity.
 /// Should generally remain enabled in production.
-fn default_sqlite_foreign_keys() -> bool { true }
+fn default_sqlite_foreign_keys() -> bool {
+    true
+}
 
 /// Returns the default SQLite cache size.
 ///
 /// Returns `-2000` (2MB in pages) as a reasonable cache size for
 /// most SQLite workloads. Negative values indicate page count.
-fn default_sqlite_cache_size_kb() -> i64 { -2000 } // 2MB in pages
+fn default_sqlite_cache_size_kb() -> i64 {
+    -2000
+} // 2MB in pages
 
 /// Returns the default SQLite busy timeout.
 ///
 /// Returns `5000` milliseconds (5 seconds) to wait when the database
 /// is locked by another connection before failing the operation.
-fn default_sqlite_busy_timeout_ms() -> u64 { 5000 }
+fn default_sqlite_busy_timeout_ms() -> u64 {
+    5000
+}

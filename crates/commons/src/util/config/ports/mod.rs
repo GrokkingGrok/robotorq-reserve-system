@@ -32,7 +32,7 @@
 //! - `METRICS_PORT`: Override metrics port
 //! - `GRAFANA_PORT`: Override Grafana port
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 /// Network port configuration for all RoboTorq services.
@@ -70,13 +70,19 @@ pub struct PortsConfig {
 }
 
 /// Returns the default port for the Robot Gateway service.
-fn default_robot_gateway_port() -> u16 { 9000 }
+fn default_robot_gateway_port() -> u16 {
+    9000
+}
 
 /// Returns the default port for Prometheus metrics exposition.
-fn default_metrics_port() -> u16 { 8005 }
+fn default_metrics_port() -> u16 {
+    8005
+}
 
 /// Returns the default port for the Grafana dashboard.
-fn default_grafana_port() -> u16 { 8015 }
+fn default_grafana_port() -> u16 {
+    8015
+}
 
 /// Load ports configuration from the repository default TOML file.
 ///

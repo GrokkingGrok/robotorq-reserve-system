@@ -30,24 +30,24 @@
 //! The `InvariantError` enum provides transparent error conversion from all
 //! subsystem errors, allowing consistent error handling throughout the codebase.
 
-pub mod token_error;
 pub mod batch_error;
-pub mod robot_error;
-pub mod robot_gateway_error;
 pub mod config_error;
-pub mod triple_torq_error;
 pub mod logging_error;
 pub mod prometheus_error;
+pub mod robot_error;
+pub mod robot_gateway_error;
+pub mod token_error;
+pub mod triple_torq_error;
 
-use thiserror::Error;
-use token_error::TokenError;
 use batch_error::BatchError;
-use robot_error::RobotError;
-use robot_gateway_error::RobotGatewayError;
 use config_error::ConfigError;
-use triple_torq_error::TripleTorqError;
 use logging_error::LoggingError;
 use prometheus_error::PrometheusError;
+use robot_error::RobotError;
+use robot_gateway_error::RobotGatewayError;
+use thiserror::Error;
+use token_error::TokenError;
+use triple_torq_error::TripleTorqError;
 
 /// Unified error type for all system invariant violations.
 ///

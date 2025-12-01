@@ -3,8 +3,8 @@
 //! Covers error paths for missing/malformed files and environment override behavior
 //! for `load_robotorq_config`, increasing branch coverage in config loader.
 use commons::util::config::{RoboTorqConfig, load_robotorq_config};
-use std::fs;
 use std::env;
+use std::fs;
 use std::path::PathBuf;
 
 #[test]
@@ -44,12 +44,17 @@ enabled = true
 enabled = true
 min_unit_joules = 1
 min_unit_tokens = 1
-"#
-    ).expect("write");
+"#,
+    )
+    .expect("write");
     let path_str = pathbuf.to_string_lossy().to_string();
-    unsafe { env::set_var("ROBOTORQ_CONFIG", &path_str); }
+    unsafe {
+        env::set_var("ROBOTORQ_CONFIG", &path_str);
+    }
     let cfg = load_robotorq_config(None).expect("load config from env");
     assert!(cfg.observability.metrics.enabled);
     // cleanup env
-    unsafe { env::remove_var("ROBOTORQ_CONFIG"); }
+    unsafe {
+        env::remove_var("ROBOTORQ_CONFIG");
+    }
 }

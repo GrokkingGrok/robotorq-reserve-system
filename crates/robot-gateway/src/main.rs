@@ -1,12 +1,12 @@
-use commons::util::logging::init_logging_pretty;
-use commons::util::error::{InvariantError, logging_error::LoggingError};
-use robot_gateway::metrics::RobotGatewayMetrics;
-use robot_gateway::RobotGateway;
 use commons::services::http::{HttpServer, HttpServerConfig, RoboTorqService};
-use commons::util::config::load_robotorq_config;
 use commons::types::ids::RobotId;
-use tracing::{info, error};
+use commons::util::config::load_robotorq_config;
+use commons::util::error::{InvariantError, logging_error::LoggingError};
+use commons::util::logging::init_logging_pretty;
+use robot_gateway::RobotGateway;
+use robot_gateway::metrics::RobotGatewayMetrics;
 use std::sync::Arc;
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -32,7 +32,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create HTTP server configuration from loaded config
     let http_config = HttpServerConfig::local_defaults(config.ports.robot_gateway_port);
-    let addr = format!("{}:{}", http_config.service.address, http_config.service.port);
+    let addr = format!(
+        "{}:{}",
+        http_config.service.address, http_config.service.port
+    );
 
     // Create the robot gateway service
     let metrics = RobotGatewayMetrics::new("robot_gateway");
@@ -91,7 +94,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     info!(component = "robot-gateway", "shutdown complete");
-
 
     Ok(())
 }

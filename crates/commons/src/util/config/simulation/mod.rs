@@ -102,7 +102,6 @@ pub struct Simulation {
     /// Caps the robot population growth to prevent unbounded resource usage.
     /// If `None`, no maximum limit is enforced.
     pub robot_gateway_max_robot_count: Option<usize>,
-
     /*
     pub robot_gateway_average_token_throughput: u32,
     pub robot_gateway_variance_token_throughput: u32,

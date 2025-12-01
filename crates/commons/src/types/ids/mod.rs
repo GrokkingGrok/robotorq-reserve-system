@@ -7,7 +7,7 @@
 //! All IDs are backed by UUID v4 for global uniqueness and are serializable
 //! for network transmission and persistence.
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Unique identifier for a robot in the RoboTorq network.
@@ -109,11 +109,15 @@ impl RobotId {
     /// let robot_id = RobotId::new();
     /// ```
     #[must_use]
-    pub fn new() -> Self { Self(Uuid::new_v4()) }
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
 }
 
 impl Default for RobotId {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TokenId {
@@ -125,11 +129,15 @@ impl TokenId {
     /// let token_id = TokenId::new();
     /// ```
     #[must_use]
-    pub fn new() -> Self { Self(Uuid::new_v4()) }
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
 }
 
 impl Default for TokenId {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl UnmappedOreBatchId {
@@ -141,11 +149,15 @@ impl UnmappedOreBatchId {
     /// let batch_id = UnmappedOreBatchId::new();
     /// ```
     #[must_use]
-    pub fn new() -> Self { Self(Uuid::new_v4()) }
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
 }
 
 impl Default for UnmappedOreBatchId {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TripleTorqId {
@@ -157,11 +169,15 @@ impl TripleTorqId {
     /// let account_id = TripleTorqId::new();
     /// ```
     #[must_use]
-    pub fn new() -> Self { Self(Uuid::new_v4()) }
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
 }
 
 impl Default for TripleTorqId {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ContractId {
@@ -173,11 +189,15 @@ impl ContractId {
     /// let contract_id = ContractId::new();
     /// ```
     #[must_use]
-    pub fn new() -> Self { Self(Uuid::new_v4()) }
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
 }
 
 impl Default for ContractId {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PartyId {
@@ -189,9 +209,13 @@ impl PartyId {
     /// let party_id = PartyId::new();
     /// ```
     #[must_use]
-    pub fn new() -> Self { Self(Uuid::new_v4()) }
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
 }
 
 impl Default for PartyId {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

@@ -3,8 +3,8 @@
 //! Use this to coordinate final cleanup and resource release when terminating a
 //! service. This helper delegates to the service's async shutdown routine and
 //! surfaces any error produced.
-use crate::util::error::InvariantError;
 use crate::services::http::RoboTorqService;
+use crate::util::error::InvariantError;
 
 /// Request an orderly shutdown via the service's async shutdown routine.
 ///

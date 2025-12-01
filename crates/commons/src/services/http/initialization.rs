@@ -3,9 +3,9 @@
 //! Intended for use in service lifecycle orchestration where a concrete
 //! `RoboTorqService` must be initialized with a `RoboTorqConfig` before
 //! becoming ready.
+use crate::services::http::RoboTorqService;
 use crate::util::config::RoboTorqConfig;
 use crate::util::error::InvariantError;
-use crate::services::http::RoboTorqService;
 
 /// Initialize a service with the given configuration.
 ///
@@ -50,6 +50,9 @@ use crate::services::http::RoboTorqService;
 ///     Ok(())
 /// }
 /// ```
-pub async fn initialize_service<S: RoboTorqService>(svc: &mut S, cfg: &RoboTorqConfig) -> Result<(), InvariantError> {
+pub async fn initialize_service<S: RoboTorqService>(
+    svc: &mut S,
+    cfg: &RoboTorqConfig,
+) -> Result<(), InvariantError> {
     svc.initialize(cfg).await
 }

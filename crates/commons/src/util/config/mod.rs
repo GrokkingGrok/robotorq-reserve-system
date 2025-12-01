@@ -51,8 +51,8 @@
 //! ```
 
 pub mod mode;
-pub mod simulation;
 pub mod ports;
+pub mod simulation;
 // Nested service-specific config modules live under `services/`
 /// Service-specific configuration modules.
 ///
@@ -63,28 +63,28 @@ pub mod services {
     pub mod nats;
 }
 // Persistence config lives under `persistance/` (intentional spelling per repo layout)
-pub mod persistance;
-pub mod observability;
-pub mod security;
 pub mod crypto;
 pub mod economic;
+pub mod observability;
+pub mod persistance;
+pub mod security;
 
 // Re-export common config types for ergonomic imports
-pub use mode::Mode;
-pub use simulation::Simulation;
-pub use simulation::sim_sleep;
-pub use ports::PortsConfig;
-pub use ports::load_ports_config_from_default;
-pub use services::http::HttpConfig;
-pub use services::nats::NatsConfig;
-pub use persistance::PersistenceConfig;
-pub use observability::ObservabilityConfig;
-pub use security::SecurityConfig;
 pub use crypto::CryptoConfig;
 pub use economic::EconomicConfig;
+pub use mode::Mode;
+pub use observability::ObservabilityConfig;
+pub use persistance::PersistenceConfig;
+pub use ports::PortsConfig;
+pub use ports::load_ports_config_from_default;
+pub use security::SecurityConfig;
+pub use services::http::HttpConfig;
+pub use services::nats::NatsConfig;
+pub use simulation::Simulation;
+pub use simulation::sim_sleep;
 
-use serde::{Deserialize, Serialize};
 use crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION;
+use serde::{Deserialize, Serialize};
 
 /// Main configuration structure for the RoboTorq Reserve System.
 ///
@@ -249,30 +249,30 @@ impl RoboTorqConfig {
 }
 
 /// Load RoboTorq configuration with fallback logic.
-/// 
+///
 /// This function provides a unified way to load configuration across all services.
 /// It tries multiple sources in order:
 /// 1. Command line argument (if provided)
 /// 2. ROBOTORQ_CONFIG environment variable
 /// 3. Default config file paths
 /// 4. Built-in defaults
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `config_path` - Optional path to config file. If None, uses environment/default paths.
-/// 
+///
 /// # Returns
-/// 
+///
 /// Returns the loaded configuration or an error message.
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```rust,no_run
 /// use commons::util::config::load_robotorq_config;
-/// 
+///
 /// // Load from default locations
 /// let config = load_robotorq_config(None)?;
-/// 
+///
 /// // Load from specific file
 /// let config = load_robotorq_config(Some("my-config.toml".as_ref()))?;
 /// # Ok::<(), String>(())
@@ -282,7 +282,9 @@ impl RoboTorqConfig {
 ///
 /// This function currently does not return any errors but may in the future
 /// when configuration validation or parsing fails.
-pub fn load_robotorq_config(config_path: Option<&std::path::Path>) -> Result<RoboTorqConfig, String> {
+pub fn load_robotorq_config(
+    config_path: Option<&std::path::Path>,
+) -> Result<RoboTorqConfig, String> {
     // Try explicit path first
     if let Some(path) = config_path {
         match RoboTorqConfig::load_from_file(path) {
@@ -296,16 +298,16 @@ pub fn load_robotorq_config(config_path: Option<&std::path::Path>) -> Result<Rob
         let path = std::path::Path::new(&env_path);
         match RoboTorqConfig::load_from_file(path) {
             Ok(config) => return Ok(config),
-            Err(e) => tracing::warn!("Failed to load config from ROBOTORQ_CONFIG={}: {}", env_path, e),
+            Err(e) => tracing::warn!(
+                "Failed to load config from ROBOTORQ_CONFIG={}: {}",
+                env_path,
+                e
+            ),
         }
     }
 
     // Try default locations
-    let default_paths = [
-        "robotorq.toml",
-        "config/robotorq.toml",
-        "etc/robotorq.toml",
-    ];
+    let default_paths = ["robotorq.toml", "config/robotorq.toml", "etc/robotorq.toml"];
 
     for path_str in &default_paths {
         let path = std::path::Path::new(path_str);

@@ -407,79 +407,129 @@ impl Default for BidnetConfig {
 // Default value functions
 
 /// Default JouleTorqOre units per TokenTorqIngot (economic invariant).
-fn default_joule_per_ingot() -> u32 { 3600 }
+fn default_joule_per_ingot() -> u32 {
+    3600
+}
 
 /// Default TokenTorqIngots per RoboTorq Certificate (economic invariant).
-fn default_ingots_per_certificate() -> u32 { 1000 }
+fn default_ingots_per_certificate() -> u32 {
+    1000
+}
 
 /// Default UBD enabled state.
-fn default_ubd_enabled() -> bool { true }
+fn default_ubd_enabled() -> bool {
+    true
+}
 
 /// Default UBD interval in hours.
-fn default_ubd_interval_hours() -> u32 { 24 } // Daily
+fn default_ubd_interval_hours() -> u32 {
+    24
+} // Daily
 
 /// Default UBD minimum spend threshold.
-fn default_ubd_min_spend_threshold() -> f64 { 0.75 } // 75%
+fn default_ubd_min_spend_threshold() -> f64 {
+    0.75
+} // 75%
 
 /// Default UBD eligibility period in hours.
-fn default_ubd_eligibility_period_hours() -> u32 { 168 } // 1 week
+fn default_ubd_eligibility_period_hours() -> u32 {
+    168
+} // 1 week
 
 /// Default minimum stake percentage.
-fn default_stake_min_percentage() -> f64 { 0.1 } // 10%
+fn default_stake_min_percentage() -> f64 {
+    0.1
+} // 10%
 
 /// Default maximum stake percentage.
-fn default_stake_max_percentage() -> f64 { 0.5 } // 50%
+fn default_stake_max_percentage() -> f64 {
+    0.5
+} // 50%
 
 /// Default stake lockup period in hours.
-fn default_stake_lockup_hours() -> u32 { 24 } // 1 day
+fn default_stake_lockup_hours() -> u32 {
+    24
+} // 1 day
 
 /// Default stake penalty rate for early unstaking.
-fn default_stake_penalty_rate() -> f64 { 0.05 } // 5%
+fn default_stake_penalty_rate() -> f64 {
+    0.05
+} // 5%
 
 /// Default minimum reserve ratio.
-fn default_reserve_min_ratio() -> f64 { 1.0 } // 100%
+fn default_reserve_min_ratio() -> f64 {
+    1.0
+} // 100%
 
 /// Default target reserve ratio.
-fn default_reserve_target_ratio() -> f64 { 1.2 } // 120%
+fn default_reserve_target_ratio() -> f64 {
+    1.2
+} // 120%
 
 /// Default reserve audit interval in hours.
-fn default_reserve_audit_interval_hours() -> u32 { 24 } // Daily
+fn default_reserve_audit_interval_hours() -> u32 {
+    24
+} // Daily
 
 /// Default emergency reserve threshold.
-fn default_reserve_emergency_threshold() -> f64 { 0.95 } // 95%
+fn default_reserve_emergency_threshold() -> f64 {
+    0.95
+} // 95%
 
 /// Default maximum JouleTorqOre supply (None = unlimited).
-fn default_supply_max_joule() -> Option<u128> { None }
+fn default_supply_max_joule() -> Option<u128> {
+    None
+}
 
 /// Default maximum TokenTorqIngot supply (None = unlimited).
-fn default_supply_max_ingot() -> Option<u128> { None }
+fn default_supply_max_ingot() -> Option<u128> {
+    None
+}
 
 /// Default maximum RoboTorq Certificate supply (None = unlimited).
-fn default_supply_max_certificate() -> Option<u128> { None }
+fn default_supply_max_certificate() -> Option<u128> {
+    None
+}
 
 /// Default daily certificate issuance limit (None = unlimited).
-fn default_supply_daily_certificate_limit() -> Option<u64> { None }
+fn default_supply_daily_certificate_limit() -> Option<u64> {
+    None
+}
 
 /// Default minimum spend percentage for distribution.
-fn default_distribution_min_spend_percent() -> f64 { 0.75 } // 75%
+fn default_distribution_min_spend_percent() -> f64 {
+    0.75
+} // 75%
 
 /// Default minimum internal spend for activation.
-fn default_activation_min_internal_spend() -> f64 { 0.75 } // 75%
+fn default_activation_min_internal_spend() -> f64 {
+    0.75
+} // 75%
 
 /// Default activation grace period in hours.
-fn default_activation_grace_period_hours() -> u32 { 168 } // 1 week
+fn default_activation_grace_period_hours() -> u32 {
+    168
+} // 1 week
 
 /// Default BidNet enabled state.
-fn default_bidnet_enabled() -> bool { true }
+fn default_bidnet_enabled() -> bool {
+    true
+}
 
 /// Default maximum bid percentage.
-fn default_bidnet_max_bid_percent() -> f64 { 0.1 } // 10%
+fn default_bidnet_max_bid_percent() -> f64 {
+    0.1
+} // 10%
 
 /// Default bid expiry time in hours.
-fn default_bidnet_expiry_hours() -> u32 { 24 } // 1 day
+fn default_bidnet_expiry_hours() -> u32 {
+    24
+} // 1 day
 
 /// Default minimum bid amount.
-fn default_bidnet_min_bid() -> u64 { 1 }
+fn default_bidnet_min_bid() -> u64 {
+    1
+}
 
 #[cfg(test)]
 mod tests {
@@ -582,7 +632,8 @@ mod tests {
         assert_eq!(config.ingots_per_certificate, 1000);
 
         // Verify derived calculations
-        let joule_per_certificate = config.joule_per_ingot as u64 * config.ingots_per_certificate as u64;
+        let joule_per_certificate =
+            config.joule_per_ingot as u64 * config.ingots_per_certificate as u64;
         assert_eq!(joule_per_certificate, 3_600_000);
     }
 }
