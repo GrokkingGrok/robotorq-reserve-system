@@ -5,7 +5,11 @@
 //!
 //! Typical use is to expose `GET /metrics` for scraping by Prometheus.
 use crate::services::http::RoboTorqService;
-use axum::{extract::{State, Extension}, http::{StatusCode, header}, response::IntoResponse};
+use axum::{
+    extract::{Extension, State},
+    http::{StatusCode, header},
+    response::IntoResponse,
+};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -56,7 +60,10 @@ pub async fn metrics_handler<S: RoboTorqService>(
 
     (
         StatusCode::OK,
-        [(header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+        [(
+            header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )],
         body,
     )
 }

@@ -267,26 +267,20 @@ impl RoboTorqConfig {
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// Load using default search order (environment + default paths + built-ins):
+/// ```
 /// use commons::util::config::load_robotorq_config;
+/// let cfg = load_robotorq_config(None).expect("config loads");
+/// // Basic invariant: HTTP port resolved (may be default)
+/// assert!(cfg.http.port > 0);
+/// ```
 ///
-/// // Load from default locations
-/// let config = load_robotorq_config(None).map_err(ConfigError::Invalid)?;
-///  info!(
-///     schema_version = config.schema_version,
-///     mode = ?config.mode,
-///     http_address = %config.http.address,
-///     http_port = config.http.port,
-///     "loaded RoboTorq configuration"
-/// );
-///     // Build the HTTP server config from the loaded settings, honoring the sandbox override.
-/// let http_config = build_http_server_config(&config.http, Some(port));
-///
-/// let service = Arc::new(SandboxService::new());
-/// info!(
-///     port = http_config.service.port,
-///     "starting the RoboTorq sandbox"
-/// );
+/// Load from an explicit path (falls back if missing):
+/// ```
+/// use commons::util::config::load_robotorq_config;
+/// let cfg = load_robotorq_config(Some(std::path::Path::new("robotorq.toml")))
+///     .expect("config loads (file or defaults)");
+/// assert!(cfg.schema_version > 0);
 /// ```
 ///
 /// # Errors

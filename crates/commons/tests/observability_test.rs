@@ -4,21 +4,31 @@ use commons::util::config::observability::{
 
 #[test]
 fn tracing_config_variants_default_ok() {
-    let mut cfg = TracingConfig::default();
-    cfg.backend = TracingBackend::Console;
+    let cfg = TracingConfig {
+        backend: TracingBackend::Console,
+        ..Default::default()
+    };
     assert!(matches!(cfg.backend, TracingBackend::Console));
 
-    cfg.backend = TracingBackend::Jaeger;
+    let cfg = TracingConfig {
+        backend: TracingBackend::Jaeger,
+        ..Default::default()
+    };
     assert!(matches!(cfg.backend, TracingBackend::Jaeger));
 
-    cfg.backend = TracingBackend::OtelOtlp;
+    let cfg = TracingConfig {
+        backend: TracingBackend::OtelOtlp,
+        ..Default::default()
+    };
     assert!(matches!(cfg.backend, TracingBackend::OtelOtlp));
 }
 
 #[test]
 fn metrics_registry_variants_ok() {
-    let mut m = MetricsConfig::default();
-    m.registry = MetricsRegistryType::Prometheus;
+    let m = MetricsConfig {
+        registry: MetricsRegistryType::Prometheus,
+        ..Default::default()
+    };
     assert!(matches!(m.registry, MetricsRegistryType::Prometheus));
 }
 

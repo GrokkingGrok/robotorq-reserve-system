@@ -1,13 +1,13 @@
 //! HTTP observability middleware: request counters, durations, in-flight gauge.
 use crate::util::metrics::{LabeledCounter, LabeledHistogram, MetricGauge, MetricsRegistry};
+use axum::extract::MatchedPath;
 use axum::http::Request;
 use axum::response::Response;
-use axum::extract::MatchedPath;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Instant;
-use std::future::Future;
-use std::pin::Pin;
 use tower::{Layer, Service};
 
 /// Axum layer that wires HTTP metrics into the request pipeline.
@@ -27,9 +27,11 @@ impl<S> Layer<S> for HttpMetricsLayer {
     type Service = HttpMetricsService<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        let requests_total = self
-            .registry
-            .counter_vec("http_requests_total", "Total HTTP requests", &["method", "status", "path"]);
+        let requests_total = self.registry.counter_vec(
+            "http_requests_total",
+            "Total HTTP requests",
+            &["method", "status", "path"],
+        );
         let inflight =
             self.registry
                 .gauge("http_inflight_requests", "In-flight HTTP requests", &[]);
@@ -37,11 +39,15 @@ impl<S> Layer<S> for HttpMetricsLayer {
             "http_request_duration_seconds",
             "HTTP request durations in seconds",
             &["method", "status", "path"],
-            Some(vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]),
+            Some(vec![
+                0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+            ]),
         );
-        let errors_total = self
-            .registry
-            .counter_vec("http_errors_total", "HTTP error responses (>=400)", &["method", "status_class", "path"]);
+        let errors_total = self.registry.counter_vec(
+            "http_errors_total",
+            "HTTP error responses (>=400)",
+            &["method", "status_class", "path"],
+        );
 
         HttpMetricsService {
             inner,
@@ -101,21 +107,37 @@ where
                 Ok(res) => {
                     let status_code = res.status().as_u16();
                     let status = status_code.to_string();
-                    let labels = [("method", method.as_str()), ("status", status.as_str()), ("path", path.as_str())];
+                    let labels = [
+                        ("method", method.as_str()),
+                        ("status", status.as_str()),
+                        ("path", path.as_str()),
+                    ];
                     requests_total.inc(&labels);
                     durations.observe_duration(start.elapsed(), &labels);
                     if status_code >= 400 {
                         let class = if status_code >= 500 { "5xx" } else { "4xx" };
-                        let elabels = [("method", method.as_str()), ("status_class", class), ("path", path.as_str())];
+                        let elabels = [
+                            ("method", method.as_str()),
+                            ("status_class", class),
+                            ("path", path.as_str()),
+                        ];
                         errors_total.inc(&elabels);
                     }
                 }
                 Err(_err) => {
                     // On inner service error, count as 5xx and record duration
-                    let labels = [("method", method.as_str()), ("status", "500"), ("path", path.as_str())];
+                    let labels = [
+                        ("method", method.as_str()),
+                        ("status", "500"),
+                        ("path", path.as_str()),
+                    ];
                     requests_total.inc(&labels);
                     durations.observe_duration(start.elapsed(), &labels);
-                    let elabels = [("method", method.as_str()), ("status_class", "5xx"), ("path", path.as_str())];
+                    let elabels = [
+                        ("method", method.as_str()),
+                        ("status_class", "5xx"),
+                        ("path", path.as_str()),
+                    ];
                     errors_total.inc(&elabels);
                 }
             }

@@ -384,7 +384,13 @@ impl LabeledCounter for PromLabeledCounter {
         let vals: Vec<&str> = self
             .label_keys
             .iter()
-            .map(|k| labels.iter().find(|(lk, _)| *lk == k.as_str()).map(|(_, v)| *v).unwrap_or(""))
+            .map(|k| {
+                labels
+                    .iter()
+                    .find(|(lk, _)| *lk == k.as_str())
+                    .map(|(_, v)| *v)
+                    .unwrap_or("")
+            })
             .collect();
         self.inner.with_label_values(&vals).inc();
     }
@@ -393,7 +399,13 @@ impl LabeledCounter for PromLabeledCounter {
         let vals: Vec<&str> = self
             .label_keys
             .iter()
-            .map(|k| labels.iter().find(|(lk, _)| *lk == k.as_str()).map(|(_, v)| *v).unwrap_or(""))
+            .map(|k| {
+                labels
+                    .iter()
+                    .find(|(lk, _)| *lk == k.as_str())
+                    .map(|(_, v)| *v)
+                    .unwrap_or("")
+            })
             .collect();
         self.inner.with_label_values(&vals).inc_by(v);
     }
@@ -405,7 +417,13 @@ impl LabeledHistogram for PromLabeledHistogram {
         let vals: Vec<&str> = self
             .label_keys
             .iter()
-            .map(|k| labels.iter().find(|(lk, _)| *lk == k.as_str()).map(|(_, v)| *v).unwrap_or(""))
+            .map(|k| {
+                labels
+                    .iter()
+                    .find(|(lk, _)| *lk == k.as_str())
+                    .map(|(_, v)| *v)
+                    .unwrap_or("")
+            })
             .collect();
         self.inner.with_label_values(&vals).observe(v);
     }

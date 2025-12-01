@@ -9,10 +9,9 @@ use std::sync::Arc;
 use commons::{
     services::http::{HttpServer, HttpServerConfig},
     util::error::InvariantError,
-    util::metrics::{PrometheusRegistry, MetricsRegistry},
+    util::metrics::{MetricsRegistry, PrometheusRegistry},
 };
 use tokio::sync::Mutex;
-use tracing_subscriber;
 
 const DEFAULT_PORT: u16 = 9000;
 
@@ -88,4 +87,3 @@ mod tests {
         assert_eq!(value, Some(2.0));
     }
 }
-

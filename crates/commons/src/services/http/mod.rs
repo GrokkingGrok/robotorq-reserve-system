@@ -6,7 +6,7 @@
 #![allow(async_fn_in_trait)]
 use crate::util::config::RoboTorqConfig;
 use crate::util::error::{InvariantError, logging_error::LoggingError};
-use axum::{Router, routing::get, Extension};
+use axum::{Extension, Router, routing::get};
 use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -88,10 +88,8 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// // - Ready to start processing
     /// # Ok::<(), commons::util::error::InvariantError>(())
     /// ```
-    fn initialize(&mut self, _config: &RoboTorqConfig) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
-        async {
-            Ok(())
-        }
+    async fn initialize(&mut self, _config: &RoboTorqConfig) -> Result<(), InvariantError> {
+        Ok(())
     }
 
     /// Transition from initialized to running.
@@ -132,10 +130,8 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// // - Ready to serve clients
     /// # Ok::<(), commons::util::error::InvariantError>(())
     /// ```
-    fn start(&self) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
-        async {
-            Ok(())
-        }
+    async fn start(&self) -> Result<(), InvariantError> {
+        Ok(())
     }
 
     /// Gracefully stop processing while keeping resources allocated.
@@ -176,10 +172,8 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// // - Can be restarted quickly
     /// # Ok::<(), commons::util::error::InvariantError>(())
     /// ```
-    fn stop(&self) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
-        async {
-            Ok(())
-        }
+    async fn stop(&self) -> Result<(), InvariantError> {
+        Ok(())
     }
 
     /// Final cleanup; release all resources.
@@ -221,10 +215,8 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// // - Service cannot be restarted
     /// # Ok::<(), commons::util::error::InvariantError>(())
     /// ```
-    fn shutdown(&self) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
-        async {
-            Ok(())
-        }
+    async fn shutdown(&self) -> Result<(), InvariantError> {
+        Ok(())
     }
 }
 
@@ -394,7 +386,7 @@ impl<S: RoboTorqService> HttpServer<S> {
         }
 
         // Create shutdown signal that will call stop and shutdown
-        let shutdown_signal = ctrl_c_signal_with_service_shutdown(Arc::clone(&self.service));
+        let shutdown_signal = async move { shutdown::ctrl_c_signal().await };
 
         // Start HTTP server with shutdown
         self.start_with_shutdown(shutdown_signal).await
@@ -424,7 +416,7 @@ impl<S: RoboTorqService> HttpServer<S> {
         }
 
         // Create shutdown signal that will call stop and shutdown
-        let shutdown_signal = ctrl_c_signal_with_service_shutdown(Arc::clone(&self.service));
+        let shutdown_signal = async move { shutdown::ctrl_c_signal().await };
 
         // Start HTTP server with shutdown
         self.start_with_shutdown(shutdown_signal).await
@@ -452,10 +444,7 @@ impl<S: RoboTorqService> HttpServer<S> {
                 "/readyz",
                 get(move || readyz::readyz_handler(Arc::clone(&ready_flag))),
             )
-            .route(
-                self.config.metrics.0.as_str(),
-                get(metrics_handler::<S>),
-            )
+            .route(self.config.metrics.0.as_str(), get(metrics_handler::<S>))
             .with_state(Arc::clone(&self.service));
 
         // Conditionally add middleware layers based on configuration
@@ -478,7 +467,9 @@ impl<S: RoboTorqService> HttpServer<S> {
         if let Some(registry) = &self.config.metrics_registry {
             app = app.layer(Extension(std::sync::Arc::clone(registry)));
             // Use route_layer so MatchedPath is set before middleware runs
-            app = app.route_layer(middleware::HttpMetricsLayer::new(std::sync::Arc::clone(registry)));
+            app = app.route_layer(middleware::HttpMetricsLayer::new(std::sync::Arc::clone(
+                registry,
+            )));
         }
 
         // Create listener
@@ -489,7 +480,8 @@ impl<S: RoboTorqService> HttpServer<S> {
         tracing::info!("HTTP server listening on {}", addr);
 
         // Mark ready and start serving; export readiness gauge if registry present
-        let mut ready_gauge: Option<Arc<dyn crate::util::metrics::MetricGauge + Send + Sync>> = None;
+        let mut ready_gauge: Option<Arc<dyn crate::util::metrics::MetricGauge + Send + Sync>> =
+            None;
         if let Some(registry) = &self.config.metrics_registry {
             let g = registry.gauge("http_ready", "HTTP server readiness flag", &[]);
             g.set(1.0);
@@ -856,25 +848,17 @@ mod tests {
             self.handler.export_text()
         }
 
-        fn initialize(&mut self, _config: &RoboTorqConfig) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
-            async {
-                Ok(())
-            }
+        async fn initialize(&mut self, _config: &RoboTorqConfig) -> Result<(), InvariantError> {
+            Ok(())
         }
-        fn start(&self) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
-            async {
-                Ok(())
-            }
+        async fn start(&self) -> Result<(), InvariantError> {
+            Ok(())
         }
-        fn stop(&self) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
-            async {
-                Ok(())
-            }
+        async fn stop(&self) -> Result<(), InvariantError> {
+            Ok(())
         }
-        fn shutdown(&self) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
-            async {
-                Ok(())
-            }
+        async fn shutdown(&self) -> Result<(), InvariantError> {
+            Ok(())
         }
     }
 
@@ -882,7 +866,7 @@ mod tests {
     fn http_server_with_test_service() {
         // Create a minimal service that implements RoboTorqService
         let handler = MetricsHandler::new();
-        handler.register_counter("test_requests_total", "Total test requests");
+        let _ = handler.register_counter("test_requests_total", "Total test requests");
         let svc = Arc::new(Mutex::new(TestService { handler }));
 
         // Create HTTP server config
@@ -908,7 +892,7 @@ mod tests {
     async fn basic_http_server_async() {
         let handler = MetricsHandler::new();
         // Register some test metrics to ensure export_text() is not empty
-        handler.register_counter("test_counter", "test counter");
+        let _ = handler.register_counter("test_counter", "test counter");
         let _service = HttpService::new("127.0.0.1", 0); // Use port 0 for testing
         let _health = HttpEndpoint::new("/health");
         let _metrics = HttpEndpoint::new("/metrics");

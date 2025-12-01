@@ -51,7 +51,7 @@ impl RoboTorqService for SandboxService {
         self.metrics.export_text()
     }
 
-    fn start(&self) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
-        async { Ok(()) }
+    async fn start(&self) -> Result<(), InvariantError> {
+        Ok(())
     }
 }

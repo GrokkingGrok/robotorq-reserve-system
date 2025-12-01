@@ -6,8 +6,8 @@
 use crate::services::http::RoboTorqService;
 use crate::util::config::RoboTorqConfig;
 use crate::util::config::load_robotorq_config;
-use crate::util::error::config_error::ConfigError;
 use crate::util::error::InvariantError;
+use crate::util::error::config_error::ConfigError;
 use tracing::info;
 
 /// Initialize a service with the given configuration.

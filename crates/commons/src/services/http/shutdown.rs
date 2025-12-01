@@ -3,7 +3,6 @@
 //! These helpers make it easy to hook a service `stop`/`shutdown` sequence into
 //! a signal such as Ctrl+C so the service can release resources cleanly.
 use crate::services::http::RoboTorqService;
-use std::future::Future;
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -33,13 +32,11 @@ use tracing::{info, warn};
 ///     .start_with_shutdown(ctrl_c_signal())
 ///     .await?;
 /// ```
-pub fn ctrl_c_signal() -> impl Future<Output = ()> + Send {
-    async move {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("failed to register Ctrl+C handler");
-        info!("received shutdown signal");
-    }
+pub async fn ctrl_c_signal() {
+    tokio::signal::ctrl_c()
+        .await
+        .expect("failed to register Ctrl+C handler");
+    info!("received shutdown signal");
 }
 
 /// Build a signal listener that also runs service cleanup hooks after Ctrl+C.
@@ -47,18 +44,17 @@ pub fn ctrl_c_signal() -> impl Future<Output = ()> + Send {
 /// This helper wraps `ctrl_c_signal` and, once the shutdown trigger fires, calls
 /// `stop` followed by `shutdown` on the provided service. Errors during stop or
 /// shutdown are logged but do not stop the signal propagation.
-pub fn ctrl_c_signal_with_service_shutdown<S>(service: Arc<tokio::sync::Mutex<S>>) -> impl Future<Output = ()> + Send
+pub async fn ctrl_c_signal_with_service_shutdown<S>(service: Arc<tokio::sync::Mutex<S>>)
 where
     S: RoboTorqService,
 {
-    async move {
-        ctrl_c_signal().await;
-        let svc = service.lock().await;
-        if let Err(err) = svc.stop().await {
-            warn!(error = ?err, "service stop hook failed");
-        }
-        if let Err(err) = svc.shutdown().await {
-            warn!(error = ?err, "service shutdown hook failed");
-        }
+    ctrl_c_signal().await;
+    let svc = service.lock().await;
+    if let Err(err) = svc.stop().await {
+        warn!(error = ?err, "service stop hook failed");
+    }
+    let svc = service.lock().await;
+    if let Err(err) = svc.shutdown().await {
+        warn!(error = ?err, "service shutdown hook failed");
     }
 }

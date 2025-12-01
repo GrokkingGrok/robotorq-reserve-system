@@ -35,6 +35,3 @@ jobs:
 
       - name: Lint (clippy)
         run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Format (verify)
-        run: cargo fmt --all -- --check

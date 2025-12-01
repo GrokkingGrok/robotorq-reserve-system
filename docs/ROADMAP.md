@@ -27,31 +27,56 @@ Deliverables:
 - Full test coverage and CI integration
 
 ### Phase 2.0 — Template Stabilization
+Status: in progress
+
+Completed:
+- Normalize module paths in commons (removed #[path], removed glob re-exports); centralized schema version constants and gauges
+- Metrics naming and labels aligned (service/component/version/subject), per INCONSISTENCIES audit
+
+In progress:
 - Pin dependencies in workspace Cargo.toml with specific versions
+  - Add cargo-deny for license/duplicate checks
+  - Generate and commit lockfile for reproducible CI builds
 - Implement sim_sleep helper for time dilation in simulation mode
+  - Feature-gate with `sim` and provide deterministic time source
 - Clarify simulation legal notice for contributor awareness
+  - Include repo-level NOTICE and per-crate README badge
 - Add default implementations to RoboTorqService trait methods
+  - Provide no-op health/metrics defaults and graceful shutdown hooks
 - Set up CI pipeline with automated testing and linting
+  - Rust: fmt, clippy, test; optional miri on nightly
+  - Cache strategy for workspace builds
 
 Deliverables:
-- Stabilized template with pinned dependencies and CI
-- Implemented time dilation for simulation testing
-- Updated documentation and legal notices
+- Stabilized template with pinned dependencies and baseline CI
+- Implemented time dilation for simulation testing (sim_sleep + feature-gate)
+- Updated documentation and legal notices for simulation mode
+- Module path normalization and schema/version gauges consolidated (from INCONSISTENCIES)
 - Template ready for persistence implementation without regressions
 
 ### Phase 2.1 — Persistence Strategy (Unified)
+Scope: unify Postgres/SQLite/Memory backends behind a common abstraction, with health, timeouts, and standardized errors
+
+Plan:
 - Implement multi-backend repository abstraction supporting Postgres/SQLite/Memory
+  - Use sqlx with feature flags: `postgres`, `sqlite`; `runtime-tokio`
+  - Memory backend via in-process store for tests/examples
 - Add health contributions, connection pooling, and timeout handling
+  - Pooled connections (sqlx::Pool), per-op timeouts via tokio timeouts
 - Implement database migrations with multi-backend support
+  - Use sqlx migrate (avoid name collision with service “Refinery” crate)
+  - Seed example migrations and a migration runner utility
 - Standardize error mapping from persistence layer to service errors
+  - Define PersistenceError enum and map driver errors
 - Add repository pattern for common data access operations
+  - Traits for read/write ops; typed IDs; pagination helpers
 
 Deliverables:
 - Multi-backend persistence module with repository abstraction
-- Migration system supporting all configured backends
-- Health checks and connection management
+- Migration system (sqlx migrate) supporting configured backends
+- Health checks and connection management with timeouts
 - Standardized persistence error types and mapping
-- Examples and comprehensive tests
+- Examples and comprehensive tests (including testcontainers for Postgres)
 
 ### Phase 3 — NATS & JetStream
 - Client abstraction over `async-nats`: connect, publish, subscribe, request/reply.
