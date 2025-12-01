@@ -9,6 +9,7 @@ use std::sync::Arc;
 use commons::{
     services::http::{HttpServer, HttpServerConfig},
     util::error::InvariantError,
+    util::metrics::{PrometheusRegistry, MetricsRegistry},
 };
 use tokio::sync::Mutex;
 use tracing_subscriber;
@@ -30,7 +31,11 @@ async fn main() -> Result<(), InvariantError> {
         .unwrap_or(DEFAULT_PORT);
 
     // Build HTTP server config using local defaults and override port
-    let http_config = HttpServerConfig::local_defaults(port);
+    // Include a Prometheus registry so middleware + /metrics can export http_* metrics
+    let registry: std::sync::Arc<dyn MetricsRegistry> =
+        std::sync::Arc::new(PrometheusRegistry::new("sandbox", "http", "dev"));
+    let http_config = HttpServerConfig::local_defaults(port)
+        .with_metrics_registry(std::sync::Arc::clone(&registry));
 
     // Construct service and wrap for HttpServer
     let service = Arc::new(Mutex::new(SandboxService::new(http_config.clone())));
@@ -54,6 +59,7 @@ mod tests {
             timeout_seconds: Some(30),
             max_body_size_bytes: Some(1024 * 1024),
             cors_permissive: false,
+            metrics_registry: None,
         };
         let service = SandboxService::new(test_config);
         fn extract_metric_value(metrics: &str, name: &str) -> Option<f64> {

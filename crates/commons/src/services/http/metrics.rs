@@ -5,7 +5,7 @@
 //!
 //! Typical use is to expose `GET /metrics` for scraping by Prometheus.
 use crate::services::http::RoboTorqService;
-use axum::{extract::State, http::StatusCode, response::IntoResponse};
+use axum::{extract::{State, Extension}, http::{StatusCode, header}, response::IntoResponse};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -43,7 +43,20 @@ use tokio::sync::Mutex;
 /// ```
 pub async fn metrics_handler<S: RoboTorqService>(
     State(service): State<Arc<Mutex<S>>>,
+    maybe_registry: Option<Extension<std::sync::Arc<dyn crate::util::metrics::MetricsRegistry>>>,
 ) -> impl IntoResponse {
-    let svc = service.lock().await;
-    (StatusCode::OK, svc.export_metrics())
+    // Prefer a shared registry when present (middleware/populated registry),
+    // otherwise fall back to the service's own exporter.
+    let body = if let Some(Extension(reg)) = maybe_registry {
+        reg.export_text()
+    } else {
+        let svc = service.lock().await;
+        svc.export_metrics()
+    };
+
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+        body,
+    )
 }

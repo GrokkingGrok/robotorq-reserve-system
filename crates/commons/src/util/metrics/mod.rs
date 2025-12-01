@@ -36,6 +36,25 @@ pub trait MetricHistogram: Send + Sync {
         self.observe(d.as_secs_f64());
     }
 }
+
+/// Labeled counter allowing dynamic label values at observation time.
+pub trait LabeledCounter: Send + Sync {
+    /// Increment by 1 with label values.
+    fn inc(&self, labels: &[(&str, &str)]);
+    /// Add an arbitrary value with label values.
+    fn add(&self, v: f64, labels: &[(&str, &str)]);
+}
+
+/// Labeled histogram allowing dynamic label values at observation time.
+pub trait LabeledHistogram: Send + Sync {
+    /// Observe a raw value with label values.
+    fn observe(&self, v: f64, labels: &[(&str, &str)]);
+    /// Observe a duration (seconds) with label values.
+    #[inline]
+    fn observe_duration(&self, d: Duration, labels: &[(&str, &str)]) {
+        self.observe(d.as_secs_f64(), labels);
+    }
+}
 use prometheus::{
     CounterVec, Encoder, GaugeVec, HistogramOpts, HistogramVec, Opts, Registry, TextEncoder,
 };
@@ -65,6 +84,21 @@ pub trait MetricsRegistry: Send + Sync + 'static {
         labels: &[(&str, &str)],
         buckets: Option<Vec<f64>>,
     ) -> Box<dyn MetricHistogram + Send + Sync>;
+    /// Create a labeled counter with dynamic label values.
+    fn counter_vec(
+        &self,
+        name: &str,
+        help: &str,
+        label_keys: &[&str],
+    ) -> Box<dyn LabeledCounter + Send + Sync>;
+    /// Create a labeled histogram with dynamic label values.
+    fn histogram_vec(
+        &self,
+        name: &str,
+        help: &str,
+        label_keys: &[&str],
+        buckets: Option<Vec<f64>>,
+    ) -> Box<dyn LabeledHistogram + Send + Sync>;
     /// Export metrics as Prometheus text.
     fn export_text(&self) -> String;
 }
@@ -118,6 +152,14 @@ struct PromGauge {
 struct PromHistogram {
     inner: HistogramVec,
     label_values: Vec<String>,
+}
+struct PromLabeledCounter {
+    inner: CounterVec,
+    label_keys: Vec<String>,
+}
+struct PromLabeledHistogram {
+    inner: HistogramVec,
+    label_keys: Vec<String>,
 }
 struct PromSimpleCounter {
     inner: prometheus::Counter,
@@ -290,12 +332,82 @@ impl MetricsRegistry for PrometheusRegistry {
     }
 
     #[inline]
+    fn counter_vec(
+        &self,
+        name: &str,
+        help: &str,
+        label_keys: &[&str],
+    ) -> Box<dyn LabeledCounter + Send + Sync> {
+        let keys: Vec<&str> = label_keys.to_vec();
+        let vec = CounterVec::new(Opts::new(name, help), &keys).expect("counter vec");
+        self.registry.register(Box::new(vec.clone())).ok();
+        Box::new(PromLabeledCounter {
+            inner: vec,
+            label_keys: label_keys.iter().map(|s| s.to_string()).collect(),
+        })
+    }
+
+    #[inline]
+    fn histogram_vec(
+        &self,
+        name: &str,
+        help: &str,
+        label_keys: &[&str],
+        buckets: Option<Vec<f64>>,
+    ) -> Box<dyn LabeledHistogram + Send + Sync> {
+        let mut opts = HistogramOpts::new(name, help);
+        if let Some(b) = buckets {
+            opts = opts.buckets(b.to_vec());
+        }
+        let keys: Vec<&str> = label_keys.to_vec();
+        let vec = HistogramVec::new(opts, &keys).expect("histogram vec");
+        self.registry.register(Box::new(vec.clone())).ok();
+        Box::new(PromLabeledHistogram {
+            inner: vec,
+            label_keys: label_keys.iter().map(|s| s.to_string()).collect(),
+        })
+    }
+
+    #[inline]
     fn export_text(&self) -> String {
         let mf = self.registry.gather();
         let mut buf = Vec::new();
         let enc = TextEncoder::new();
         enc.encode(&mf, &mut buf).ok();
         String::from_utf8(buf).unwrap_or_default()
+    }
+}
+
+impl LabeledCounter for PromLabeledCounter {
+    #[inline]
+    fn inc(&self, labels: &[(&str, &str)]) {
+        let vals: Vec<&str> = self
+            .label_keys
+            .iter()
+            .map(|k| labels.iter().find(|(lk, _)| *lk == k.as_str()).map(|(_, v)| *v).unwrap_or(""))
+            .collect();
+        self.inner.with_label_values(&vals).inc();
+    }
+    #[inline]
+    fn add(&self, v: f64, labels: &[(&str, &str)]) {
+        let vals: Vec<&str> = self
+            .label_keys
+            .iter()
+            .map(|k| labels.iter().find(|(lk, _)| *lk == k.as_str()).map(|(_, v)| *v).unwrap_or(""))
+            .collect();
+        self.inner.with_label_values(&vals).inc_by(v);
+    }
+}
+
+impl LabeledHistogram for PromLabeledHistogram {
+    #[inline]
+    fn observe(&self, v: f64, labels: &[(&str, &str)]) {
+        let vals: Vec<&str> = self
+            .label_keys
+            .iter()
+            .map(|k| labels.iter().find(|(lk, _)| *lk == k.as_str()).map(|(_, v)| *v).unwrap_or(""))
+            .collect();
+        self.inner.with_label_values(&vals).observe(v);
     }
 }
 

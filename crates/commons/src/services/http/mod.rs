@@ -6,7 +6,7 @@
 #![allow(async_fn_in_trait)]
 use crate::util::config::RoboTorqConfig;
 use crate::util::error::{InvariantError, logging_error::LoggingError};
-use axum::{Router, routing::get};
+use axum::{Router, routing::get, Extension};
 use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,7 +16,6 @@ use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
 // Metrics abstraction for HTTP middleware wiring
-use crate::util::metrics::PrometheusRegistry;
 // Metrics abstraction imported when wiring middleware
 // use crate::util::metrics::{MetricsRegistry, Histogram, Counter, Gauge};
 // use std::time::Duration;
@@ -447,8 +446,6 @@ impl<S: RoboTorqService> HttpServer<S> {
 
         // Build the application with routes
         let ready_flag = Arc::clone(&self.ready);
-        // Minimal registry setup for Phase 1; labels can be refined later
-        let registry = std::sync::Arc::new(PrometheusRegistry::new("robotorq", "http", "dev"));
         let mut app = Router::new()
             .route("/healthz", get(health_handler))
             .route(
@@ -457,14 +454,7 @@ impl<S: RoboTorqService> HttpServer<S> {
             )
             .route(
                 self.config.metrics.0.as_str(),
-                get({
-                    let r = std::sync::Arc::clone(&registry);
-                    move || async move {
-                        use crate::util::metrics::MetricsRegistry;
-                        use axum::http::StatusCode;
-                        (StatusCode::OK, r.export_text())
-                    }
-                }),
+                get(metrics_handler::<S>),
             )
             .with_state(Arc::clone(&self.service));
 
@@ -484,6 +474,13 @@ impl<S: RoboTorqService> HttpServer<S> {
             app = app.layer(CorsLayer::permissive());
         }
 
+        // Attach metrics registry via Extension and enable HTTP metrics middleware when configured
+        if let Some(registry) = &self.config.metrics_registry {
+            app = app.layer(Extension(std::sync::Arc::clone(registry)));
+            // Use route_layer so MatchedPath is set before middleware runs
+            app = app.route_layer(middleware::HttpMetricsLayer::new(std::sync::Arc::clone(registry)));
+        }
+
         // Create listener
         let listener = TcpListener::bind(&addr)
             .await
@@ -491,7 +488,13 @@ impl<S: RoboTorqService> HttpServer<S> {
 
         tracing::info!("HTTP server listening on {}", addr);
 
-        // Mark ready and start serving
+        // Mark ready and start serving; export readiness gauge if registry present
+        let mut ready_gauge: Option<Arc<dyn crate::util::metrics::MetricGauge + Send + Sync>> = None;
+        if let Some(registry) = &self.config.metrics_registry {
+            let g = registry.gauge("http_ready", "HTTP server readiness flag", &[]);
+            g.set(1.0);
+            ready_gauge = Some(g.into());
+        }
         self.ready.store(true, Ordering::Relaxed);
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal)
@@ -500,6 +503,9 @@ impl<S: RoboTorqService> HttpServer<S> {
 
         // After shutdown, mark not ready
         self.ready.store(false, Ordering::Relaxed);
+        if let Some(g) = ready_gauge {
+            g.set(0.0);
+        }
 
         Ok(())
     }
@@ -692,7 +698,7 @@ impl HttpEndpoint {
 /// // Or use the convenience method for local development
 /// let dev_config = HttpServerConfig::local_defaults(3000);
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct HttpServerConfig {
     /// The HTTP service configuration specifying network address and port.
     pub service: HttpService,
@@ -712,6 +718,21 @@ pub struct HttpServerConfig {
     pub max_body_size_bytes: Option<usize>,
     /// Whether to enable permissive CORS. Defaults to true for development.
     pub cors_permissive: bool,
+    /// Optional shared metrics registry; when set, middleware and handler can use it.
+    pub metrics_registry: Option<std::sync::Arc<dyn crate::util::metrics::MetricsRegistry>>,
+}
+
+impl std::fmt::Debug for HttpServerConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HttpServerConfig")
+            .field("service", &self.service)
+            .field("health", &self.health)
+            .field("metrics", &self.metrics)
+            .field("timeout_seconds", &self.timeout_seconds)
+            .field("max_body_size_bytes", &self.max_body_size_bytes)
+            .field("cors_permissive", &self.cors_permissive)
+            .finish()
+    }
 }
 
 impl HttpServerConfig {
@@ -754,6 +775,7 @@ impl HttpServerConfig {
             timeout_seconds: None,
             max_body_size_bytes: None,
             cors_permissive: true,
+            metrics_registry: None,
         }
     }
 
@@ -802,7 +824,17 @@ impl HttpServerConfig {
             timeout_seconds: Some(30), // 30 second timeout for development
             max_body_size_bytes: Some(1024 * 1024), // 1MB body limit
             cors_permissive: true,
+            metrics_registry: None,
         }
+    }
+
+    /// Enable HTTP observability by providing a metrics registry used by middleware and /metrics.
+    pub fn with_metrics_registry(
+        mut self,
+        registry: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry>,
+    ) -> Self {
+        self.metrics_registry = Some(registry);
+        self
     }
 }
 

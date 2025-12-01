@@ -9,6 +9,7 @@ use commons::services::http::RoboTorqService;
 use commons::util::metrics::PrometheusRegistry;
 use axum::http::Request;
 use tower::ServiceExt; // for oneshot
+use tokio::sync::Mutex;
 
 #[tokio::test]
 async fn healthz_returns_ok() {
@@ -92,6 +93,86 @@ async fn metrics_integration_exposes_counter() {
         text.contains("# HELP test_counter") ||
         text.contains("test_counter ")
     );
+}
+
+#[tokio::test]
+async fn metrics_handler_uses_extension_registry() {
+    /// Verifies metrics_handler prefers Extension registry and exports http_* metrics.
+    let registry = Arc::new(PrometheusRegistry::new("commons", "test", "dev"));
+    // Build router using metrics_handler and provide both Extension(registry) and middleware layer
+    let app = Router::new()
+        .route("/ping", get(|| async { StatusCode::OK }))
+        .route("/metrics", get(commons::services::http::metrics::metrics_handler::<TestService>))
+        .layer(axum::Extension(registry.clone()))
+        .layer(HttpMetricsLayer::new(registry.clone()))
+        .with_state(Arc::new(Mutex::new(TestService)));
+
+    // Hit /ping to increment request counters in middleware
+    let _ = app
+        .clone()
+        .oneshot(Request::builder().uri("/ping").body(axum::body::Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    // Fetch /metrics via our handler and assert http_* metrics are present
+    let res = app
+        .clone()
+        .oneshot(Request::builder().uri("/metrics").body(axum::body::Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body_bytes = axum::body::to_bytes(res.into_body(), 1024 * 1024).await.unwrap();
+    let text = String::from_utf8_lossy(&body_bytes);
+    assert!(
+        text.contains("# HELP http_requests_total") ||
+        text.contains("http_requests_total{") ||
+        text.contains("http_requests_total ")
+    );
+}
+
+#[tokio::test]
+async fn labeled_metrics_include_method_status_path_and_errors() {
+    /// Ensures labeled metrics record method/status/path and errors counter increments.
+    let registry = Arc::new(PrometheusRegistry::new("commons", "test", "dev"));
+    use commons::util::metrics::MetricsRegistry;
+
+    // Router with templated path and route_layer metrics
+    let app = Router::new()
+        .route("/item/:id", get(|| async { StatusCode::BAD_REQUEST }))
+        .route("/metrics", get(commons::services::http::metrics::metrics_handler::<TestService>))
+        .layer(axum::Extension(registry.clone()))
+        .route_layer(HttpMetricsLayer::new(registry.clone()))
+        .with_state(Arc::new(Mutex::new(TestService)));
+
+    // Perform a request that yields 400 to trigger errors_total
+    let _ = app
+        .clone()
+        .oneshot(Request::builder().uri("/item/42").body(axum::body::Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    // Fetch metrics and assert labeled series are present
+    let res = app
+        .clone()
+        .oneshot(Request::builder().uri("/metrics").body(axum::body::Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body_bytes = axum::body::to_bytes(res.into_body(), 1024 * 1024).await.unwrap();
+    let text = String::from_utf8_lossy(&body_bytes);
+
+    // Check requests_total with labels
+    assert!(text.contains("http_requests_total"));
+    assert!(text.contains("method=\"GET\""));
+    assert!(text.contains("status=\"400\""));
+    assert!(text.contains("path=\"/item/:id\"") || text.contains("path=\"/item/42\""));
+
+    // Check duration histogram with labels
+    assert!(text.contains("http_request_duration_seconds_bucket"));
+
+    // Check errors_total with status_class label
+    assert!(text.contains("http_errors_total"));
+    assert!(text.contains("status_class=\"4xx\""));
 }
 
 // Minimal stub service implementing RoboTorqService for health handler generic
