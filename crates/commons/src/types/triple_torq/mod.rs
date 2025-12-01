@@ -63,6 +63,7 @@ pub const JOULE_TORQS_PER_ROBOTORQ: u128 = TOKEN_TORQS_PER_ROBOTORQ * JOULE_TORQ
 /// # Returns
 /// Returns a tuple `(robotorq, tokentorq, jouletorq)` in canonical form where
 /// tokentorq < 1,000 and jouletorq < 3,600.
+#[allow(clippy::arithmetic_side_effects)]
 fn normalize(mut robotorq: u128, mut tokentorq: u128, mut jouletorq: u128) -> (u128, u16, u16) {
     // Roll excess JouleTorq into TokenTorq.
     if jouletorq >= JOULE_TORQS_PER_TOKEN_TORQ {
@@ -92,6 +93,7 @@ fn normalize(mut robotorq: u128, mut tokentorq: u128, mut jouletorq: u128) -> (u
 ///
 /// # Returns
 /// Returns the total JouleTorq units represented by the triple.
+#[allow(clippy::arithmetic_side_effects)]
 fn to_smallest_units(robotorq: u128, tokentorq: u16, jouletorq: u16) -> u128 {
     robotorq * JOULE_TORQS_PER_ROBOTORQ + (tokentorq as u128) * JOULE_TORQS_PER_TOKEN_TORQ + (jouletorq as u128)
 }
@@ -106,6 +108,7 @@ fn to_smallest_units(robotorq: u128, tokentorq: u16, jouletorq: u16) -> u128 {
 ///
 /// # Returns
 /// Returns a tuple `(robotorq, tokentorq, jouletorq)` in canonical form.
+#[allow(clippy::arithmetic_side_effects)]
 fn from_smallest_units(total: u128) -> (u128, u16, u16) {
     let robotorq = total / JOULE_TORQS_PER_ROBOTORQ;
     let rem_after_robot = total % JOULE_TORQS_PER_ROBOTORQ;
@@ -205,6 +208,7 @@ impl TripleTorq {
     /// assert_eq!(account.tokentorq_balance, 502);
     /// assert_eq!(account.jouletorq_balance, 300);
     /// ```
+    #[must_use]
     pub fn from_components_unchecked(robot: u128, token: u128, joule: u128) -> Self {
         let (r,t,j) = normalize(robot, token, joule);
         let provisional = Self { id: TripleTorqId::new(), robotorq_balance: r, tokentorq_balance: t, jouletorq_balance: j, schema_version: TRIPLE_TORQ_SCHEMA_VERSION, hash: [0u8;32] };
@@ -232,6 +236,7 @@ impl TripleTorq {
     /// assert_eq!(account.tokentorq_balance, 0);
     /// assert_eq!(account.jouletorq_balance, 0);
     /// ```
+    #[must_use]
     pub fn from_smallest_units(total: u128) -> Self {
         let (r,t,j) = from_smallest_units(total);
         let provisional = Self { id: TripleTorqId::new(), robotorq_balance: r, tokentorq_balance: t, jouletorq_balance: j, schema_version: TRIPLE_TORQ_SCHEMA_VERSION, hash: [0u8;32] };
@@ -279,6 +284,8 @@ impl TripleTorq {
     /// // Result will be normalized
     /// assert_eq!(sum.total_smallest_units(), a.total_smallest_units() + b.total_smallest_units());
     /// ```
+    #[must_use]
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn add(&self, other: &TripleTorq) -> TripleTorq {
         TripleTorq::from_components_unchecked(
             self.robotorq_balance + other.robotorq_balance,
@@ -307,6 +314,8 @@ impl TripleTorq {
     /// assert_eq!(result.tokentorq_balance, 1);
     /// assert_eq!(result.jouletorq_balance, 0);
     /// ```
+    #[must_use]
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn add_smallest_units(&self, add_units: u128) -> TripleTorq {
         TripleTorq::from_smallest_units(self.total_smallest_units() + add_units)
     }
@@ -334,6 +343,7 @@ impl TripleTorq {
     /// let result = a.subtract(&b).unwrap();
     /// assert_eq!(result.total_smallest_units(), a.total_smallest_units() - b.total_smallest_units());
     /// ```
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn subtract(&self, other: &TripleTorq) -> Result<TripleTorq, InvariantError> {
         let self_total = self.total_smallest_units();
         let other_total = other.total_smallest_units();
@@ -359,6 +369,8 @@ impl TripleTorq {
     /// let doubled = account.mul(2);
     /// assert_eq!(doubled.tokentorq_balance, 2);
     /// ```
+    #[must_use]
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn mul(&self, factor: u128) -> TripleTorq {
         // Multiplication in smallest units then decompose ensures normalization.
         TripleTorq::from_smallest_units(self.total_smallest_units() * factor)
@@ -385,6 +397,7 @@ impl TripleTorq {
     /// let halved = account.div_floor(2).unwrap();
     /// assert_eq!(halved.tokentorq_balance, 1);
     /// ```
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn div_floor(&self, divisor: u128) -> Result<TripleTorq, InvariantError> {
         if divisor == 0 {
             return Err(InvariantError::from(ConfigError::Invalid("division by zero".to_string())));
@@ -411,6 +424,8 @@ impl TripleTorq {
     /// let diff = a.abs_diff(&b);
     /// assert_eq!(diff.tokentorq_balance, 5);
     /// ```
+    #[must_use]
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn abs_diff(&self, other: &TripleTorq) -> TripleTorq {
         let a = self.total_smallest_units();
         let b = other.total_smallest_units();
@@ -457,6 +472,7 @@ impl TripleTorq {
     /// let min = a.min(&b);
     /// assert_eq!(min.tokentorq_balance, 1);
     /// ```
+    #[must_use]
     pub fn min(&self, other: &TripleTorq) -> TripleTorq {
         if self.total_smallest_units() <= other.total_smallest_units() { self.clone() } else { other.clone() }
     }
@@ -477,6 +493,7 @@ impl TripleTorq {
     /// let max = a.max(&b);
     /// assert_eq!(max.tokentorq_balance, 2);
     /// ```
+    #[must_use]
     pub fn max(&self, other: &TripleTorq) -> TripleTorq {
         if self.total_smallest_units() >= other.total_smallest_units() { self.clone() } else { other.clone() }
     }

@@ -22,6 +22,7 @@ use uuid::Uuid;
 /// let robot_id = RobotId::new();
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RobotId(pub Uuid);
 
 /// Unique identifier for a token representing work performed.
@@ -36,6 +37,7 @@ pub struct RobotId(pub Uuid);
 /// let token_id = TokenId::new();
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TokenId(pub Uuid);
 
 /// Unique identifier for an unmapped ore batch.
@@ -50,6 +52,7 @@ pub struct TokenId(pub Uuid);
 /// let batch_id = UnmappedOreBatchId::new();
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UnmappedOreBatchId(pub Uuid);
 
 /// Unique identifier for a TripleTorq account.
@@ -64,6 +67,7 @@ pub struct UnmappedOreBatchId(pub Uuid);
 /// let account_id = TripleTorqId::new();
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TripleTorqId(pub Uuid);
 
 /// Unique identifier for a contract between parties.
@@ -78,6 +82,7 @@ pub struct TripleTorqId(pub Uuid);
 /// let contract_id = ContractId::new();
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ContractId(pub Uuid);
 
 /// Unique identifier for a party in the RoboTorq network.
@@ -92,6 +97,7 @@ pub struct ContractId(pub Uuid);
 /// let party_id = PartyId::new();
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PartyId(pub Uuid);
 
 impl RobotId {
@@ -102,6 +108,7 @@ impl RobotId {
     /// # use commons::types::ids::RobotId;
     /// let robot_id = RobotId::new();
     /// ```
+    #[must_use]
     pub fn new() -> Self { Self(Uuid::new_v4()) }
 }
 
@@ -117,6 +124,7 @@ impl TokenId {
     /// # use commons::types::ids::TokenId;
     /// let token_id = TokenId::new();
     /// ```
+    #[must_use]
     pub fn new() -> Self { Self(Uuid::new_v4()) }
 }
 
@@ -132,6 +140,7 @@ impl UnmappedOreBatchId {
     /// # use commons::types::ids::UnmappedOreBatchId;
     /// let batch_id = UnmappedOreBatchId::new();
     /// ```
+    #[must_use]
     pub fn new() -> Self { Self(Uuid::new_v4()) }
 }
 
@@ -147,6 +156,7 @@ impl TripleTorqId {
     /// # use commons::types::ids::TripleTorqId;
     /// let account_id = TripleTorqId::new();
     /// ```
+    #[must_use]
     pub fn new() -> Self { Self(Uuid::new_v4()) }
 }
 
@@ -162,6 +172,7 @@ impl ContractId {
     /// # use commons::types::ids::ContractId;
     /// let contract_id = ContractId::new();
     /// ```
+    #[must_use]
     pub fn new() -> Self { Self(Uuid::new_v4()) }
 }
 
@@ -177,6 +188,7 @@ impl PartyId {
     /// # use commons::types::ids::PartyId;
     /// let party_id = PartyId::new();
     /// ```
+    #[must_use]
     pub fn new() -> Self { Self(Uuid::new_v4()) }
 }
 

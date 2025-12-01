@@ -19,6 +19,11 @@ use crate::services::http::RoboTorqService;
 /// - `Ok(())` when the service finishes its shutdown procedure.
 /// - `Err(InvariantError)` if the service reports a shutdown failure.
 ///
+/// # Errors
+///
+/// Returns `InvariantError` if the underlying service's `shutdown` method fails.
+/// The specific error depends on the service implementation.
+///
 /// # Panics
 /// - Not expected to panic.
 ///

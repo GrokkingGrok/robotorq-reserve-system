@@ -13,6 +13,7 @@ impl RobotGatewayMetrics {
     /// Create a new metrics set for the robot gateway.
     /// Internally allocates a fresh `MetricsHandler` and registers schema gauges plus
     /// gateway-specific counters/gauges.
+    #[must_use]
     pub fn new(prefix: &str) -> Self {
         let handler = MetricsHandler::new();
         handler.register_schema_version_gauges("commons");
@@ -31,10 +32,14 @@ impl RobotGatewayMetrics {
         Self { handler, registered_robots, batches_captured_total, batches_rejected_total }
     }
 
-    pub fn set_registered(&self, n: usize) { self.registered_robots.set(n as f64); }
+    pub fn set_registered(&self, n: usize) { 
+        #[allow(clippy::as_conversions)]
+        self.registered_robots.set(n as f64); 
+    }
     pub fn inc_captured(&self) { self.batches_captured_total.inc(); }
     pub fn inc_rejected(&self) { self.batches_rejected_total.inc(); }
 
     /// Getter returning a cloned Arc to the underlying handler for server/export usage.
-    pub fn get_handler(&self) -> Arc<MetricsHandler> { self.handler.clone() }
+    #[must_use]
+    pub fn get_handler(&self) -> Arc<MetricsHandler> { Arc::clone(&self.handler) }
 }

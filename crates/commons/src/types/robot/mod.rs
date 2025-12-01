@@ -43,6 +43,7 @@ use crate::util::schema::ROBOT_SCHEMA_VERSION;
 /// - `active_contract`: ID of the contract this robot is currently executing
 /// - `schema_version`: Version of the robot schema for compatibility
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Robot {
     /// Unique identifier of the robot.
     pub id: RobotId,

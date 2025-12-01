@@ -51,10 +51,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Wrap in Arc for HTTP server
-    let gateway = Arc::new(gateway);
+    let gateway_arc = Arc::new(gateway);
 
     // Create and start the HTTP server
-    let server = HttpServer::new(gateway.clone(), http_config);
+    let server = HttpServer::new(Arc::clone(&gateway_arc), http_config);
     info!(component = "robot-gateway", %addr, "starting HTTP server");
 
     // Set up graceful shutdown handling
@@ -81,12 +81,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Perform graceful shutdown of the service
     info!(component = "robot-gateway", "stopping service");
-    if let Err(e) = gateway.stop().await {
+    if let Err(e) = gateway_arc.stop().await {
         error!(component = "robot-gateway", error = %e, "error stopping service");
     }
 
     info!(component = "robot-gateway", "shutting down service");
-    if let Err(e) = gateway.shutdown().await {
+    if let Err(e) = gateway_arc.shutdown().await {
         error!(component = "robot-gateway", error = %e, "error shutting down service");
     }
 

@@ -20,6 +20,11 @@ use crate::services::http::RoboTorqService;
 /// - `Ok(())` when initialization completes successfully.
 /// - `Err(InvariantError)` if the service reports a failure.
 ///
+/// # Errors
+///
+/// Returns `InvariantError` if the underlying service's `initialize` method fails.
+/// The specific error depends on the service implementation.
+///
 /// # Panics
 /// - Not expected to panic.
 ///

@@ -25,9 +25,11 @@ impl RobotGateway {
     }
 
     /// Convenience for single robot.
+    #[must_use]
     pub fn single(robot_id: RobotId) -> Self { Self { robots: vec![robot_id], metrics: None } }
 
     /// Attach metrics to this gateway (builder-style). Updates registered robots gauge immediately.
+    #[must_use]
     pub fn with_metrics(mut self, metrics: RobotGatewayMetrics) -> Self {
         let count = self.robots.len();
         metrics.set_registered(count);
@@ -36,6 +38,12 @@ impl RobotGateway {
     }
 
     /// Load from a config file path (stub: returns one new robot for now).
+    ///
+    /// # Errors
+    ///
+    /// This function currently does not return any errors but may in the future
+    /// when actual configuration file parsing is implemented.
+    #[must_use]
     pub fn from_config(_path: &Path) -> Result<Self, String> {
         Ok(Self::single(RobotId::new()))
     }
@@ -51,6 +59,12 @@ impl RobotGateway {
     /// All registered robots.
     pub fn robots(&self) -> &[RobotId] { &self.robots }
 
+    /// Capture an unmapped batch for a specific robot.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvariantError::Gateway(RobotGatewayError::UnknownRobotId)` if the
+    /// specified `robot_id` is not registered with this gateway.
     pub fn capture_unmapped_batch_for(&self, robot_id: RobotId, tokens: Vec<Token>) -> Result<UnmappedOreBatch, InvariantError> {
         if !self.robots.contains(&robot_id) {
             if let Some(m) = &self.metrics { m.inc_rejected(); }
@@ -62,6 +76,11 @@ impl RobotGateway {
     }
 
     /// Capture a batch using the first registered robot (returns error if none).
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvariantError::Gateway(RobotGatewayError::UnknownRobotId)` if no
+    /// robots are registered with this gateway.
     pub fn capture_unmapped_batch_any(&self, tokens: Vec<Token>) -> Result<UnmappedOreBatch, InvariantError> {
         let robot_id = *self.robots.first().ok_or_else(|| {
             if let Some(m) = &self.metrics { m.inc_rejected(); }
@@ -74,6 +93,15 @@ impl RobotGateway {
 }
 
 impl RoboTorqService for RobotGateway {
+    /// Perform a health check on the robot gateway service.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvariantError::Gateway(RobotGatewayError::UnknownRobotId)` if no
+    /// robots are registered with this gateway.
+    ///
+    /// Returns `InvariantError::Gateway(RobotGatewayError::MetricsNotConfigured)` if
+    /// metrics are not configured for this gateway.
     fn health_check(&self) -> Result<String, InvariantError> {
         // Basic health check: ensure we have robots and metrics configured
         if self.robots.is_empty() {
@@ -91,6 +119,16 @@ impl RoboTorqService for RobotGateway {
             .unwrap_or_else(|| "# No metrics configured\n".to_string())
     }
 
+    fn handle_request(&self, _path: &str, _method: &str) -> Option<Result<String, InvariantError>> {
+        None
+    }
+
+    /// Initialize the robot gateway service with the provided configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvariantError::Gateway(RobotGatewayError::InvalidConfiguration)` if
+    /// the robot_gateway_port in the configuration is set to 0.
     async fn initialize(&mut self, config: &RoboTorqConfig) -> Result<(), InvariantError> {
         // Validate configuration for robot gateway
         if config.ports.robot_gateway_port == 0 {
@@ -120,6 +158,15 @@ impl RoboTorqService for RobotGateway {
         Ok(())
     }
 
+    /// Start the robot gateway service.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvariantError::Gateway(RobotGatewayError::InvalidConfiguration)` if
+    /// no robots are registered with this gateway.
+    ///
+    /// Returns `InvariantError::Gateway(RobotGatewayError::MetricsNotConfigured)` if
+    /// metrics are not configured for this gateway.
     async fn start(&self) -> Result<(), InvariantError> {
         // Validate that we're properly configured
         if self.robots.is_empty() {
@@ -142,6 +189,12 @@ impl RoboTorqService for RobotGateway {
         Ok(())
     }
 
+    /// Stop the robot gateway service gracefully.
+    ///
+    /// # Errors
+    ///
+    /// This method currently does not return any errors but may in the future
+    /// when background tasks or connections need to be shut down.
     async fn stop(&self) -> Result<(), InvariantError> {
         // Log that we're stopping
         tracing::info!(
@@ -157,6 +210,12 @@ impl RoboTorqService for RobotGateway {
         Ok(())
     }
 
+    /// Shut down the robot gateway service and release all resources.
+    ///
+    /// # Errors
+    ///
+    /// This method currently does not return any errors but may in the future
+    /// when resources need explicit cleanup.
     async fn shutdown(&self) -> Result<(), InvariantError> {
         // Log final shutdown
         tracing::info!(

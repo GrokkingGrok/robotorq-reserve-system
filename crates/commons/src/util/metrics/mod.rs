@@ -73,6 +73,7 @@ impl PrometheusRegistry {
         Self { registry, common_labels: common }
     }
 
+    #[allow(clippy::arithmetic_side_effects)]
     fn merged_labels<'a>(&'a self, labels: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
         let mut out = Vec::with_capacity(self.common_labels.len() + labels.len());
         for (k, v) in &self.common_labels {
@@ -239,14 +240,17 @@ impl MetricsHandler {
     /// A `Vec<Gauge>` containing the registered gauges for each schema type.
     ///
     /// # Example
-    /// ```
+    /// ```rust
     /// use commons::util::metrics::MetricsHandler;
     ///
     /// let handler = MetricsHandler::new();
     /// let gauges = handler.register_schema_version_gauges("commons");
     /// // Gauges are now registered and set to current schema versions
     /// ```
+    #[must_use]
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn register_schema_version_gauges(&self, prefix: &str) -> Vec<prometheus::Gauge> {
+        #[allow(clippy::arithmetic_side_effects)]
         fn to_snake(name: &str) -> String {
             let mut out = String::with_capacity(name.len() * 2);
             for (i, ch) in name.chars().enumerate() {
@@ -280,6 +284,11 @@ impl MetricsHandler {
     ///
     /// A `Result` containing a `Vec<Gauge>` on success, or a `PrometheusError` on failure.
     ///
+    /// # Errors
+    ///
+    /// Returns `PrometheusError` if metric registration fails due to invalid names,
+    /// duplicate metrics, or other Prometheus registry errors.
+    ///
     /// # Example
     /// ```
     /// use commons::util::metrics::MetricsHandler;
@@ -290,6 +299,7 @@ impl MetricsHandler {
     /// # Ok::<(), commons::util::error::prometheus_error::PrometheusError>(())
     /// ```
     pub fn register_schema_version_gauges_result(&self, prefix: &str) -> Result<Vec<prometheus::Gauge>, PrometheusError> {
+        #[allow(clippy::arithmetic_side_effects)]
         fn to_snake(name: &str) -> String {
             let mut out = String::with_capacity(name.len() * 2);
             for (i, ch) in name.chars().enumerate() {
@@ -329,7 +339,7 @@ impl MetricsHandler {
     /// Panics if the counter cannot be created (e.g., invalid metric name or help text).
     ///
     /// # Example
-    /// ```
+    /// ```rust
     /// use commons::util::metrics::MetricsHandler;
     ///
     /// let handler = MetricsHandler::new();
@@ -339,6 +349,8 @@ impl MetricsHandler {
     /// // or increment by a specific amount
     /// counter.inc_by(5.0);
     /// ```
+    #[must_use]
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn register_counter(&self, name: &str, help: &str) -> prometheus::Counter {
         let c = prometheus::Counter::new(name, help).expect("counter");
         self.registry.register(Box::new(c.clone())).ok();
@@ -355,6 +367,11 @@ impl MetricsHandler {
     /// # Returns
     ///
     /// A `Result` containing the `Counter` instance on success, or a `PrometheusError` on failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PrometheusError` if metric registration fails due to invalid names,
+    /// duplicate metrics, or other Prometheus registry errors.
     ///
     /// # Example
     /// ```
@@ -387,7 +404,7 @@ impl MetricsHandler {
     /// Panics if the gauge cannot be created (e.g., invalid metric name or help text).
     ///
     /// # Example
-    /// ```
+    /// ```rust
     /// use commons::util::metrics::MetricsHandler;
     ///
     /// let handler = MetricsHandler::new();
@@ -397,6 +414,8 @@ impl MetricsHandler {
     /// // later, decrease connections
     /// gauge.set(7.0);
     /// ```
+    #[must_use]
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn register_gauge(&self, name: &str, help: &str) -> prometheus::Gauge {
         let g = prometheus::Gauge::new(name, help).expect("gauge");
         self.registry.register(Box::new(g.clone())).ok();
@@ -413,6 +432,11 @@ impl MetricsHandler {
     /// # Returns
     ///
     /// A `Result` containing the `Gauge` instance on success, or a `PrometheusError` on failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PrometheusError` if metric registration fails due to invalid names,
+    /// duplicate metrics, or other Prometheus registry errors.
     ///
     /// # Example
     /// ```
@@ -446,7 +470,7 @@ impl MetricsHandler {
     /// Panics if the histogram cannot be created (e.g., invalid metric name, help text, or bucket configuration).
     ///
     /// # Example
-    /// ```
+    /// ```rust
     /// use commons::util::metrics::MetricsHandler;
     ///
     /// let handler = MetricsHandler::new();
@@ -455,6 +479,8 @@ impl MetricsHandler {
     /// hist.observe(0.5);
     /// hist.observe(2.0);
     /// ```
+    #[must_use]
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn register_histogram(&self, name: &str, help: &str, buckets: &[f64]) -> prometheus::Histogram {
         let h = prometheus::Histogram::with_opts(HistogramOpts::new(name, help).buckets(buckets.to_vec())).expect("histogram");
         self.registry.register(Box::new(h.clone())).ok();
@@ -472,6 +498,11 @@ impl MetricsHandler {
     /// # Returns
     ///
     /// A `Result` containing the `Histogram` instance on success, or a `PrometheusError` on failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PrometheusError` if metric registration fails due to invalid names,
+    /// duplicate metrics, invalid bucket configurations, or other Prometheus registry errors.
     ///
     /// # Example
     /// ```
@@ -503,7 +534,7 @@ impl MetricsHandler {
     /// A `Counter` instance for tracking errors.
     ///
     /// # Example
-    /// ```
+    /// ```rust
     /// use commons::util::metrics::MetricsHandler;
     ///
     /// let handler = MetricsHandler::new();
@@ -511,6 +542,7 @@ impl MetricsHandler {
     /// // on error
     /// err_counter.inc();
     /// ```
+    #[must_use]
     pub fn register_error_counter(&self, name: &str, help: &str) -> prometheus::Counter {
         self.register_counter(&format!("{}_errors_total", name), help)
     }
@@ -525,6 +557,11 @@ impl MetricsHandler {
     /// # Returns
     ///
     /// A `Result` containing the `Counter` instance on success, or a `PrometheusError` on failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PrometheusError` if metric registration fails due to invalid names,
+    /// duplicate metrics, or other Prometheus registry errors.
     ///
     /// # Example
     /// ```
@@ -553,7 +590,7 @@ impl MetricsHandler {
     /// A `Gauge` instance for tracking batch sizes.
     ///
     /// # Example
-    /// ```
+    /// ```rust
     /// use commons::util::metrics::MetricsHandler;
     ///
     /// let handler = MetricsHandler::new();
@@ -562,6 +599,7 @@ impl MetricsHandler {
     /// // later
     /// batch_gauge.set(30.0);
     /// ```
+    #[must_use]
     pub fn register_batch_size_gauge(&self, name: &str, help: &str) -> prometheus::Gauge {
         self.register_gauge(&format!("{}_batch_size", name), help)
     }
@@ -576,6 +614,11 @@ impl MetricsHandler {
     /// # Returns
     ///
     /// A `Result` containing the `Gauge` instance on success, or a `PrometheusError` on failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PrometheusError` if metric registration fails due to invalid names,
+    /// duplicate metrics, or other Prometheus registry errors.
     ///
     /// # Example
     /// ```
@@ -604,7 +647,7 @@ impl MetricsHandler {
     /// A `Histogram` instance for tracking processing times.
     ///
     /// # Example
-    /// ```
+    /// ```rust
     /// use commons::util::metrics::MetricsHandler;
     ///
     /// let handler = MetricsHandler::new();
@@ -612,6 +655,7 @@ impl MetricsHandler {
     /// proc_hist.observe(0.05);
     /// proc_hist.observe(0.2);
     /// ```
+    #[must_use]
     pub fn register_processing_time_histogram(&self, name: &str, help: &str) -> prometheus::Histogram {
         let buckets = [0.001, 0.01, 0.1, 1.0, 10.0]; // seconds
         self.register_histogram(&format!("{}_processing_time_seconds", name), help, &buckets)
@@ -627,6 +671,11 @@ impl MetricsHandler {
     /// # Returns
     ///
     /// A `Result` containing the `Histogram` instance on success, or a `PrometheusError` on failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PrometheusError` if metric registration fails due to invalid names,
+    /// duplicate metrics, or other Prometheus registry errors.
     ///
     /// # Example
     /// ```

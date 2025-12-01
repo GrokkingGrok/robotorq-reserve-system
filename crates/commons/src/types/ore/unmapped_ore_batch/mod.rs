@@ -38,6 +38,7 @@ use crate::types::Token;
 /// - `captured_at_ms`: Timestamp when the batch was captured (milliseconds since Unix epoch)
 /// - `hash`: Cryptographic hash of the batch contents for integrity verification
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UnmappedOreBatch {
     /// Unique identifier for this batch.
     pub id: UnmappedOreBatchId,

@@ -38,6 +38,7 @@ use crate::util::schema::TOKEN_SCHEMA_VERSION;
 /// - `schema_version`: Version of the token schema for compatibility
 /// - `hash`: Cryptographic hash of the token contents for integrity verification
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Token {
     /// Unique identifier for this token.
     pub id: TokenId,

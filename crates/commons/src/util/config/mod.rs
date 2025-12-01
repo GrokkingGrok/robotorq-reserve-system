@@ -277,6 +277,11 @@ impl RoboTorqConfig {
 /// let config = load_robotorq_config(Some("my-config.toml".as_ref()))?;
 /// # Ok::<(), String>(())
 /// ```
+///
+/// # Errors
+///
+/// This function currently does not return any errors but may in the future
+/// when configuration validation or parsing fails.
 pub fn load_robotorq_config(config_path: Option<&std::path::Path>) -> Result<RoboTorqConfig, String> {
     // Try explicit path first
     if let Some(path) = config_path {

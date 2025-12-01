@@ -37,6 +37,12 @@ pub use shutdown::shutdown_service;
 /// Core trait for services exposed via standardized HTTP endpoints.
 pub trait RoboTorqService: Send + Sync + 'static {
     /// Liveness check; `GET /healthz` returns 200 when this is Ok.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvariantError` if the service is not healthy or encounters
+    /// an error during the health check. The specific error depends on the
+    /// service implementation.
     fn health_check(&self) -> Result<String, InvariantError>;
 
     /// Export metrics in Prometheus text format; served at `/metrics`.
@@ -322,6 +328,11 @@ impl<S: RoboTorqService> HttpServer<S> {
     ///
     /// Returns `Ok(())` if the server shuts down gracefully, or `Err(error)` if
     /// it fails to start or encounters an unrecoverable error.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvariantError` if the server fails to bind to the configured
+    /// address and port, or if the HTTP server encounters an unrecoverable error.
     ///
     /// # Panics
     ///
@@ -644,6 +655,7 @@ impl HttpServerConfig {
     /// // The config can now be used to start an HTTP server
     /// // that listens on 0.0.0.0:80 with /health and /metrics endpoints
     /// ```
+    #[must_use]
     pub fn new(service: HttpService, health: HttpEndpoint, metrics: HttpEndpoint) -> Self {
         Self { 
             service, 
@@ -691,6 +703,7 @@ impl HttpServerConfig {
     /// // Perfect for development servers
     /// let dev_config = HttpServerConfig::local_defaults(3000);
     /// ```
+    #[must_use]
     pub fn local_defaults(port: u16) -> Self {
         Self {
             service: HttpService::new("127.0.0.1", port),
