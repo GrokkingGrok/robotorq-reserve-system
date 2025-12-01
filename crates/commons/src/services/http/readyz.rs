@@ -45,3 +45,31 @@ pub async fn readyz_handler(flag: Arc<AtomicBool>) -> impl IntoResponse {
         (StatusCode::SERVICE_UNAVAILABLE, "Not Ready")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::StatusCode;
+
+    /// Test that readyz_handler returns 200 OK with "Ready" when the flag is true.
+    #[tokio::test]
+    async fn test_readyz_handler_ready() {
+        let flag = Arc::new(AtomicBool::new(true));
+        let response = readyz_handler(flag).await;
+        let (parts, body) = response.into_response().into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let body_bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+        assert_eq!(&body_bytes[..], b"Ready");
+    }
+
+    /// Test that readyz_handler returns 503 SERVICE_UNAVAILABLE with "Not Ready" when the flag is false.
+    #[tokio::test]
+    async fn test_readyz_handler_not_ready() {
+        let flag = Arc::new(AtomicBool::new(false));
+        let response = readyz_handler(flag).await;
+        let (parts, body) = response.into_response().into_parts();
+        assert_eq!(parts.status, StatusCode::SERVICE_UNAVAILABLE);
+        let body_bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+        assert_eq!(&body_bytes[..], b"Not Ready");
+    }
+}

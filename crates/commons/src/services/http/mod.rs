@@ -237,6 +237,10 @@ pub trait RoboTorqService: Send + Sync + 'static {
 /// Services can implement this to receive a `ServiceMetricsContext` constructed
 /// by the HTTP server when a metrics registry is configured. Default is no-op.
 pub trait RoboTorqServiceMetricsExt {
+    /// Inject a shared `ServiceMetricsContext` created by the HTTP server.
+    ///
+    /// Services can store this context to emit standardized lifecycle metrics.
+    /// Default implementation is a no-op, so adoption is opt-in.
     fn set_metrics_context(&mut self, _ctx: Option<std::sync::Arc<ServiceMetricsContext>>) {}
 }
 

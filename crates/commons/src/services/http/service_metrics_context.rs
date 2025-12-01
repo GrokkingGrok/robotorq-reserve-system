@@ -38,6 +38,7 @@ use std::time::Instant;
 use crate::util::metrics::{MetricsRegistry, MetricCounter, MetricGauge};
 use super::label_source::LabelSet;
 
+/// Shared service-level metrics with common labels and lifecycle counters.
 pub struct ServiceMetricsContext {
     registry: Arc<dyn MetricsRegistry>,
     labels: LabelSet,
@@ -51,6 +52,7 @@ pub struct ServiceMetricsContext {
 }
 
 impl ServiceMetricsContext {
+    /// Create a new service metrics context bound to the provided registry and labels.
     pub fn new(registry: Arc<dyn MetricsRegistry>, labels: LabelSet) -> Self {
         let starts_total = registry.counter("service_starts_total", "Total service starts", &[]);
         let stops_total = registry.counter("service_stops_total", "Total service stops", &[]);
@@ -75,20 +77,31 @@ impl ServiceMetricsContext {
         }
     }
 
+    /// Increment the total starts counter.
     pub fn mark_start(&self) { self.starts_total.inc(); }
+    /// Increment the total stops counter.
     pub fn mark_stop(&self) { self.stops_total.inc(); }
+    /// Increment the total health checks counter.
     pub fn inc_health(&self) { self.health_checks_total.inc(); }
+    /// Increment the total errors counter.
     pub fn inc_error(&self) { self.errors_total.inc(); }
+    /// Set readiness gauge to 1 when ready, 0 otherwise.
     pub fn set_ready(&self, ready: bool) { self.ready_gauge.set(if ready {1.0} else {0.0}); }
+    /// Update the uptime gauge from the start instant.
     pub fn refresh_uptime(&self) {
         let secs = self.start_instant.elapsed().as_secs_f64();
         self.uptime_seconds.set(secs);
     }
 
+    /// Access the underlying metrics registry.
     pub fn registry(&self) -> &Arc<dyn MetricsRegistry> { &self.registry }
+    /// The service label applied to emitted metrics.
     pub fn service(&self) -> &str { &self.labels.service }
+    /// The component label applied to emitted metrics.
     pub fn component(&self) -> &str { &self.labels.component }
+    /// The version label applied to emitted metrics.
     pub fn version(&self) -> &str { &self.labels.version }
+    /// The subject label applied to emitted metrics.
     pub fn subject(&self) -> &str { &self.labels.subject }
 }
 
@@ -97,7 +110,6 @@ mod tests {
     use super::*;
     use crate::util::metrics::{PrometheusRegistry, MetricsRegistry};
     use crate::services::http::label_source::build_label_set;
-    use crate::util::config::RoboTorqConfig;
 
     #[test]
     fn context_registers_and_updates() {

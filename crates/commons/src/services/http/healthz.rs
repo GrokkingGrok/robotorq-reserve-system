@@ -17,6 +17,7 @@ use crate::util::metrics::{MetricsRegistry, MetricCounter};
 /// These metrics capture HTTP traffic characteristics and are distinct from
 /// service-level health metrics. Labels are injected via the shared registry.
 pub struct HealthzMetrics {
+    /// Total number of HTTP `/healthz` requests received.
     pub requests_total: Box<dyn MetricCounter + Send + Sync>,
 }
 

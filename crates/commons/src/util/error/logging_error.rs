@@ -66,3 +66,37 @@ impl From<Box<dyn std::error::Error>> for LoggingError {
         Self::InitFailed(e.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test that LoggingError can be created from a &str.
+    #[test]
+    fn test_from_str() {
+        let error: LoggingError = "test message".into();
+        match error {
+            LoggingError::InitFailed(msg) => assert_eq!(msg, "test message"),
+        }
+    }
+
+    /// Test that LoggingError can be created from a String.
+    #[test]
+    fn test_from_string() {
+        let error: LoggingError = "test message".to_string().into();
+        match error {
+            LoggingError::InitFailed(msg) => assert_eq!(msg, "test message"),
+        }
+    }
+
+    /// Test that LoggingError can be created from a Box<dyn std::error::Error>.
+    #[test]
+    fn test_from_box_dyn_error() {
+        let original_error = std::io::Error::new(std::io::ErrorKind::Other, "io error");
+        let boxed_error: Box<dyn std::error::Error> = Box::new(original_error);
+        let error: LoggingError = boxed_error.into();
+        match error {
+            LoggingError::InitFailed(msg) => assert!(msg.contains("io error")),
+        }
+    }
+}

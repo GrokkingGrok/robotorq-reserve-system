@@ -77,3 +77,65 @@ pub async fn load_and_initialize_service<S: RoboTorqService>(
     initialize_service(svc, &cfg).await?;
     Ok(cfg)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::util::config::RoboTorqConfig;
+
+    // Mock service for testing
+    struct MockService {
+        should_fail: bool,
+    }
+
+    impl RoboTorqService for MockService {
+        fn export_metrics(&self) -> String {
+            String::new()
+        }
+
+        fn health_check(&self) -> Result<String, InvariantError> {
+            Ok("OK".to_string())
+        }
+
+        async fn initialize(&mut self, _cfg: &RoboTorqConfig) -> Result<(), InvariantError> {
+            if self.should_fail {
+                Err(InvariantError::Config(crate::util::error::config_error::ConfigError::Invalid("mock failure".into())))
+            } else {
+                Ok(())
+            }
+        }
+
+        async fn start(&self) -> Result<(), InvariantError> {
+            Ok(())
+        }
+
+        async fn stop(&self) -> Result<(), InvariantError> {
+            Ok(())
+        }
+
+        async fn shutdown(&self) -> Result<(), InvariantError> {
+            Ok(())
+        }
+    }
+
+    /// Test that initialize_service succeeds when the service initializes successfully.
+    #[tokio::test]
+    async fn test_initialize_service_success() {
+        let mut svc = MockService { should_fail: false };
+        let cfg = crate::util::config::load_robotorq_config(None).unwrap();
+        let result = initialize_service(&mut svc, &cfg).await;
+        assert!(result.is_ok());
+    }
+
+    /// Test that initialize_service fails when the service initialization fails.
+    #[tokio::test]
+    async fn test_initialize_service_failure() {
+        let mut svc = MockService { should_fail: true };
+        let cfg = crate::util::config::load_robotorq_config(None).unwrap();
+        let result = initialize_service(&mut svc, &cfg).await;
+        assert!(result.is_err());
+    }
+
+    // Note: load_and_initialize_service is harder to test without mocking config loading
+    // For now, we test the core initialize_service function
+}

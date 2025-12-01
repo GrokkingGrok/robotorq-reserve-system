@@ -10,7 +10,6 @@ use commons::{
     services::http::{HttpServer, HttpServerConfig, label_source::build_label_set},
     util::config::load_robotorq_config,
     util::error::InvariantError,
-    util::metrics::{MetricsRegistry, PrometheusRegistry},
 };
 use tokio::sync::Mutex;
 

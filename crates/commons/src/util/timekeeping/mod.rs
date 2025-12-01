@@ -23,3 +23,22 @@ use std::time::SystemTime;
 pub fn now() -> SystemTime {
     SystemTime::now()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_now_returns_current_time() {
+        let time1 = now();
+        let time2 = now();
+
+        // Ensure that now() returns a valid SystemTime
+        assert!(time1 <= time2, "Time should not go backwards");
+
+        // Optionally, check that it's close to SystemTime::now()
+        let direct_now = SystemTime::now();
+        let elapsed = direct_now.duration_since(time1).unwrap_or_default();
+        assert!(elapsed.as_millis() < 10, "now() should be very close to SystemTime::now()");
+    }
+}

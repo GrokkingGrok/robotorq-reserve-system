@@ -53,13 +53,9 @@ mod tests {
     fn extract_metric_value(text: &str, name: &str) -> Option<f64> {
         for line in text.lines() {
             if line.starts_with('#') { continue; }
-            if line.starts_with(name) {
-                if let Some(idx) = line.rfind(' ') {
-                    let val_str = &line[idx+1..];
-                    if let Ok(v) = val_str.trim().parse::<f64>() {
-                        return Some(v);
-                    }
-                }
+            if line.starts_with(name) && let Some(idx) = line.rfind(' ') {
+                let val_str = &line[idx+1..];
+                if let Ok(v) = val_str.trim().parse::<f64>() { return Some(v); }
             }
         }
         None
@@ -101,7 +97,7 @@ mod tests {
         let base_url = format!("http://127.0.0.1:{}", TEST_PORT);
 
         // Test /healthz
-        let resp = client.get(&format!("{}/healthz", base_url))
+        let resp = client.get(format!("{}/healthz", base_url))
             .send()
             .await
             .expect("healthz request failed");
@@ -110,7 +106,7 @@ mod tests {
         assert_eq!(body, "Test service healthy");
 
         // Test /metrics
-        let resp = client.get(&format!("{}/metrics", base_url))
+        let resp = client.get(format!("{}/metrics", base_url))
             .send()
             .await
             .expect("metrics request failed");
@@ -129,7 +125,7 @@ mod tests {
         assert!(body.contains(&format!("version=\"{}\"", labels.version)));
 
         // Test CORS headers
-        let resp = client.get(&format!("{}/healthz", base_url))
+        let resp = client.get(format!("{}/healthz", base_url))
             .header("Origin", "http://example.com")
             .send()
             .await
