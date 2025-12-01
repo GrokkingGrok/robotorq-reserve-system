@@ -30,6 +30,10 @@ pub use healthz::health_handler;
 pub use initialization::{initialize_service, load_and_initialize_service};
 pub use metrics::metrics_handler;
 pub use shutdown::{ctrl_c_signal, ctrl_c_signal_with_service_shutdown};
+mod service_metrics_context;
+pub use service_metrics_context::ServiceMetricsContext;
+pub mod label_source;
+pub use label_source::{build_label_set, LabelSet};
 
 /// Core trait for services exposed via standardized HTTP endpoints.
 pub trait RoboTorqService: Send + Sync + 'static {
@@ -40,10 +44,18 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// Returns `InvariantError` if the service is not healthy or encounters
     /// an error during the health check. The specific error depends on the
     /// service implementation.
-    fn health_check(&self) -> Result<String, InvariantError>;
+    /// Default implementation returns a simple "ok" status.
+    /// Services should override to perform real dependency checks.
+    fn health_check(&self) -> Result<String, InvariantError> {
+        Ok("ok".to_string())
+    }
 
     /// Export metrics in Prometheus text format; served at `/metrics`.
-    fn export_metrics(&self) -> String;
+    /// Default implementation returns an empty metrics payload.
+    /// Override to export Prometheus-formatted metrics.
+    fn export_metrics(&self) -> String {
+        String::new()
+    }
 
     /// Optional hook for custom endpoints beyond `/healthz` and `/metrics`.
     fn handle_request(&self, _path: &str, _method: &str) -> Option<Result<String, InvariantError>> {
@@ -220,6 +232,16 @@ pub trait RoboTorqService: Send + Sync + 'static {
     }
 }
 
+/// Optional metrics context hook for services.
+///
+/// Services can implement this to receive a `ServiceMetricsContext` constructed
+/// by the HTTP server when a metrics registry is configured. Default is no-op.
+pub trait RoboTorqServiceMetricsExt {
+    fn set_metrics_context(&mut self, _ctx: Option<std::sync::Arc<ServiceMetricsContext>>) {}
+}
+
+impl<T: RoboTorqService> RoboTorqServiceMetricsExt for T {}
+
 /// Lightweight Axum server exposing standardized endpoints for a service.
 ///
 /// The HttpServer automatically creates HTTP endpoints for any service that
@@ -374,6 +396,14 @@ impl<S: RoboTorqService> HttpServer<S> {
         // Initialize the service
         {
             let mut service = self.service.lock().await;
+            if let Some(registry) = &self.config.metrics_registry {
+                let labels = build_label_set(config);
+                let ctx = ServiceMetricsContext::new(
+                    std::sync::Arc::clone(registry),
+                    labels,
+                );
+                service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
+            }
             if let Err(err) = service.initialize(config).await {
                 tracing::warn!(error = ?err, "service initialize failed, continuing");
             }
@@ -402,9 +432,42 @@ impl<S: RoboTorqService> HttpServer<S> {
         {
             let mut service = self.service.lock().await;
             match load_and_initialize_service(&mut *service).await {
-                Ok(_cfg) => {}
+                Ok(cfg) => {
+                    if let Some(registry) = &self.config.metrics_registry {
+                        let labels = build_label_set(&cfg);
+                        let ctx = ServiceMetricsContext::new(
+                            std::sync::Arc::clone(registry),
+                            labels,
+                        );
+                        service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
+                    }
+                }
                 Err(err) => {
                     tracing::warn!(error = ?err, "service initialize failed, continuing");
+                    if let Some(registry) = &self.config.metrics_registry {
+                        let cfg = crate::util::config::load_robotorq_config(None).unwrap_or_else(|_| {
+                            // Fallback to minimal config if loading fails
+                            crate::util::config::RoboTorqConfig {
+                                schema_version: crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION,
+                                mode: crate::util::config::Mode::Production,
+                                simulation: Default::default(),
+                                ports: crate::util::config::load_ports_config_from_default(),
+                                http: Default::default(),
+                                nats: Default::default(),
+                                persistence: Default::default(),
+                                observability: Default::default(),
+                                security: Default::default(),
+                                crypto: Default::default(),
+                                economic: Default::default(),
+                            }
+                        });
+                        let labels = build_label_set(&cfg);
+                        let ctx = ServiceMetricsContext::new(
+                            std::sync::Arc::clone(registry),
+                            labels,
+                        );
+                        service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
+                    }
                 }
             }
         }
@@ -492,6 +555,17 @@ impl<S: RoboTorqService> HttpServer<S> {
             .with_graceful_shutdown(shutdown_signal)
             .await
             .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
+
+        // Invoke graceful cleanup hooks after server stops (Ctrl+C or error)
+        {
+            let service = self.service.lock().await;
+            if let Err(err) = service.stop().await {
+                tracing::warn!(error = ?err, "service stop hook failed");
+            }
+            if let Err(err) = service.shutdown().await {
+                tracing::warn!(error = ?err, "service shutdown hook failed");
+            }
+        }
 
         // After shutdown, mark not ready
         self.ready.store(false, Ordering::Relaxed);

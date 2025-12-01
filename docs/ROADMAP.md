@@ -27,22 +27,20 @@ Deliverables:
 - Full test coverage and CI integration
 
 ### Phase 2.0 — Template Stabilization
-Status: in progress
+Status: completed
 
 Completed:
 - Normalize module paths in commons (removed #[path], removed glob re-exports); centralized schema version constants and gauges
 - Metrics naming and labels aligned (service/component/version/subject), per INCONSISTENCIES audit
-
-In progress:
+- Add default implementations to RoboTorqService trait methods (async lifecycle, no-op health/metrics, graceful shutdown hooks)
+- Implement ServiceMetricsContext with config-derived labels (derive from RoboTorqConfig instead of hardcoded values)
 - Pin dependencies in workspace Cargo.toml with specific versions
-  - Add cargo-deny for license/duplicate checks
-  - Generate and commit lockfile for reproducible CI builds
+- Add cargo-deny for license/duplicate checks
+- Generate and commit lockfile for reproducible CI builds
 - Implement sim_sleep helper for time dilation in simulation mode
   - Feature-gate with `sim` and provide deterministic time source
 - Clarify simulation legal notice for contributor awareness
   - Include repo-level NOTICE and per-crate README badge
-- Add default implementations to RoboTorqService trait methods
-  - Provide no-op health/metrics defaults and graceful shutdown hooks
 - Set up CI pipeline with automated testing and linting
   - Rust: fmt, clippy, test; optional miri on nightly
   - Cache strategy for workspace builds
