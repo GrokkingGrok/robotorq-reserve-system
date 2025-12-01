@@ -1,3 +1,7 @@
+//! Integration tests for HTTP handlers and middleware.
+//!
+//! Verifies healthz/readyz endpoints and Prometheus metrics layer behavior.
+//! Ensures axum routes and RoboTorqService integration work as expected.
 use axum::{Router, routing::get, http::StatusCode};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use commons::services::http::{healthz::health_handler, readyz, middleware::HttpMetricsLayer};
@@ -8,6 +12,7 @@ use tower::ServiceExt; // for oneshot
 
 #[tokio::test]
 async fn healthz_returns_ok() {
+    /// Asserts `/healthz` returns `200 OK` using the generic health handler.
     // Minimal service stub: health_handler ignores state specifics
     let app = Router::new().route("/healthz", get(health_handler::<TestService>)).with_state(Arc::new(TestService));
     let res = app.clone().oneshot(Request::builder().uri("/healthz").body(axum::body::Body::empty()).unwrap()).await.unwrap();
@@ -16,6 +21,7 @@ async fn healthz_returns_ok() {
 
 #[tokio::test]
 async fn readyz_reflects_flag() {
+    /// Validates `/readyz` reflects readiness flag: 503 → 200 after toggling.
     let flag = Arc::new(AtomicBool::new(false));
     let app = Router::new().route("/readyz", get({
         let f = flag.clone();
@@ -30,6 +36,7 @@ async fn readyz_reflects_flag() {
 
 #[tokio::test]
 async fn metrics_layer_increments_on_request() {
+    /// Confirms metrics layer increments counters on request and registry exports.
     let registry = Arc::new(PrometheusRegistry::new("commons", "test", "dev"));
     let app = Router::new()
         .route("/ping", get(|| async { StatusCode::OK }))
@@ -53,6 +60,7 @@ async fn metrics_layer_increments_on_request() {
 
 #[tokio::test]
 async fn metrics_integration_exposes_counter() {
+    /// Ensures `/metrics` route exports middleware counter and a direct counter.
     let registry = Arc::new(PrometheusRegistry::new("commons", "test", "dev"));
     use commons::util::metrics::MetricsRegistry;
     // expose metrics via a simple route using the registry

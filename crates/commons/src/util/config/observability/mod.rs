@@ -174,19 +174,14 @@ impl Default for MetricsConfig {
 /// // Standard Prometheus metrics (recommended)
 /// let prometheus = MetricsRegistryType::Prometheus;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum MetricsRegistryType {
     /// Prometheus metrics registry.
     ///
     /// Standard Prometheus text format metrics for scraping.
+    #[default]
     Prometheus,
-}
-
-impl Default for MetricsRegistryType {
-    fn default() -> Self {
-        MetricsRegistryType::Prometheus
-    }
 }
 
 /// Tracing configuration.
@@ -272,7 +267,7 @@ impl Default for TracingConfig {
 /// // Console output for development
 /// let console = TracingBackend::Console;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TracingBackend {
     /// OpenTelemetry with OTLP exporter.
@@ -288,13 +283,8 @@ pub enum TracingBackend {
     /// Console logging (development only).
     ///
     /// Prints traces to stdout/stderr. Not suitable for production.
+    #[default]
     Console,
-}
-
-impl Default for TracingBackend {
-    fn default() -> Self {
-        TracingBackend::Console
-    }
 }
 
 /// Logging configuration.
@@ -391,7 +381,7 @@ impl Default for LoggingConfig {
 /// // Show all messages including traces (verbose debugging)
 /// let trace_all = LogLevel::Trace;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     /// Only error messages
@@ -399,17 +389,12 @@ pub enum LogLevel {
     /// Warnings and above
     Warn,
     /// Info messages and above
+    #[default]
     Info,
     /// Debug messages and above
     Debug,
     /// All messages including traces
     Trace,
-}
-
-impl Default for LogLevel {
-    fn default() -> Self {
-        LogLevel::Info
-    }
 }
 
 /// Log formats.
@@ -430,21 +415,16 @@ impl Default for LogLevel {
 /// // Compact single-line format (system logs)
 /// let compact = LogFormat::Compact;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum LogFormat {
     /// Human-readable format
+    #[default]
     Pretty,
     /// JSON structured format
     Json,
     /// Compact single-line format
     Compact,
-}
-
-impl Default for LogFormat {
-    fn default() -> Self {
-        LogFormat::Pretty
-    }
 }
 
 /// Health monitoring configuration.

@@ -41,7 +41,7 @@ use serde::{Deserialize, Serialize};
 ///     ..Default::default()
 /// };
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SecurityConfig {
     /// TLS configuration for network connections.
     #[serde(default)]
@@ -58,17 +58,6 @@ pub struct SecurityConfig {
     /// Secrets management configuration.
     #[serde(default)]
     pub secrets: SecretsConfig,
-}
-
-impl Default for SecurityConfig {
-    fn default() -> Self {
-        Self {
-            tls: TlsConfig::default(),
-            auth: AuthConfig::default(),
-            authz: AuthzConfig::default(),
-            secrets: SecretsConfig::default(),
-        }
-    }
 }
 
 /// TLS configuration.
@@ -197,21 +186,16 @@ impl Default for TlsConfig {
 /// // Require and verify client certificates (mutual TLS)
 /// let required = ClientCertMode::Required;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ClientCertMode {
     /// No client certificate verification
+    #[default]
     None,
     /// Client certificates are requested but not required
     Optional,
     /// Client certificates are required and verified
     Required,
-}
-
-impl Default for ClientCertMode {
-    fn default() -> Self {
-        ClientCertMode::None
-    }
 }
 
 /// TLS versions.
@@ -229,19 +213,14 @@ impl Default for ClientCertMode {
 /// // TLS 1.3 (modern, recommended)
 /// let tls13 = TlsVersion::Tls13;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TlsVersion {
     /// TLS 1.2
+    #[default]
     Tls12,
     /// TLS 1.3
     Tls13,
-}
-
-impl Default for TlsVersion {
-    fn default() -> Self {
-        TlsVersion::Tls12
-    }
 }
 
 /// Authentication configuration.
@@ -283,7 +262,7 @@ impl Default for TlsVersion {
 ///     ..Default::default()
 /// };
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthConfig {
     /// Authentication method.
     ///
@@ -302,17 +281,6 @@ pub struct AuthConfig {
     /// Session configuration.
     #[serde(default)]
     pub session: SessionConfig,
-}
-
-impl Default for AuthConfig {
-    fn default() -> Self {
-        Self {
-            method: AuthMethod::default(),
-            jwt: JwtConfig::default(),
-            api_key: ApiKeyConfig::default(),
-            session: SessionConfig::default(),
-        }
-    }
 }
 
 /// Authentication methods.
@@ -339,10 +307,11 @@ impl Default for AuthConfig {
 /// // Multiple authentication methods (first successful wins)
 /// let multi = AuthMethod::Multi;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthMethod {
     /// No authentication required
+    #[default]
     None,
     /// JSON Web Tokens
     Jwt,
@@ -352,12 +321,6 @@ pub enum AuthMethod {
     Mtls,
     /// Multiple methods (first successful wins)
     Multi,
-}
-
-impl Default for AuthMethod {
-    fn default() -> Self {
-        AuthMethod::None
-    }
 }
 
 /// JWT authentication configuration.
@@ -496,7 +459,7 @@ impl Default for SessionConfig {
 ///     ..Default::default()
 /// };
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthzConfig {
     /// Authorization method.
     ///
@@ -511,16 +474,6 @@ pub struct AuthzConfig {
     /// Policy file path (for OPA, etc.).
     #[serde(default)]
     pub policy_path: Option<String>,
-}
-
-impl Default for AuthzConfig {
-    fn default() -> Self {
-        Self {
-            method: AuthzMethod::default(),
-            rbac: RbacConfig::default(),
-            policy_path: None,
-        }
-    }
 }
 
 /// Authorization methods.
@@ -544,10 +497,11 @@ impl Default for AuthzConfig {
 /// // Open Policy Agent for complex policies
 /// let opa = AuthzMethod::Opa;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthzMethod {
     /// Allow all authenticated requests
+    #[default]
     AllowAll,
     /// Deny all requests (explicit allow only)
     DenyAll,
@@ -555,12 +509,6 @@ pub enum AuthzMethod {
     Rbac,
     /// Open Policy Agent
     Opa,
-}
-
-impl Default for AuthzMethod {
-    fn default() -> Self {
-        AuthzMethod::AllowAll
-    }
 }
 
 /// Role-based access control configuration.
@@ -673,10 +621,11 @@ impl Default for SecretsConfig {
 /// // Use Azure Key Vault for Azure deployments
 /// let backend = SecretsBackend::Azure;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SecretsBackend {
     /// Environment variables
+    #[default]
     Env,
     /// Local files
     File,
@@ -686,12 +635,6 @@ pub enum SecretsBackend {
     Aws,
     /// Azure Key Vault
     Azure,
-}
-
-impl Default for SecretsBackend {
-    fn default() -> Self {
-        SecretsBackend::Env
-    }
 }
 
 // Default value functions

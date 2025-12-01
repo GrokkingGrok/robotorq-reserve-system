@@ -153,7 +153,7 @@ impl Default for PersistenceConfig {
 /// // In-memory storage for testing (data lost on restart)
 /// let memory = PersistenceBackend::Memory;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum PersistenceBackend {
     /// PostgreSQL database.
@@ -166,6 +166,7 @@ pub enum PersistenceBackend {
     ///
     /// Embedded, file-based storage. Simple operations, good for development
     /// and small-scale deployments. Limited concurrency.
+    #[default]
     Sqlite,
 
     /// In-memory storage.
@@ -175,17 +176,11 @@ pub enum PersistenceBackend {
     Memory,
 }
 
-impl Default for PersistenceBackend {
-    fn default() -> Self {
-        PersistenceBackend::Sqlite // Safe default for development
-    }
-}
-
 /// Backend-specific configuration options.
 ///
 /// Contains settings that are specific to particular database backends
 /// and don't fit into the common configuration structure.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BackendSpecificConfig {
     /// PostgreSQL-specific settings.
     #[serde(default)]
@@ -194,15 +189,6 @@ pub struct BackendSpecificConfig {
     /// SQLite-specific settings.
     #[serde(default)]
     pub sqlite: SqliteConfig,
-}
-
-impl Default for BackendSpecificConfig {
-    fn default() -> Self {
-        Self {
-            postgres: PostgresConfig::default(),
-            sqlite: SqliteConfig::default(),
-        }
-    }
 }
 
 /// PostgreSQL-specific configuration.
@@ -280,23 +266,18 @@ impl Default for PostgresConfig {
 /// // Disable SSL (insecure, local development only)
 /// let disable_ssl = PostgresSslMode::Disable;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum PostgresSslMode {
     /// Only allow SSL connections
     Require,
     /// Prefer SSL but allow non-SSL
+    #[default]
     Prefer,
     /// Allow both SSL and non-SSL
     Allow,
     /// Disable SSL
     Disable,
-}
-
-impl Default for PostgresSslMode {
-    fn default() -> Self {
-        PostgresSslMode::Prefer
-    }
 }
 
 /// SQLite-specific configuration.
@@ -396,10 +377,11 @@ impl Default for SqliteConfig {
 /// // No journal (fastest but unsafe)
 /// let off = SqliteJournalMode::Off;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SqliteJournalMode {
     /// Write-ahead logging for better concurrency
+    #[default]
     Wal,
     /// Traditional rollback journal
     Delete,
@@ -407,12 +389,6 @@ pub enum SqliteJournalMode {
     Memory,
     /// No journal (fastest but unsafe)
     Off,
-}
-
-impl Default for SqliteJournalMode {
-    fn default() -> Self {
-        SqliteJournalMode::Wal
-    }
 }
 
 /// SQLite synchronous modes.
@@ -433,21 +409,16 @@ impl Default for SqliteJournalMode {
 /// // Minimal synchronization (fastest, least durable)
 /// let off = SqliteSynchronousMode::Off;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SqliteSynchronousMode {
     /// Full synchronization (safest)
     Full,
     /// Synchronize at critical moments
+    #[default]
     Normal,
     /// Minimal synchronization (fastest)
     Off,
-}
-
-impl Default for SqliteSynchronousMode {
-    fn default() -> Self {
-        SqliteSynchronousMode::Normal
-    }
 }
 
 // Default value functions

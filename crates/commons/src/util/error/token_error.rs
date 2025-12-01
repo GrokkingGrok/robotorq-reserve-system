@@ -30,7 +30,7 @@ use thiserror::Error;
 
 /// Errors that occur during token validation and processing.
 ///
-//// These errors represent violations of token specification invariants
+/// These errors represent violations of token specification invariants
 /// that would compromise the economic integrity of the RoboTorq system.
 #[derive(Debug, Error)]
 pub enum TokenError {

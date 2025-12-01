@@ -210,10 +210,11 @@ impl Default for NatsAuthConfig {
 /// // NATS token authentication
 /// let token = NatsAuthMethod::Token;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum NatsAuthMethod {
     /// No authentication
+    #[default]
     None,
     /// Username and password
     UserPass,
@@ -221,12 +222,6 @@ pub enum NatsAuthMethod {
     Credentials,
     /// NATS token
     Token,
-}
-
-impl Default for NatsAuthMethod {
-    fn default() -> Self {
-        NatsAuthMethod::None
-    }
 }
 
 /// JetStream configuration for durable messaging.
@@ -384,21 +379,16 @@ impl Default for ConsumerDefaultsConfig {
 /// // Keep messages until explicitly acknowledged (work queue pattern)
 /// let work_queue = StreamRetentionPolicy::WorkQueue;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum StreamRetentionPolicy {
     /// Keep all messages until limits are reached
+    #[default]
     Limits,
     /// Keep messages for a specific duration
     Interest,
     /// Keep messages until explicitly deleted
     WorkQueue,
-}
-
-impl Default for StreamRetentionPolicy {
-    fn default() -> Self {
-        StreamRetentionPolicy::Limits
-    }
 }
 
 /// Stream storage types.
@@ -416,19 +406,14 @@ impl Default for StreamRetentionPolicy {
 /// // Memory-based storage (fast, but lost on restart)
 /// let memory_storage = StreamStorageType::Memory;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum StreamStorageType {
     /// File-based storage (persistent)
+    #[default]
     File,
     /// Memory-based storage (ephemeral)
     Memory,
-}
-
-impl Default for StreamStorageType {
-    fn default() -> Self {
-        StreamStorageType::File
-    }
 }
 
 /// Subject naming configuration.
@@ -460,7 +445,7 @@ impl Default for SubjectConfig {
 }
 
 /// Subject patterns for each service type.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ServiceSubjects {
     /// Robot Gateway service subjects.
     #[serde(default)]
@@ -477,17 +462,6 @@ pub struct ServiceSubjects {
     /// Vault service subjects.
     #[serde(default)]
     pub vault: ServiceSubjectPatterns,
-}
-
-impl Default for ServiceSubjects {
-    fn default() -> Self {
-        Self {
-            gateway: ServiceSubjectPatterns::default(),
-            refinery: ServiceSubjectPatterns::default(),
-            mint: ServiceSubjectPatterns::default(),
-            vault: ServiceSubjectPatterns::default(),
-        }
-    }
 }
 
 /// Subject patterns for a specific service.

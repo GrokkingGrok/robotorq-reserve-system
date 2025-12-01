@@ -57,7 +57,7 @@ use serde::{Deserialize, Serialize};
 ///     ..Default::default()
 /// };
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CryptoConfig {
     /// Primary signature algorithm for signing operations.
     ///
@@ -108,22 +108,6 @@ pub struct CryptoConfig {
     pub kms: KmsConfig,
 }
 
-impl Default for CryptoConfig {
-    fn default() -> Self {
-        Self {
-            signature_algorithm: SignatureAlgorithm::default(),
-            key_backend: KeyBackend::default(),
-            key_path: None,
-            certificate_path: None,
-            certificate_chain_path: None,
-            revocation: RevocationConfig::default(),
-            rotation: RotationConfig::default(),
-            hsm: HsmConfig::default(),
-            kms: KmsConfig::default(),
-        }
-    }
-}
-
 /// Supported signature algorithms.
 ///
 /// Defines the cryptographic algorithms available for digital signatures.
@@ -142,13 +126,14 @@ impl Default for CryptoConfig {
 /// let ed25519 = SignatureAlgorithm::Ed25519;
 /// let rsa = SignatureAlgorithm::RsaPss;
 /// ```
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SignatureAlgorithm {
     /// Falcon lattice-based signature scheme (post-quantum).
     ///
     /// Fast signing and verification, good for high-throughput applications.
     /// Provides 128-bit post-quantum security.
+    #[default]
     Falcon,
 
     /// SPHINCS+ stateless hash-based signatures (post-quantum).
@@ -167,13 +152,6 @@ pub enum SignatureAlgorithm {
     /// Traditional RSA signatures with provably secure padding.
     /// Slower and requires larger keys than ECC algorithms.
     RsaPss,
-}
-
-impl Default for SignatureAlgorithm {
-    fn default() -> Self {
-        // Default to Falcon for post-quantum security
-        SignatureAlgorithm::Falcon
-    }
 }
 
 /// Key storage backends.
@@ -197,13 +175,14 @@ impl Default for SignatureAlgorithm {
 /// // Azure Key Vault
 /// let azure = KeyBackend::AzureKeyVault;
 /// ```
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum KeyBackend {
     /// Local file system storage.
     ///
     /// Keys stored as encrypted files on local disk.
     /// Suitable for development and single-node deployments.
+    #[default]
     File,
 
     /// Hardware Security Module.
@@ -229,12 +208,6 @@ pub enum KeyBackend {
     /// Cloud-based key management with Google Cloud KMS.
     /// Suitable for GCP deployments.
     GcpKms,
-}
-
-impl Default for KeyBackend {
-    fn default() -> Self {
-        KeyBackend::File
-    }
 }
 
 /// Certificate revocation configuration.
@@ -294,21 +267,16 @@ impl Default for RevocationConfig {
 }
 
 /// Certificate revocation methods.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum RevocationMethod {
     /// No revocation checking
+    #[default]
     None,
     /// Certificate Revocation List
     Crl,
     /// Online Certificate Status Protocol
     Ocsp,
-}
-
-impl Default for RevocationMethod {
-    fn default() -> Self {
-        RevocationMethod::None
-    }
 }
 
 /// Key rotation configuration.
@@ -372,7 +340,7 @@ impl Default for RotationConfig {
 ///     ..Default::default()
 /// };
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HsmConfig {
     /// Path to PKCS#11 library.
     #[serde(default)]
@@ -389,17 +357,6 @@ pub struct HsmConfig {
     /// Token label for key identification.
     #[serde(default)]
     pub token_label: Option<String>,
-}
-
-impl Default for HsmConfig {
-    fn default() -> Self {
-        Self {
-            library_path: String::new(),
-            slot_id: None,
-            pin: None,
-            token_label: None,
-        }
-    }
 }
 
 /// Cloud Key Management Service configuration.
@@ -419,7 +376,7 @@ impl Default for HsmConfig {
 ///     ..Default::default()
 /// };
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct KmsConfig {
     /// KMS provider name.
     #[serde(default)]
@@ -436,17 +393,6 @@ pub struct KmsConfig {
     /// Service account or authentication credentials.
     #[serde(default)]
     pub credentials_path: Option<String>,
-}
-
-impl Default for KmsConfig {
-    fn default() -> Self {
-        Self {
-            provider: String::new(),
-            region: None,
-            key_id: None,
-            credentials_path: None,
-        }
-    }
 }
 
 // Default value functions
