@@ -4,11 +4,11 @@
 schema_version = 1
 
 # Set to "simulation" for development/testing, "production" for live operation
-mode = "simulation"
+mode = "production"
 
 [simulation]
 # Simulation parameters (only used when mode = "simulation")
-enabled = true
+enabled = false
 random_seed = 42
 in_simulation_hours = 8760  # One year
 speedup = 1000.0

@@ -279,51 +279,71 @@ impl Default for EndpointConfig {
 ///
 /// Returns `true` to enable HTTP servers by default, allowing services
 /// to expose monitoring and health check endpoints.
-fn default_http_enabled() -> bool { true }
+fn default_http_enabled() -> bool {
+    true
+}
 
 /// Returns the default network address for HTTP server binding.
 ///
 /// Returns `"127.0.0.1"` (localhost only) for security in development environments.
 /// In production, this should be changed to `"0.0.0.0"` to bind to all interfaces.
-fn default_http_address() -> String { "127.0.0.1".to_string() }
+fn default_http_address() -> String {
+    "127.0.0.1".to_string()
+}
 
 /// Returns the default port number for HTTP server binding.
 ///
 /// Returns `8080`, a common development port that doesn't conflict with
 /// system services running on lower-numbered ports.
-fn default_http_port() -> u16 { 8080 }
+fn default_http_port() -> u16 {
+    8080
+}
 
 /// Returns the default request timeout duration.
 ///
 /// Returns `Some(30)` seconds as a reasonable default for most HTTP operations.
 /// This prevents requests from hanging indefinitely while allowing time for
 /// complex operations like database queries or external API calls.
-fn default_request_timeout_seconds() -> Option<u64> { Some(30) }
+fn default_request_timeout_seconds() -> Option<u64> {
+    Some(30)
+}
 
 /// Returns the default maximum request body size.
 ///
 /// Returns `Some(1MB)` to prevent abuse while allowing reasonable payload sizes
 /// for configuration updates, bulk operations, and file uploads.
-fn default_max_body_size_bytes() -> Option<usize> { Some(1024 * 1024) } // 1MB
+fn default_max_body_size_bytes() -> Option<usize> {
+    Some(1024 * 1024)
+} // 1MB
 
 /// Returns the default CORS enabled state.
 ///
 /// Returns `true` to enable CORS by default, supporting web applications
 /// that need to communicate with RoboTorq services.
-fn default_cors_enabled() -> bool { true }
+fn default_cors_enabled() -> bool {
+    true
+}
 
 /// Returns the default allowed CORS origins.
 ///
 /// Returns `["*"]` for permissive access in development. In production,
 /// this should be restricted to specific trusted domains.
-fn default_cors_origins() -> Vec<String> { vec!["*".to_string()] }
+fn default_cors_origins() -> Vec<String> {
+    vec!["*".to_string()]
+}
 
 /// Returns the default allowed CORS HTTP methods.
 ///
 /// Returns common HTTP methods: `["GET", "POST", "PUT", "DELETE", "OPTIONS"]`.
 /// These cover typical REST API operations and CORS preflight requests.
 fn default_cors_methods() -> Vec<String> {
-    vec!["GET".to_string(), "POST".to_string(), "PUT".to_string(), "DELETE".to_string(), "OPTIONS".to_string()]
+    vec![
+        "GET".to_string(),
+        "POST".to_string(),
+        "PUT".to_string(),
+        "DELETE".to_string(),
+        "OPTIONS".to_string(),
+    ]
 }
 
 /// Returns the default allowed CORS headers.
@@ -331,32 +351,44 @@ fn default_cors_methods() -> Vec<String> {
 /// Returns common headers: `["Content-Type", "Authorization", "X-Requested-With"]`.
 /// These support JSON APIs, authentication, and AJAX requests.
 fn default_cors_headers() -> Vec<String> {
-    vec!["Content-Type".to_string(), "Authorization".to_string(), "X-Requested-With".to_string()]
+    vec![
+        "Content-Type".to_string(),
+        "Authorization".to_string(),
+        "X-Requested-With".to_string(),
+    ]
 }
 
 /// Returns the default CORS credentials policy.
 ///
 /// Returns `false` to disable credentials by default for security.
 /// When enabled, only specific trusted origins should be allowed.
-fn default_cors_allow_credentials() -> bool { false }
+fn default_cors_allow_credentials() -> bool {
+    false
+}
 
 /// Returns the default CORS preflight cache duration.
 ///
 /// Returns `86400` seconds (24 hours) to reduce preflight request frequency
 /// while allowing reasonable cache invalidation for policy changes.
-fn default_cors_max_age() -> u64 { 86400 } // 24 hours
+fn default_cors_max_age() -> u64 {
+    86400
+} // 24 hours
 
 /// Returns the default endpoint path.
 ///
 /// Returns `"/health"` as the standard path for health check endpoints.
 /// This follows common conventions for service health monitoring.
-fn default_endpoint_path() -> String { "/health".to_string() }
+fn default_endpoint_path() -> String {
+    "/health".to_string()
+}
 
 /// Returns the default endpoint enabled state.
 ///
 /// Returns `true` to enable endpoints by default, ensuring monitoring
 /// and health check capabilities are available.
-fn default_endpoint_enabled() -> bool { true }
+fn default_endpoint_enabled() -> bool {
+    true
+}
 
 fn default_health_endpoint_config() -> EndpointConfig {
     EndpointConfig {
@@ -374,4 +406,6 @@ fn default_metrics_endpoint_config() -> EndpointConfig {
 }
 
 /// Default metrics endpoint path exposed to Prometheus.
-fn default_metrics_endpoint_path() -> String { "/metrics".to_string() }
+fn default_metrics_endpoint_path() -> String {
+    "/metrics".to_string()
+}

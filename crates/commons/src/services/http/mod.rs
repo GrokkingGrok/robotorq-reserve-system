@@ -7,14 +7,15 @@
 use crate::util::config::RoboTorqConfig;
 use crate::util::error::{InvariantError, logging_error::LoggingError};
 use axum::{Router, routing::get};
+use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::net::TcpListener;
+use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
 // Metrics abstraction for HTTP middleware wiring
-use crate::services::http::middleware::HttpMetricsLayer;
 use crate::util::metrics::PrometheusRegistry;
 // Metrics abstraction imported when wiring middleware
 // use crate::util::metrics::{MetricsRegistry, Histogram, Counter, Gauge};
@@ -27,9 +28,9 @@ pub mod middleware;
 pub mod readyz;
 mod shutdown;
 pub use healthz::health_handler;
-pub use initialization::initialize_service;
+pub use initialization::{initialize_service, load_and_initialize_service};
 pub use metrics::metrics_handler;
-pub use shutdown::shutdown_service;
+pub use shutdown::{ctrl_c_signal, ctrl_c_signal_with_service_shutdown};
 
 /// Core trait for services exposed via standardized HTTP endpoints.
 pub trait RoboTorqService: Send + Sync + 'static {
@@ -88,8 +89,10 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// // - Ready to start processing
     /// # Ok::<(), commons::util::error::InvariantError>(())
     /// ```
-    async fn initialize(&mut self, _config: &RoboTorqConfig) -> Result<(), InvariantError> {
-        Ok(())
+    fn initialize(&mut self, _config: &RoboTorqConfig) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
+        async {
+            Ok(())
+        }
     }
 
     /// Transition from initialized to running.
@@ -130,8 +133,10 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// // - Ready to serve clients
     /// # Ok::<(), commons::util::error::InvariantError>(())
     /// ```
-    async fn start(&self) -> Result<(), InvariantError> {
-        Ok(())
+    fn start(&self) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
+        async {
+            Ok(())
+        }
     }
 
     /// Gracefully stop processing while keeping resources allocated.
@@ -172,8 +177,10 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// // - Can be restarted quickly
     /// # Ok::<(), commons::util::error::InvariantError>(())
     /// ```
-    async fn stop(&self) -> Result<(), InvariantError> {
-        Ok(())
+    fn stop(&self) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
+        async {
+            Ok(())
+        }
     }
 
     /// Final cleanup; release all resources.
@@ -215,8 +222,10 @@ pub trait RoboTorqService: Send + Sync + 'static {
     /// // - Service cannot be restarted
     /// # Ok::<(), commons::util::error::InvariantError>(())
     /// ```
-    async fn shutdown(&self) -> Result<(), InvariantError> {
-        Ok(())
+    fn shutdown(&self) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
+        async {
+            Ok(())
+        }
     }
 }
 
@@ -232,40 +241,36 @@ pub trait RoboTorqService: Send + Sync + 'static {
 ///
 /// # Fields
 ///
-/// * `service` - The service instance wrapped in an Arc for thread-safe sharing
+/// * `service` - The service instance wrapped in an Arc<Mutex> for thread-safe mutable access
 /// * `config` - Configuration specifying address, port, and endpoint paths
 ///
 /// # Examples
 ///
 /// ```rust,ignore
 /// use std::sync::Arc;
+/// use tokio::sync::Mutex;
 /// use commons::services::http::{HttpServer, HttpServerConfig};
 /// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
 /// use commons::types::ids::RobotId;
+/// use commons::util::config::RoboTorqConfig;
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     // Before: Service exists but is not exposed via HTTP
 ///     let metrics = RobotGatewayMetrics::new("gateway");
-///     let gateway = Arc::new(RobotGateway::single(RobotId::new()).with_metrics(metrics));
+///     let mut gateway = RobotGateway::single(RobotId::new()).with_metrics(metrics);
+///     let config = RoboTorqConfig::default();
 ///
-///     // Configure HTTP server
-///     let config = HttpServerConfig::local_defaults(8080);
-///
-///     // Create HTTP server to expose the service
-///     let server = HttpServer::new(gateway, config);
-///
-///     // After: Service is now accessible via HTTP
-///     // GET http://127.0.0.1:8080/health -> health check response
-///     // GET http://127.0.0.1:8080/metrics -> Prometheus metrics
-///     server.start().await?;
+///     // After: HTTP server is created and ready to expose the service
+///     let server = HttpServer::new(Arc::new(Mutex::new(gateway)), HttpServerConfig::local_defaults(8080));
+///     server.start(&config).await?;
 ///
 ///     Ok(())
 /// }
 /// ```
 pub struct HttpServer<S: RoboTorqService> {
-    /// The service instance wrapped in an Arc for thread-safe sharing across HTTP requests.
-    service: Arc<S>,
+    /// The service instance wrapped in an Arc<Mutex> for thread-safe mutable access across HTTP requests.
+    service: Arc<Mutex<S>>,
     /// Configuration specifying network address, port, and endpoint paths.
     config: HttpServerConfig,
     /// Readiness flag indicating whether the server is ready to serve traffic.
@@ -277,12 +282,12 @@ pub struct HttpServer<S: RoboTorqService> {
 impl<S: RoboTorqService> HttpServer<S> {
     /// Create a new server for the given service and config.
     ///
-    /// This constructor wraps the service in an Arc for thread-safe sharing
+    /// This constructor wraps the service in an Arc<Mutex> for thread-safe mutable access
     /// across multiple HTTP requests and stores the configuration.
     ///
     /// # Arguments
     ///
-    /// * `service` - The service instance to expose via HTTP, wrapped in an Arc
+    /// * `service` - The service instance to expose via HTTP, wrapped in an Arc<Mutex>
     /// * `config` - HTTP server configuration specifying address, port, and endpoints
     ///
     /// # Returns
@@ -293,20 +298,20 @@ impl<S: RoboTorqService> HttpServer<S> {
     ///
     /// ```rust,ignore
     /// use std::sync::Arc;
+    /// use tokio::sync::Mutex;
     /// use commons::services::http::{HttpServer, HttpServerConfig};
     /// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
     /// use commons::types::ids::RobotId;
     ///
     /// // Before: Service exists in memory
     /// let metrics = RobotGatewayMetrics::new("gateway");
-    /// let gateway = Arc::new(RobotGateway::single(RobotId::new()).with_metrics(metrics));
-    /// let config = HttpServerConfig::local_defaults(8080);
+    /// let gateway = RobotGateway::single(RobotId::new()).with_metrics(metrics);
     ///
     /// // After: HTTP server is created and ready to expose the service
-    /// let server = HttpServer::new(gateway, config);
+    /// let server = HttpServer::new(Arc::new(Mutex::new(gateway)), HttpServerConfig::local_defaults(8080));
     /// // The service is now wrapped and configured for HTTP exposure
     /// ```
-    pub fn new(service: Arc<S>, config: HttpServerConfig) -> Self {
+    pub fn new(service: Arc<Mutex<S>>, config: HttpServerConfig) -> Self {
         Self {
             service,
             config,
@@ -316,14 +321,19 @@ impl<S: RoboTorqService> HttpServer<S> {
 
     /// Bind, route, and serve until shutdown.
     ///
-    /// This method binds to the configured address and port, sets up the HTTP routes,
-    /// and begins accepting connections. The server will run until it receives a
-    /// shutdown signal or encounters an unrecoverable error.
+    /// This method orchestrates the full service lifecycle: initialize, start, HTTP serving,
+    /// and graceful shutdown (stop + shutdown). It binds to the configured address and port,
+    /// sets up the HTTP routes, and begins accepting connections. The server will run until
+    /// it receives a shutdown signal or encounters an unrecoverable error.
     ///
     /// The server automatically creates the following endpoints:
     /// - `GET /healthz` - Liveness: returns 200 if process is up
     /// - `GET /readyz` - Readiness: returns 200 only when ready flag is set
     /// - `GET {metrics_path}` - Calls `service.export_metrics()` and returns Prometheus format
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The system-wide RoboTorq configuration for service initialization
     ///
     /// # Returns
     ///
@@ -344,16 +354,19 @@ impl<S: RoboTorqService> HttpServer<S> {
     ///
     /// ```rust,ignore
     /// use std::sync::Arc;
+    /// use tokio::sync::Mutex;
     /// use commons::services::http::{HttpServer, HttpServerConfig};
     /// use commons::services::robot_gateway::{RobotGateway, metrics::RobotGatewayMetrics};
     /// use commons::types::ids::RobotId;
+    /// use commons::util::config::RoboTorqConfig;
     ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ///     let metrics = RobotGatewayMetrics::new("gateway");
-    ///     let gateway = Arc::new(RobotGateway::single(RobotId::new()).with_metrics(metrics));
-    ///     let config = HttpServerConfig::local_defaults(8080);
-    ///     let server = HttpServer::new(gateway, config);
+    ///     let gateway = RobotGateway::single(RobotId::new()).with_metrics(metrics);
+    ///     let http_config = HttpServerConfig::local_defaults(8080);
+    ///     let robo_config = RoboTorqConfig::default();
+    ///     let server = HttpServer::new(Arc::new(Mutex::new(gateway)), http_config);
     ///
     ///     // Before: Server is configured but not running
     ///     // Network port 8080 is available
@@ -361,12 +374,72 @@ impl<S: RoboTorqService> HttpServer<S> {
     ///     // After: Server is running and accepting connections
     ///     // GET http://127.0.0.1:8080/health returns health status
     ///     // GET http://127.0.0.1:8080/metrics returns Prometheus metrics
-    ///     server.start().await?;
+    ///     server.start(&robo_config).await?;
     ///
     ///     Ok(())
     /// }
     /// ```
-    pub async fn start(self) -> Result<(), InvariantError> {
+    pub async fn start(self, config: &RoboTorqConfig) -> Result<(), InvariantError> {
+        // Initialize the service
+        {
+            let mut service = self.service.lock().await;
+            if let Err(err) = service.initialize(config).await {
+                tracing::warn!(error = ?err, "service initialize failed, continuing");
+            }
+        }
+
+        // Start the service
+        {
+            let service = self.service.lock().await;
+            service.start().await?;
+        }
+
+        // Create shutdown signal that will call stop and shutdown
+        let shutdown_signal = ctrl_c_signal_with_service_shutdown(Arc::clone(&self.service));
+
+        // Start HTTP server with shutdown
+        self.start_with_shutdown(shutdown_signal).await
+    }
+
+    /// Bind, route, and serve using config auto-loaded inside commons.
+    ///
+    /// This convenience method keeps callers clean by loading `RoboTorqConfig`
+    /// within commons and driving the full lifecycle. Errors during
+    /// initialization are logged and the server continues, per policy.
+    pub async fn start_autoload(self) -> Result<(), InvariantError> {
+        // Initialize with autoloaded config
+        {
+            let mut service = self.service.lock().await;
+            match load_and_initialize_service(&mut *service).await {
+                Ok(_cfg) => {}
+                Err(err) => {
+                    tracing::warn!(error = ?err, "service initialize failed, continuing");
+                }
+            }
+        }
+
+        // Start the service
+        {
+            let service = self.service.lock().await;
+            service.start().await?;
+        }
+
+        // Create shutdown signal that will call stop and shutdown
+        let shutdown_signal = ctrl_c_signal_with_service_shutdown(Arc::clone(&self.service));
+
+        // Start HTTP server with shutdown
+        self.start_with_shutdown(shutdown_signal).await
+    }
+
+    /// Start the HTTP server and shut it down when the provided future resolves.
+    ///
+    /// This mirrors `start` but allows callers to drive graceful shutdown from
+    /// an existing signal source (Ctrl+C, health failures, etc.) instead of
+    /// relying on a single internal listener.
+    pub async fn start_with_shutdown<F>(self, shutdown_signal: F) -> Result<(), InvariantError>
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
         let addr = format!(
             "{}:{}",
             self.config.service.address, self.config.service.port
@@ -393,8 +466,7 @@ impl<S: RoboTorqService> HttpServer<S> {
                     }
                 }),
             )
-            .layer(HttpMetricsLayer::new(registry))
-            .with_state(self.service);
+            .with_state(Arc::clone(&self.service));
 
         // Conditionally add middleware layers based on configuration
         if let Some(body_limit) = self.config.max_body_size_bytes {
@@ -422,6 +494,7 @@ impl<S: RoboTorqService> HttpServer<S> {
         // Mark ready and start serving
         self.ready.store(true, Ordering::Relaxed);
         axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_signal)
             .await
             .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
 
@@ -751,17 +824,25 @@ mod tests {
             self.handler.export_text()
         }
 
-        async fn initialize(&mut self, _config: &RoboTorqConfig) -> Result<(), InvariantError> {
-            Ok(())
+        fn initialize(&mut self, _config: &RoboTorqConfig) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
+            async {
+                Ok(())
+            }
         }
-        async fn start(&self) -> Result<(), InvariantError> {
-            Ok(())
+        fn start(&self) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
+            async {
+                Ok(())
+            }
         }
-        async fn stop(&self) -> Result<(), InvariantError> {
-            Ok(())
+        fn stop(&self) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
+            async {
+                Ok(())
+            }
         }
-        async fn shutdown(&self) -> Result<(), InvariantError> {
-            Ok(())
+        fn shutdown(&self) -> impl std::future::Future<Output = Result<(), InvariantError>> + Send {
+            async {
+                Ok(())
+            }
         }
     }
 
@@ -770,14 +851,10 @@ mod tests {
         // Create a minimal service that implements RoboTorqService
         let handler = MetricsHandler::new();
         handler.register_counter("test_requests_total", "Total test requests");
-        let svc = Arc::new(TestService { handler });
+        let svc = Arc::new(Mutex::new(TestService { handler }));
 
         // Create HTTP server config
         let config = HttpServerConfig::local_defaults(0); // Use port 0 for testing
-
-        // Verify the service implements the trait
-        assert!(svc.health_check().is_ok());
-        assert!(!svc.export_metrics().is_empty());
 
         // Test that we can create the server (without starting it)
         let _server = HttpServer::new(svc, config);

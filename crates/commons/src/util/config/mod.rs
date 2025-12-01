@@ -271,11 +271,22 @@ impl RoboTorqConfig {
 /// use commons::util::config::load_robotorq_config;
 ///
 /// // Load from default locations
-/// let config = load_robotorq_config(None)?;
+/// let config = load_robotorq_config(None).map_err(ConfigError::Invalid)?;
+///  info!(
+///     schema_version = config.schema_version,
+///     mode = ?config.mode,
+///     http_address = %config.http.address,
+///     http_port = config.http.port,
+///     "loaded RoboTorq configuration"
+/// );
+///     // Build the HTTP server config from the loaded settings, honoring the sandbox override.
+/// let http_config = build_http_server_config(&config.http, Some(port));
 ///
-/// // Load from specific file
-/// let config = load_robotorq_config(Some("my-config.toml".as_ref()))?;
-/// # Ok::<(), String>(())
+/// let service = Arc::new(SandboxService::new());
+/// info!(
+///     port = http_config.service.port,
+///     "starting the RoboTorq sandbox"
+/// );
 /// ```
 ///
 /// # Errors

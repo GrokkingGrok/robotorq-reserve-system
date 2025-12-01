@@ -7,10 +7,11 @@
 use crate::services::http::RoboTorqService;
 use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// Handler for Prometheus metrics.
 /// # Arguments
-/// - `State(service)`: Shared `Arc<S>` where `S: RoboTorqService`.
+/// - `State(service)`: Shared `Arc<Mutex<S>>` where `S: RoboTorqService`.
 /// # Returns
 /// - `200 OK` and the Prometheus text exposition payload.
 ///
@@ -20,6 +21,7 @@ use std::sync::Arc;
 /// # Examples
 /// ```rust,ignore
 /// use std::sync::Arc;
+/// use tokio::sync::Mutex;
 /// use axum::{routing::get, Router};
 /// use commons::services::http::metrics::metrics_handler;
 /// use commons::services::http::RoboTorqService;
@@ -33,14 +35,15 @@ use std::sync::Arc;
 /// # }
 ///
 /// async fn router() -> Router {
-///     let svc = Arc::new(MySvc);
+///     let svc = Arc::new(Mutex::new(MySvc));
 ///     Router::new()
 ///         .route("/metrics", get(metrics_handler::<MySvc>))
 ///         .with_state(svc)
 /// }
 /// ```
 pub async fn metrics_handler<S: RoboTorqService>(
-    State(service): State<Arc<S>>,
+    State(service): State<Arc<Mutex<S>>>,
 ) -> impl IntoResponse {
-    (StatusCode::OK, service.export_metrics())
+    let svc = service.lock().await;
+    (StatusCode::OK, svc.export_metrics())
 }

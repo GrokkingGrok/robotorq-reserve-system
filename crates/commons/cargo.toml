@@ -18,7 +18,7 @@ prometheus = "0.14.0"
 axum = "0.8.7"
 tower = "0.5.2"
 tower-http = { version = "0.6.7", features = ["cors", "trace", "timeout", "limit"] }
-tokio = { version = "1.48.0", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1.48.0", features = ["rt", "rt-multi-thread", "macros", "signal"] }
 
 [dev-dependencies]
 # No cross-crate test deps to avoid duplicate commons versions

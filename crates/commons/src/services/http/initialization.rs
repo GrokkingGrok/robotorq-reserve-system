@@ -5,7 +5,10 @@
 //! becoming ready.
 use crate::services::http::RoboTorqService;
 use crate::util::config::RoboTorqConfig;
+use crate::util::config::load_robotorq_config;
+use crate::util::error::config_error::ConfigError;
 use crate::util::error::InvariantError;
+use tracing::info;
 
 /// Initialize a service with the given configuration.
 ///
@@ -55,4 +58,22 @@ pub async fn initialize_service<S: RoboTorqService>(
     cfg: &RoboTorqConfig,
 ) -> Result<(), InvariantError> {
     svc.initialize(cfg).await
+}
+
+/// Load `RoboTorqConfig` and initialize a service.
+///
+/// Centralizes config loading inside commons to keep callers clean.
+pub async fn load_and_initialize_service<S: RoboTorqService>(
+    svc: &mut S,
+) -> Result<RoboTorqConfig, InvariantError> {
+    let cfg = load_robotorq_config(None).map_err(ConfigError::Invalid)?;
+    info!(
+        schema_version = cfg.schema_version,
+        mode = ?cfg.mode,
+        http_address = %cfg.http.address,
+        http_port = cfg.http.port,
+        "loaded RoboTorq configuration (commons init)"
+    );
+    initialize_service(svc, &cfg).await?;
+    Ok(cfg)
 }

@@ -7,6 +7,6 @@ authors = ["RoboTorq Contributors"]
 
 [dependencies]
 commons = { path = "../commons", default-features = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "signal"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.20"
