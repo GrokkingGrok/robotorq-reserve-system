@@ -6,6 +6,9 @@ edition = "2024"
 [features]
 default = []
 sim = []
+persistence = ["sqlx"]
+messaging = ["async-nats"]
+otlp = ["tracing-opentelemetry", "opentelemetry", "opentelemetry-otlp"]
 
 [dependencies]
 serde.workspace = true
@@ -23,6 +26,15 @@ axum = "0.8.7"
 tower = "0.5.2"
 tower-http = { version = "0.6.7", features = ["cors", "trace", "timeout", "limit"] }
 tokio = { version = "1.48.0", features = ["rt", "rt-multi-thread", "macros", "signal"] }
+
+# Optional dependencies for error conversions and later persistence/messaging integrations
+sqlx = { version = "0.7", optional = true, default-features = false, features = ["runtime-tokio-rustls", "postgres", "sqlite"] }
+async-nats = { version = "0.32", optional = true }
+
+# Optional OTLP/tracing integration (feature-gated because it pulls in native exporters)
+tracing-opentelemetry = { version = "0.20", optional = true }
+opentelemetry = { version = "0.20", optional = true }
+opentelemetry-otlp = { version = "0.16", optional = true }
 
 [dev-dependencies]
 # No cross-crate test deps to avoid duplicate commons versions
