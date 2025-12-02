@@ -96,56 +96,47 @@ Deliverables:
 
 ### Phase 2.0.2 — Logging/Tracing
 
+Status: Core implementation completed (Phase 2.0.2 — progress update)
+
 Goal: establish consistent, structured logging and tracing across the template so services
-are observable in development, CI, and production. Provide an incremental migration path
-that improves debuggability immediately while enabling distributed trace export (OTLP)
-and standardized log formats (JSON for CI/aggregators, human text for local dev).
+are observable in development, CI, and production. The work provides an incremental migration
+path: immediate debug improvements, JSON logs for CI, and optional OTLP export behind a feature flag.
 
-Scope:
-- Add a single, well-documented logging initializer in `crates/commons::util::logging`.
-- Standardize on `tracing`/`tracing-subscriber` for structured logs and `opentelemetry` for
-  optional OTLP export.
-- Instrument core lifecycle boundaries: initialize/start/ready/shutdown, HTTP handlers,
-  background worker spawn points, and key error paths.
-- Provide lightweight utilities for test logging, lock-wait diagnostics, and task tracing.
+Scope (summary of what was implemented):
+- A single, well-documented logging initializer in `crates/commons::util::logging` with idempotent entry points.
+- Standardized on `tracing`/`tracing-subscriber` and feature-gated `opentelemetry`/OTLP exporter.
+- Instrumented core lifecycle boundaries (initialize/start/ready/shutdown), HTTP server lifecycle, background spawn points, and key shutdown/error paths.
+- Lightweight utilities for test logging, lock-wait diagnostics, and task tracing.
 
-Deliverables:
-- `crates/commons/src/util/logging/mod.rs` — `init_test_logging()` and `init_prod_tracing(json: bool, otlp: Option<OtlpConfig>)` helpers.
-- Example `OtlpConfig` struct and feature gating for `opentelemetry-otlp` to keep commons minimal by default.
-- Instrumentation added to `HttpServer` start/shutdown paths and `shutdown::run_service_shutdown` with structured fields (service, component, duration_ms, error).
-- Lock-wait diagnostic helper `log_if_waited(mutex_name: &str, start: Instant, threshold: Duration)` used in critical Mutex/RwLock areas.
-- Task instrumentation helpers: `spawn_traced(name: &str, fut)` to attach a span and log abort/reason on join/abort.
-- Tests and examples showing JSON logs in CI and human logs locally; CI job step that asserts presence of key fields in exported logs.
+Completed Deliverables:
+- `crates/commons/src/util/logging/mod.rs` implemented with `init_test_logging()` and `init_prod_tracing(json: bool, otlp: Option<OtlpConfig>)` (idempotent initialization).
+- `OtlpConfig` added and OTLP exporter gated behind a Cargo feature to avoid extra compile-time deps by default.
+- `HttpServer` lifecycle instrumented (start, bind, ready, shutdown) with structured spans and fields.
+- `spawn_traced()` helper implemented and used for key `tokio::spawn` sites in `commons` and examples.
+- `log_if_waited()` lock-wait diagnostic helper added and used in critical shutdown/pool lock spots as examples.
+- Middleware-based `TraceContext` injection (`insert_trace_context`) implemented and unit-tested (presence and idempotence).
+- Examples and integration tests updated to use structured `tracing` (replaced `println!`), and a CI smoke workflow (`.github/workflows/logging-ci.yml`) was added to assert JSON fields.
+- Code hygiene: ran tests and Clippy; commons tests pass and workspace clippy warnings were fixed.
 
-Plan / Work items (incremental):
-1. Draft `util::logging` API and add to `crates/commons` (idempotent init using `std::sync::Once`).
-2. Add test helper and annotate unit/integration tests to call `init_test_logging()`.
-3. Wire structured logging into `HttpServer` lifecycle (start, bind, ready, shutdown) and `run_service_shutdown` (start, stop call, shutdown call, duration).
-4. Add `spawn_traced()` helper and replace key `tokio::spawn` sites in commons and examples.
-5. Add lock-wait helper and instrument one or two hot spots (e.g., shutdown/pool locks) as examples.
-6. Add feature-guarded OTLP exporter with a sample `OtlpConfig` and environment variable mapping; add a README snippet describing how to enable OTLP in CI.
-7. Add CI smoke test that runs an example service, captures logs, and asserts required JSON fields (timestamp, level, service, span_context or trace_id).
-8. Iterate: review telemetry gaps, add missing spans, and adopt sampling defaults for production.
+Remaining / Pending Items:
+- Full OTLP end-to-end verification (collector + exporter) in CI requires an external collector or test-side container; this is intentionally pending to avoid infra dependency in the default CI.
+- A short CONTRIBUTING/README snippet documenting the logging/tracing policy and how to enable OTLP in CI is suggested (not yet added).
+- The experimental global JSON formatter approach was abandoned (private API); the middleware approach is the supported, stable solution.
 
-Acceptance criteria:
-- `crates/commons::util::logging` compiles and provides two public idempotent entry points: `init_test_logging()` and `init_prod_tracing(json: bool, otlp: Option<OtlpConfig>)`.
-- At least one example service is instrumented and produces JSON logs with `service`, `component`, `level`, and `message` fields when `json=true`.
-- Trace context (trace_id) is attached to HTTP request spans and exported to logs as `trace_id` when available.
-- CI job validates the presence of structured fields in the example service's logs.
+Acceptance criteria status:
+- `crates/commons::util::logging` provides the two idempotent entry points — met.
+- An example service emits JSON logs containing `service`, `component`, `level`, and `message` when `json=true` — met (examples and CI demo updated).
+- Trace context (trace_id) is attached to HTTP request spans and exported to logs when available — met via middleware `TraceContext` injection.
+- CI smoke test added to validate structured fields — added; note that OTLP end-to-end is still gated by external collector availability.
 
-Risks & mitigations:
-- Risk: Adding OTLP and exporters increases compile-time dependencies. Mitigation: gate OTLP behind a Cargo feature and default to disabled in the workspace.
-- Risk: Log noise growth. Mitigation: adopt `RUST_LOG` defaults and sensible sampling/level policies; prefer `debug` for high-frequency spans and `info` for lifecycle events.
+Next actions (suggested):
+- Add a short `docs/` or `CONTRIBUTING.md` snippet describing how to enable OTLP and the `RUST_LOG` defaults for local vs CI.
+- Decide whether to push the `rewrite-core` commits to the remote branch (I can push on your instruction).
 
-Estimated effort: 2–4 days of focused work (prototype + instrumentation + CI smoke tests).
+Notes:
+- All changes were implemented to be minimal, feature-gated, and backwards-compatible. Tests in `crates/commons` pass and clippy was run and fixed.
 
-Files to add/update (proposed):
-- `crates/commons/src/util/logging/mod.rs` (new)
-- `crates/commons/src/services/robotorq_service/mod.rs` — add lifecycle span calls at start/stop (small edits)
-- `crates/commons/src/services/robotorq_service/shutdown/mod.rs` — add additional structured traces around lock wait and stop/shutdown calls
-- `crates/examples/*` — update one example to enable JSON/OTLP and show CI-friendly logs
 
-If this plan looks good I will implement step 1 (add `crates/commons/src/util/logging/mod.rs`) and instrument one lifecycle path (HttpServer start/shutdown) as a concrete example, then run tests and show sample logs for your review.
 ### Phase 2.1 — Persistence Strategy (Unified)
 Scope: unify Postgres/SQLite/Memory backends behind a common abstraction, with health, timeouts, and standardized errors
 

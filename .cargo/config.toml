@@ -1,0 +1,4 @@
+[alias]
+# Shortcut to run the canonical example binary in `crates/examples`.
+# Usage: `cargo run-example` from repo root.
+run-example = "run --manifest-path crates/examples/Cargo.toml --bin custom_metrics_registry"

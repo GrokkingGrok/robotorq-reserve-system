@@ -14,11 +14,16 @@
 //! - `integration_worker_task_duration_seconds_bucket|sum|count` (histogram family, component="worker")
 //! - Standard HTTP / readiness metrics (e.g. `http_ready`)
 //!
-//! Run:
-//! ```bash
-//! cargo run --bin custom_metrics_registry
+//! Run (interactive):
+//! ```powershell
+//! # let the OS pick an ephemeral port (default)
+//! cargo run --manifest-path crates/examples/Cargo.toml --bin custom_metrics_registry
+//! # or for deterministic testing, set an explicit port via env var
+//! $env:CUSTOM_METRICS_PORT = "9001"
+//! cargo run --manifest-path crates/examples/Cargo.toml --bin custom_metrics_registry
 //! ```
-//! (Port is ephemeral; check startup log.)
+//! When `CUSTOM_METRICS_PORT` is set the binary binds the requested port; otherwise it
+//! falls back to `0` (ephemeral port) and prints the bound address to stdout.
 //! Then query metrics:
 //! ```bash
 //! curl http://127.0.0.1:<PORT>/metrics | grep integration_
@@ -165,6 +170,13 @@ impl RoboTorqService for IntegrationService {
 async fn main() -> Result<(), InvariantError> {
     tracing_subscriber::fmt().with_env_filter("info").init();
 
+    // Allow an explicit port for deterministic testing via `CUSTOM_METRICS_PORT`.
+    // If unset or invalid, fall back to 0 (ephemeral port).
+    let port: u16 = std::env::var("CUSTOM_METRICS_PORT")
+        .ok()
+        .and_then(|s| s.parse::<u16>().ok())
+        .unwrap_or(0);
+
     // Construct HTTP registry with final labels (integration service, component http).
     let http_registry: Arc<dyn commons::util::metrics::MetricsRegistry> = Arc::new(
         commons::util::metrics::PrometheusRegistry::new("integration_service", "http", "0.0.1-int"),
@@ -174,7 +186,7 @@ async fn main() -> Result<(), InvariantError> {
         "0.0.1-int",
     )));
     HttpServerBuilder::new(service)
-        .with_port(0)
+        .with_port(port)
         .with_registry(Arc::clone(&http_registry))
         // Static labels unnecessary; using manual registry labels directly.
         .build_and_start_autoload()
