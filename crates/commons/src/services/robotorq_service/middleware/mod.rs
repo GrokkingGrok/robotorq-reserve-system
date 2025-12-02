@@ -9,6 +9,11 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Instant;
 use tower::{Layer, Service};
+#[cfg(feature = "otlp")]
+use tracing::Span;
+
+#[cfg(feature = "otlp")]
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// Axum layer that wires HTTP metrics into the request pipeline.
 #[derive(Clone)]
@@ -16,11 +21,89 @@ pub struct HttpMetricsLayer {
     registry: Arc<dyn MetricsRegistry>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::Request as AxumRequest;
+
+    /// Verify that `insert_trace_context` places a `TraceContext` into the
+    /// request extensions and that the inserted value is well-formed.
+    #[test]
+    fn insert_trace_context_populates_extensions() {
+        let mut req: Request<()> = AxumRequest::builder().uri("/test").body(()).unwrap();
+        insert_trace_context(&mut req);
+        let tc = req
+            .extensions()
+            .get::<TraceContext>()
+            .expect("TraceContext not inserted");
+        // By default (no OTLP feature), ids are None.
+        assert!(tc.trace_id.is_none());
+        assert!(tc.span_id.is_none());
+    }
+
+    /// Calling `insert_trace_context` multiple times should be safe and idempotent.
+    #[test]
+    fn insert_trace_context_idempotent() {
+        let mut req: Request<()> = AxumRequest::builder().uri("/again").body(()).unwrap();
+        insert_trace_context(&mut req);
+        insert_trace_context(&mut req);
+        let tc = req
+            .extensions()
+            .get::<TraceContext>()
+            .expect("TraceContext missing after repeated insert");
+        assert!(tc.trace_id.is_none());
+        assert!(tc.span_id.is_none());
+    }
+}
+
 impl HttpMetricsLayer {
     /// Create a new metrics layer using the provided registry.
     pub fn new(registry: Arc<dyn MetricsRegistry>) -> Self {
         Self { registry }
     }
+}
+
+/// Lightweight container placed into Request extensions so handlers/loggers can correlate logs with traces.
+#[derive(Clone, Debug)]
+pub struct TraceContext {
+    /// Hex-encoded OpenTelemetry trace id when available (32 hex chars).
+    pub trace_id: Option<String>,
+    /// Hex-encoded OpenTelemetry span id when available (16 hex chars).
+    pub span_id: Option<String>,
+}
+
+/// Insert a TraceContext into the request's extensions.
+/// This is a small helper so tests can exercise the insertion without building the full service pipeline.
+pub(crate) fn insert_trace_context<B>(req: &mut Request<B>) {
+    // Default empty context. Make mutable only when OTLP feature is enabled
+    // so we avoid an unused `mut` when the feature is disabled.
+    #[cfg(feature = "otlp")]
+    let mut tc = TraceContext {
+        trace_id: None,
+        span_id: None,
+    };
+
+    #[cfg(not(feature = "otlp"))]
+    let tc = TraceContext {
+        trace_id: None,
+        span_id: None,
+    };
+
+    // If OTLP/tracing integration is available, extract ids from current span
+    #[cfg(feature = "otlp")]
+    {
+        let span = Span::current();
+        if let Some(cx) = tracing_opentelemetry::OpenTelemetrySpanExt::context(&span) {
+            let sc = cx.span();
+            let span_ctx = sc.span_context();
+            if span_ctx.trace_id().to_u128() != 0 {
+                tc.trace_id = Some(format!("{:032x}", span_ctx.trace_id().to_u128()));
+                tc.span_id = Some(format!("{:016x}", span_ctx.span_id().to_u128()));
+            }
+        }
+    }
+
+    req.extensions_mut().insert(tc);
 }
 
 impl<S> Layer<S> for HttpMetricsLayer {
@@ -82,7 +165,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: Request<B>) -> Self::Future {
+    fn call(&mut self, mut req: Request<B>) -> Self::Future {
         let start = Instant::now();
         self.inflight.inc();
 
@@ -93,6 +176,10 @@ where
             .get::<MatchedPath>()
             .map(|mp| mp.as_str().to_string())
             .unwrap_or_else(|| req.uri().path().to_string());
+
+        // Insert trace context into the request extensions so downstream handlers
+        // and log emitters can access trace/span ids for correlation.
+        insert_trace_context(&mut req);
 
         let fut = self.inner.call(req);
 
