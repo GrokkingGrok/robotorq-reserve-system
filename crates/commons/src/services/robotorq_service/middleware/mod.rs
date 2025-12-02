@@ -14,6 +14,8 @@ use tracing::Span;
 
 #[cfg(feature = "otlp")]
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+#[cfg(feature = "otlp")]
+use opentelemetry::trace::TraceContextExt;
 
 /// Axum layer that wires HTTP metrics into the request pipeline.
 #[derive(Clone)]
@@ -93,13 +95,20 @@ pub(crate) fn insert_trace_context<B>(req: &mut Request<B>) {
     #[cfg(feature = "otlp")]
     {
         let span = Span::current();
-        if let Some(cx) = tracing_opentelemetry::OpenTelemetrySpanExt::context(&span) {
-            let sc = cx.span();
-            let span_ctx = sc.span_context();
-            if span_ctx.trace_id().to_u128() != 0 {
-                tc.trace_id = Some(format!("{:032x}", span_ctx.trace_id().to_u128()));
-                tc.span_id = Some(format!("{:016x}", span_ctx.span_id().to_u128()));
-            }
+        let cx = tracing_opentelemetry::OpenTelemetrySpanExt::context(&span);
+        let sc = cx.span();
+        let span_ctx = sc.span_context();
+
+        // Convert trace/span ids to hex strings in a version-stable way using byte arrays.
+        let trace_bytes = span_ctx.trace_id().to_bytes();
+        if trace_bytes.iter().any(|&b| b != 0) {
+            let tid_num = u128::from_be_bytes(trace_bytes);
+            tc.trace_id = Some(format!("{:032x}", tid_num));
+        }
+        let span_bytes = span_ctx.span_id().to_bytes();
+        if span_bytes.iter().any(|&b| b != 0) {
+            let sid_num = u64::from_be_bytes(span_bytes);
+            tc.span_id = Some(format!("{:016x}", sid_num));
         }
     }
 

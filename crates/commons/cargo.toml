@@ -33,8 +33,9 @@ async-nats = { version = "0.32", optional = true }
 
 # Optional OTLP/tracing integration (feature-gated because it pulls in native exporters)
 tracing-opentelemetry = { version = "0.20", optional = true }
-opentelemetry = { version = "0.20", optional = true }
-opentelemetry-otlp = { version = "0.16", optional = true }
+# Enable the Tokio runtime support in opentelemetry and enable the tonic-based OTLP exporter
+opentelemetry = { version = "0.20", optional = true, features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.16", optional = true, features = ["tonic"] }
 
 [dev-dependencies]
 # No cross-crate test deps to avoid duplicate commons versions
