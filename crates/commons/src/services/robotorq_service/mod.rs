@@ -10,207 +10,110 @@ use axum::{Extension, Router, routing::get};
 use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
-// Metrics abstraction for HTTP middleware wiring
-// Metrics abstraction imported when wiring middleware
-// use crate::util::metrics::{MetricsRegistry, Histogram, Counter, Gauge};
-// use std::time::Duration;
 
+/// Marker trait indicating a type participates in the RoboTorq service lifecycle.
+///
+/// Implementors typically also implement the `RoboTorqService` facade trait which
+/// provides default async lifecycle hooks (`initialize`, `start`, `stop`, `shutdown`).
+/// This marker enables future decoupling (e.g., composing lifecycle-only adapters)
+/// without forcing all downstream code to depend on metric or health capabilities.
+pub trait ServiceLifecycle {}
+
+// Submodules wiring and re-exports
 pub mod healthz;
 mod initialization;
-pub mod service_metrics;
 pub mod middleware;
 pub mod readyz;
+pub mod service_metrics;
 pub mod shutdown;
 pub use healthz::health_handler;
 pub use initialization::{initialize_service, load_and_initialize_service};
 pub use service_metrics::metrics_handler;
 pub use shutdown::{ctrl_c_signal, ctrl_c_signal_with_service_shutdown};
-pub mod service_metrics_context;
 pub mod label_source;
-pub use label_source::{build_label_set, LabelSet};
+pub mod service_metrics_context;
+pub use label_source::{LabelSet, MetricsLabelProvider, build_label_set};
 
-/// Core trait for services exposed via standardized HTTP endpoints.
+/// Contributes to health-check endpoints.
+/// Contributes auxiliary health status details beyond simple liveness.
 ///
-/// Intentionally uses snake_case naming to align with RoboTorq's
-/// internal service taxonomy and avoid conflating trait names with
-/// concrete service structs. Clippy's `non_camel_case_types` lint
-/// is explicitly allowed here.
-#[allow(non_camel_case_types)]
-pub trait robotorq_service: Send + Sync + 'static {
-    /// Liveness check; `GET /healthz` returns 200 when this is Ok.
-    ///
-    /// # Errors
-    ///
-    /// Returns `InvariantError` if the service is not healthy or encounters
-    /// an error during the health check. The specific error depends on the
-    /// service implementation.
-    /// Default implementation returns a simple "ok" status.
-    /// Services should override to perform real dependency checks.
-    fn health_check(&self) -> Result<String, InvariantError> {
-        Ok("ok".to_string())
-    }
+/// The `RoboTorqService::health_check` method returns a `Result<String, InvariantError>`
+/// for liveness gating; `HealthContributor` supplies a lightweight, fallible‐free
+/// string snapshot (e.g. dependency summary) that can be merged into richer endpoints
+/// in later phases. For now it is a simple extension point.
+pub trait HealthContributor {
+    /// Return a human‑readable summary of auxiliary health state.
+    fn health_status(&self) -> String;
+}
 
-    /// Export metrics in Prometheus text format; served at `/metrics`.
-    /// Default implementation returns an empty metrics payload.
-    /// Override to export Prometheus-formatted metrics.
+/// Manages metrics context and exports metrics.
+/// Contributes metrics emission and receives an optional shared metrics context.
+///
+/// Services can opt-in by overriding `set_metrics_context` to retain the context
+/// for standardized counter/gauge construction. If they export service-local
+/// metrics they override `export_metrics` to return Prometheus exposition text.
+pub trait MetricsContributor {
+    /// Inject a shared metrics context established by `HttpServer` metric wiring.
+    fn set_metrics_context(
+        &mut self,
+        _ctx: Option<std::sync::Arc<service_metrics_context::ServiceMetricsContext>>,
+    ) {
+    }
+    /// Export Prometheus text metrics specific to the service implementation.
     fn export_metrics(&self) -> String {
         String::new()
     }
+}
 
-    /// Optional hook for custom endpoints beyond `/healthz` and `/metrics`.
-    fn handle_request(&self, _path: &str, _method: &str) -> Option<Result<String, InvariantError>> {
-        None
+// Update RoboTorqService to compose the smaller traits
+/// RoboTorq facade trait combining lifecycle, health, and metrics behaviors with defaults.
+///
+/// Implement this trait for each service entry point. Override only what you need:
+/// - `initialize` to allocate dependencies (DB pools, NATS clients, etc.)
+/// - `start` to begin active processing (spawn tasks, subscribe streams)
+/// - `stop` for graceful quiescing (stop intake, flush work)
+/// - `shutdown` for final resource release.
+/// - `health_check` to surface dependency status.
+/// - `export_metrics` to expose service-local Prometheus metrics.
+///
+/// All methods provide no-op / healthy defaults to minimize boilerplate for simple services.
+pub trait RoboTorqService: ServiceLifecycle + HealthContributor + MetricsContributor {
+    /// Liveness check used by `/healthz`.
+    fn health_check(&self) -> Result<String, InvariantError> {
+        Ok("ok".to_string())
     }
-
-    /// One-time initialization with configuration and dependencies.
-    ///
-    /// This method is called once during service startup to set up resources,
-    /// establish connections, load configuration, and prepare for operation.
-    /// The service should validate its configuration and set up any required
-    /// dependencies before returning.
-    ///
-    /// # Arguments
-    ///
-    /// * `config` - The system-wide RoboTorq configuration
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` if initialization succeeds, or `Err(error)` if
-    /// initialization fails (invalid config, connection failures, etc.).
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// use commons::services::robotorq_service::robotorq_service;
-    /// use commons::util::config::load_robotorq_config;
-    /// use commons::util::error::InvariantError;
-    /// struct MySvc;
-    /// impl robotorq_service for MySvc {}
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), InvariantError> {
-    ///     let mut svc = MySvc;
-    ///     let cfg = load_robotorq_config(None).unwrap();
-    ///     svc.initialize(&cfg).await?;
-    ///     Ok(())
-    /// }
-    /// ```
-    async fn initialize(&mut self, _config: &RoboTorqConfig) -> Result<(), InvariantError> {
+    /// Export Prometheus metrics (service-local portion). Override for real metrics.
+    fn export_metrics(&self) -> String {
+        String::new()
+    }
+    /// Allocate dependencies & prepare resources. Override for initialization logic.
+    async fn initialize(&mut self, _cfg: &RoboTorqConfig) -> Result<(), InvariantError> {
         Ok(())
     }
-
-    /// Transition from initialized to running.
-    ///
-    /// This method transitions the service from initialized state to running state.
-    /// The service should begin accepting requests, processing operations, and
-    /// maintaining its operational state. This is separate from initialization
-    /// to allow for coordinated startup across multiple services.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` if the service starts successfully, or `Err(error)` if
-    /// startup fails (resource allocation issues, binding failures, etc.).
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// use commons::services::robotorq_service::robotorq_service;
-    /// use commons::util::config::load_robotorq_config;
-    /// use commons::util::error::InvariantError;
-    /// struct MySvc;
-    /// impl robotorq_service for MySvc {}
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), InvariantError> {
-    ///     let mut svc = MySvc;
-    ///     let cfg = load_robotorq_config(None).unwrap();
-    ///     svc.initialize(&cfg).await?;
-    ///     svc.start().await?;
-    ///     Ok(())
-    /// }
-    /// ```
+    /// Transition to active processing (spawn tasks, subscribe). Override as needed.
     async fn start(&self) -> Result<(), InvariantError> {
         Ok(())
     }
-
-    /// Gracefully stop processing while keeping resources allocated.
-    ///
-    /// This method gracefully stops the service's operational processing but
-    /// keeps resources allocated for potential restart. The service should
-    /// stop accepting new requests, complete in-flight operations, and enter
-    /// a paused state. This allows for quick restart without full re-initialization.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` if the service stops successfully, or `Err(error)` if
-    /// the stop operation fails.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// use commons::services::robotorq_service::robotorq_service;
-    /// use commons::util::error::InvariantError;
-    /// struct MySvc;
-    /// impl robotorq_service for MySvc {}
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), InvariantError> {
-    ///     let svc = MySvc;
-    ///     svc.start().await?;
-    ///     svc.stop().await?;
-    ///     Ok(())
-    /// }
-    /// ```
+    /// Graceful pause of new work; finalize in-flight requests. Override for quiesce behavior.
     async fn stop(&self) -> Result<(), InvariantError> {
         Ok(())
     }
-
-    /// Final cleanup; release all resources.
-    ///
-    /// This method performs a clean shutdown of the service, releasing all
-    /// allocated resources, closing connections, and preparing for termination.
-    /// After shutdown, the service cannot be restarted and should be discarded.
-    /// This is the final cleanup method in the service lifecycle.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` if shutdown completes successfully, or `Err(error)` if
-    /// shutdown encounters issues (resource cleanup failures, etc.).
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// use commons::services::robotorq_service::robotorq_service;
-    /// use commons::util::error::InvariantError;
-    /// struct MySvc;
-    /// impl robotorq_service for MySvc {}
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), InvariantError> {
-    ///     let svc = MySvc;
-    ///     svc.shutdown().await?;
-    ///     Ok(())
-    /// }
-    /// ```
+    /// Final cleanup releasing all resources. Override for teardown.
     async fn shutdown(&self) -> Result<(), InvariantError> {
         Ok(())
     }
 }
 
-/// Optional metrics context hook for services.
-///
-/// Services can implement this to receive a `ServiceMetricsContext` constructed
-/// by the HTTP server when a metrics registry is configured. Default is no-op.
-pub trait RoboTorqServiceMetricsExt {
-    /// Inject a shared `ServiceMetricsContext` created by the HTTP server.
-    ///
-    /// Services can store this context to emit standardized lifecycle metrics.
-    /// Default implementation is a no-op, so adoption is opt-in.
-    fn set_metrics_context(&mut self, _ctx: Option<std::sync::Arc<service_metrics_context::ServiceMetricsContext>>) {}
-}
+// Note: No blanket impl for `RoboTorqService` to avoid conflicts with explicit impls in services.
 
-impl<T: robotorq_service> RoboTorqServiceMetricsExt for T {}
+// Backwards-compatible alias for existing code/tests using `robotorq_service`.
+// Note: legacy alias `robotorq_service` removed. Use `RoboTorqService` directly.
 
 /// Lightweight Axum server exposing standardized endpoints for a service.
 ///
@@ -232,11 +135,14 @@ impl<T: robotorq_service> RoboTorqServiceMetricsExt for T {}
 /// ```rust,no_run
 /// use std::sync::Arc;
 /// use tokio::sync::Mutex;
-/// use commons::services::robotorq_service::{HttpServer, HttpServerConfig, robotorq_service};
+/// use commons::services::robotorq_service::{HttpServer, HttpServerConfig, RoboTorqService};
 /// use commons::util::config::load_robotorq_config;
 /// use commons::util::error::InvariantError;
 /// struct MySvc;
-/// impl robotorq_service for MySvc {}
+/// impl commons::services::robotorq_service::ServiceLifecycle for MySvc {}
+/// impl commons::services::robotorq_service::HealthContributor for MySvc { fn health_status(&self) -> String { "OK".to_string() } }
+/// impl commons::services::robotorq_service::MetricsContributor for MySvc {}
+/// impl RoboTorqService for MySvc {}
 /// #[tokio::main]
 /// async fn main() -> Result<(), InvariantError> {
 ///     let svc = Arc::new(Mutex::new(MySvc));
@@ -246,7 +152,7 @@ impl<T: robotorq_service> RoboTorqServiceMetricsExt for T {}
 ///     Ok(())
 /// }
 /// ```
-pub struct HttpServer<S: robotorq_service> {
+pub struct HttpServer<S: RoboTorqService + Send + Sync + 'static> {
     /// The service instance wrapped in an Arc<Mutex> for thread-safe mutable access across HTTP requests.
     service: Arc<Mutex<S>>,
     /// Configuration specifying network address, port, and endpoint paths.
@@ -257,7 +163,7 @@ pub struct HttpServer<S: robotorq_service> {
     // (Will be extended in Phase 1 wiring.)
 }
 
-impl<S: robotorq_service> HttpServer<S> {
+impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
     /// Create a new server for the given service and config.
     ///
     /// This constructor wraps the service in an Arc<Mutex> for thread-safe mutable access
@@ -274,13 +180,17 @@ impl<S: robotorq_service> HttpServer<S> {
     ///
     /// # Examples
     ///
-        /// ```rust,no_run
-        /// use std::sync::Arc;
-        /// use tokio::sync::Mutex;
-        /// use commons::services::robotorq_service::{HttpServer, HttpServerConfig, robotorq_service};
-        /// struct MySvc; impl robotorq_service for MySvc {}
-        /// let server = HttpServer::new(Arc::new(Mutex::new(MySvc)), HttpServerConfig::local_defaults(0));
-        /// ```
+    /// ```rust,no_run
+    /// use std::sync::Arc;
+    /// use tokio::sync::Mutex;
+    /// use commons::services::robotorq_service::{HttpServer, HttpServerConfig, RoboTorqService};
+    /// struct MySvc;
+    /// impl commons::services::robotorq_service::ServiceLifecycle for MySvc {}
+    /// impl commons::services::robotorq_service::HealthContributor for MySvc { fn health_status(&self) -> String { "OK".to_string() } }
+    /// impl commons::services::robotorq_service::MetricsContributor for MySvc {}
+    /// impl RoboTorqService for MySvc {}
+    /// let server = HttpServer::new(Arc::new(Mutex::new(MySvc)), HttpServerConfig::local_defaults(0));
+    /// ```
     pub fn new(service: Arc<Mutex<S>>, config: HttpServerConfig) -> Self {
         Self {
             service,
@@ -322,40 +232,62 @@ impl<S: robotorq_service> HttpServer<S> {
     ///
     /// # Examples
     ///
-        /// ```rust,no_run
-        /// use std::sync::Arc;
-        /// use tokio::sync::Mutex;
-        /// use commons::services::robotorq_service::{HttpServer, HttpServerConfig, robotorq_service};
-        /// use commons::util::config::load_robotorq_config;
-        /// use commons::util::error::InvariantError;
-        /// struct MySvc; impl robotorq_service for MySvc {}
-        /// #[tokio::main]
-        /// async fn main() -> Result<(), InvariantError> {
-        ///     let http_config = HttpServerConfig::local_defaults(0);
-        ///     let cfg = load_robotorq_config(None).unwrap();
-        ///     let server = HttpServer::new(Arc::new(Mutex::new(MySvc)), http_config);
-        ///     // server.start(&cfg).await?;  // omitted to keep doc test fast
-        ///     Ok(())
-        /// }
-        /// ```
+    /// ```rust,no_run
+    /// use std::sync::Arc;
+    /// use tokio::sync::Mutex;
+    /// use commons::services::robotorq_service::{HttpServer, HttpServerConfig, RoboTorqService};
+    /// use commons::util::config::load_robotorq_config;
+    /// use commons::util::error::InvariantError;
+    /// struct MySvc;
+    /// impl commons::services::robotorq_service::ServiceLifecycle for MySvc {}
+    /// impl commons::services::robotorq_service::HealthContributor for MySvc { fn health_status(&self) -> String { "OK".to_string() } }
+    /// impl commons::services::robotorq_service::MetricsContributor for MySvc {}
+    /// impl RoboTorqService for MySvc {}
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), InvariantError> {
+    ///     let http_config = HttpServerConfig::local_defaults(0);
+    ///     let cfg = load_robotorq_config(None).unwrap();
+    ///     let server = HttpServer::new(Arc::new(Mutex::new(MySvc)), http_config);
+    ///     // server.start(&cfg).await?;  // omitted to keep doc test fast
+    ///     Ok(())
+    /// }
+    /// ```
+    #[tracing::instrument(skip(self, config))]
     pub async fn start(mut self, config: &RoboTorqConfig) -> Result<(), InvariantError> {
         // Initialize the service
         {
             let mut service = self.service.lock().await;
-            // Ensure a metrics registry exists; create one with config-derived labels if missing
-            let labels = build_label_set(config);
-            let registry_arc: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = if let Some(r) = &self.config.metrics_registry {
-                std::sync::Arc::clone(r)
+            // Ensure a metrics registry exists; create one with provided labels if missing
+            let labels = if let Some(provider) = &self.config.label_provider {
+                let l = provider.labels();
+                tracing::debug!(service=%l.service, component=%l.component, version=%l.version, "using provided static label set");
+                l
             } else {
-                let r: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = std::sync::Arc::new(crate::util::metrics::PrometheusRegistry::new(
-                    &labels.service,
-                    &labels.component,
-                    &labels.version,
-                ));
-                self.config.metrics_registry = Some(std::sync::Arc::clone(&r));
-                r
+                let l = build_label_set(config);
+                tracing::debug!(service=%l.service, component=%l.component, version=%l.version, "derived label set from config");
+                l
             };
-            let ctx = service_metrics_context::ServiceMetricsContext::new(std::sync::Arc::clone(&registry_arc), labels);
+            let registry_arc: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> =
+                if let Some(r) = &self.config.metrics_registry {
+                    std::sync::Arc::clone(r)
+                } else {
+                    tracing::debug!(service=%labels.service, component=%labels.component, "creating new PrometheusRegistry for HTTP server");
+                    let r: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> =
+                        std::sync::Arc::new(crate::util::metrics::PrometheusRegistry::new(
+                            &labels.service,
+                            &labels.component,
+                            &labels.version,
+                        ));
+                    tracing::info!(service=%labels.service, component=%labels.component, "created PrometheusRegistry instance");
+                    self.config.metrics_registry = Some(std::sync::Arc::clone(&r));
+                    r
+                };
+            let ctx = service_metrics_context::ServiceMetricsContext::new(
+                std::sync::Arc::clone(&registry_arc),
+                labels.clone(),
+            );
+            tracing::info!(service=%labels.service, component=%labels.component, version=%labels.version, "metrics registry attached");
+            tracing::debug!(service=%labels.service, component=%labels.component, "metrics context created and attached to service");
             service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
             if let Err(err) = service.initialize(config).await {
                 tracing::warn!(error = ?err, "service initialize failed, continuing");
@@ -365,7 +297,10 @@ impl<S: robotorq_service> HttpServer<S> {
         // Start the service
         {
             let service = self.service.lock().await;
+            tracing::info!("invoking service.start()");
+            let start_ts = std::time::Instant::now();
             service.start().await?;
+            tracing::info!(duration_ms=%start_ts.elapsed().as_millis(), "service.start() completed");
         }
 
         // Create shutdown signal that will call stop and shutdown
@@ -380,58 +315,78 @@ impl<S: robotorq_service> HttpServer<S> {
     /// This convenience method keeps callers clean by loading `RoboTorqConfig`
     /// within commons and driving the full lifecycle. Errors during
     /// initialization are logged and the server continues, per policy.
+    #[tracing::instrument(skip(self))]
     pub async fn start_autoload(mut self) -> Result<(), InvariantError> {
         // Initialize with autoloaded config
         {
             let mut service = self.service.lock().await;
             match load_and_initialize_service(&mut *service).await {
                 Ok(cfg) => {
-                    let labels = build_label_set(&cfg);
-                    let registry_arc: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = if let Some(r) = &self.config.metrics_registry {
-                        std::sync::Arc::clone(r)
+                    let labels = if let Some(provider) = &self.config.label_provider {
+                        let l = provider.labels();
+                        tracing::debug!(service=%l.service, component=%l.component, version=%l.version, "using provided static label set (autoload)");
+                        l
                     } else {
-                        let r: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = std::sync::Arc::new(crate::util::metrics::PrometheusRegistry::new(
-                            &labels.service,
-                            &labels.component,
-                            &labels.version,
-                        ));
-                        self.config.metrics_registry = Some(std::sync::Arc::clone(&r));
-                        r
+                        let l = build_label_set(&cfg);
+                        tracing::debug!(service=%l.service, component=%l.component, version=%l.version, "derived label set from config (autoload)");
+                        l
                     };
-                    let ctx = service_metrics_context::ServiceMetricsContext::new(std::sync::Arc::clone(&registry_arc), labels);
+                    let registry_arc: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> =
+                        if let Some(r) = &self.config.metrics_registry {
+                            std::sync::Arc::clone(r)
+                        } else {
+                            let r: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> =
+                                std::sync::Arc::new(crate::util::metrics::PrometheusRegistry::new(
+                                    &labels.service,
+                                    &labels.component,
+                                    &labels.version,
+                                ));
+                            self.config.metrics_registry = Some(std::sync::Arc::clone(&r));
+                            r
+                        };
+                    let ctx = service_metrics_context::ServiceMetricsContext::new(
+                        std::sync::Arc::clone(&registry_arc),
+                        labels,
+                    );
                     service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
                 }
                 Err(err) => {
                     tracing::warn!(error = ?err, "service initialize failed, continuing");
                     // Build minimal labels and registry in failure path as well
-                    let cfg = crate::util::config::load_robotorq_config(None).unwrap_or_else(|_| {
-                        crate::util::config::RoboTorqConfig {
-                            schema_version: crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION,
-                            mode: crate::util::config::Mode::Production,
-                            simulation: Default::default(),
-                            ports: crate::util::config::load_ports_config_from_default(),
-                            http: Default::default(),
-                            nats: Default::default(),
-                            persistence: Default::default(),
-                            observability: Default::default(),
-                            security: Default::default(),
-                            crypto: Default::default(),
-                            economic: Default::default(),
-                        }
-                    });
+                    let cfg =
+                        crate::util::config::load_robotorq_config(None).unwrap_or_else(|_| {
+                            crate::util::config::RoboTorqConfig {
+                                schema_version: crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION,
+                                mode: crate::util::config::Mode::Production,
+                                simulation: Default::default(),
+                                ports: crate::util::config::load_ports_config_from_default(),
+                                http: Default::default(),
+                                nats: Default::default(),
+                                persistence: Default::default(),
+                                observability: Default::default(),
+                                security: Default::default(),
+                                crypto: Default::default(),
+                                economic: Default::default(),
+                            }
+                        });
                     let labels = build_label_set(&cfg);
-                    let registry_arc: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = if let Some(r) = &self.config.metrics_registry {
-                        std::sync::Arc::clone(r)
-                    } else {
-                        let r: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = std::sync::Arc::new(crate::util::metrics::PrometheusRegistry::new(
-                            &labels.service,
-                            &labels.component,
-                            &labels.version,
-                        ));
-                        self.config.metrics_registry = Some(std::sync::Arc::clone(&r));
-                        r
-                    };
-                    let ctx = service_metrics_context::ServiceMetricsContext::new(std::sync::Arc::clone(&registry_arc), labels);
+                    let registry_arc: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> =
+                        if let Some(r) = &self.config.metrics_registry {
+                            std::sync::Arc::clone(r)
+                        } else {
+                            let r: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> =
+                                std::sync::Arc::new(crate::util::metrics::PrometheusRegistry::new(
+                                    &labels.service,
+                                    &labels.component,
+                                    &labels.version,
+                                ));
+                            self.config.metrics_registry = Some(std::sync::Arc::clone(&r));
+                            r
+                        };
+                    let ctx = service_metrics_context::ServiceMetricsContext::new(
+                        std::sync::Arc::clone(&registry_arc),
+                        labels,
+                    );
                     service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
                 }
             }
@@ -440,7 +395,10 @@ impl<S: robotorq_service> HttpServer<S> {
         // Start the service
         {
             let service = self.service.lock().await;
+            tracing::info!("invoking service.start() (autoload)");
+            let start_ts = std::time::Instant::now();
             service.start().await?;
+            tracing::info!(duration_ms=%start_ts.elapsed().as_millis(), "service.start() completed (autoload)");
         }
 
         // Create shutdown signal that will call stop and shutdown
@@ -455,6 +413,7 @@ impl<S: robotorq_service> HttpServer<S> {
     /// This mirrors `start` but allows callers to drive graceful shutdown from
     /// an existing signal source (Ctrl+C, health failures, etc.) instead of
     /// relying on a single internal listener.
+    #[tracing::instrument(skip(self, shutdown_signal))]
     pub async fn start_with_shutdown<F>(self, shutdown_signal: F) -> Result<(), InvariantError>
     where
         F: Future<Output = ()> + Send + 'static,
@@ -463,6 +422,9 @@ impl<S: robotorq_service> HttpServer<S> {
             "{}:{}",
             self.config.service.address, self.config.service.port
         );
+
+        let server_span = tracing::span!(tracing::Level::INFO, "http_server", addr = %addr);
+        let _server_enter = server_span.enter();
 
         // Build the application with routes
         let ready_flag = Arc::clone(&self.ready);
@@ -477,10 +439,12 @@ impl<S: robotorq_service> HttpServer<S> {
 
         // Conditionally add middleware layers based on configuration
         if let Some(body_limit) = self.config.max_body_size_bytes {
+            tracing::debug!(body_limit = body_limit, "enabling request body limit layer");
             app = app.layer(RequestBodyLimitLayer::new(body_limit));
         }
 
         if let Some(timeout_secs) = self.config.timeout_seconds {
+            tracing::debug!(timeout = timeout_secs, "enabling request timeout layer");
             app = app.layer(TimeoutLayer::with_status_code(
                 axum::http::StatusCode::REQUEST_TIMEOUT,
                 std::time::Duration::from_secs(timeout_secs),
@@ -488,6 +452,7 @@ impl<S: robotorq_service> HttpServer<S> {
         }
 
         if self.config.cors_permissive {
+            tracing::debug!("enabling permissive CORS layer");
             app = app.layer(CorsLayer::permissive());
         }
 
@@ -498,8 +463,11 @@ impl<S: robotorq_service> HttpServer<S> {
             app = app.route_layer(middleware::HttpMetricsLayer::new(std::sync::Arc::clone(
                 registry,
             )));
+            tracing::debug!("http metrics layer attached to router");
             // Attach HTTP endpoint-specific metrics (e.g., /healthz)
-            let healthz_metrics = std::sync::Arc::new(healthz::HealthzMetrics::new(std::sync::Arc::clone(registry)));
+            let healthz_metrics = std::sync::Arc::new(healthz::HealthzMetrics::new(
+                std::sync::Arc::clone(registry),
+            ));
             app = app.layer(Extension(healthz_metrics));
         }
 
@@ -507,8 +475,19 @@ impl<S: robotorq_service> HttpServer<S> {
         let listener = TcpListener::bind(&addr)
             .await
             .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
-
-        tracing::info!("HTTP server listening on {}", addr);
+        tracing::info!(addr=%addr, "listener created and bound");
+        // If ephemeral port (0) requested, capture the actual bound port and update config for clarity.
+        if self.config.service.port == 0 {
+            if let Ok(bound) = listener.local_addr() {
+                tracing::info!("HTTP server listening on {}", bound);
+            } else {
+                tracing::info!("HTTP server listening on {} (ephemeral)", addr);
+            }
+        } else if let Ok(bound) = listener.local_addr() {
+            tracing::info!("HTTP server listening on {}", bound);
+        } else {
+            tracing::info!("HTTP server listening on {}", addr);
+        }
 
         // Mark ready and start serving; export readiness gauge if registry present
         let mut ready_gauge: Option<Arc<dyn crate::util::metrics::MetricGauge + Send + Sync>> =
@@ -519,17 +498,26 @@ impl<S: robotorq_service> HttpServer<S> {
             ready_gauge = Some(g.into());
         }
         self.ready.store(true, Ordering::Relaxed);
+        tracing::info!(ready = true, "server marked ready");
+        tracing::debug!("ready flag set; entering serve loop");
+
+        // Serve and measure graceful shutdown timing
+        let serve_start = Instant::now();
+        tracing::info!("starting HTTP serve loop");
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal)
             .await
             .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
+        tracing::info!(duration_ms=%serve_start.elapsed().as_millis(), "http serve completed/shutdown signal received");
 
         // Invoke graceful cleanup hooks after server stops (Ctrl+C or error)
         {
             let service = self.service.lock().await;
+            tracing::info!("invoking service.stop() as part of graceful shutdown");
             if let Err(err) = service.stop().await {
                 tracing::warn!(error = ?err, "service stop hook failed");
             }
+            tracing::info!("invoking service.shutdown() as part of graceful shutdown");
             if let Err(err) = service.shutdown().await {
                 tracing::warn!(error = ?err, "service shutdown hook failed");
             }
@@ -754,6 +742,9 @@ pub struct HttpServerConfig {
     pub cors_permissive: bool,
     /// Optional shared metrics registry; when set, middleware and handler can use it.
     pub metrics_registry: Option<std::sync::Arc<dyn crate::util::metrics::MetricsRegistry>>,
+    /// Optional label provider to derive metrics labels without depending on config.
+    pub label_provider:
+        Option<std::sync::Arc<dyn crate::services::robotorq_service::MetricsLabelProvider>>,
 }
 
 impl std::fmt::Debug for HttpServerConfig {
@@ -765,6 +756,14 @@ impl std::fmt::Debug for HttpServerConfig {
             .field("timeout_seconds", &self.timeout_seconds)
             .field("max_body_size_bytes", &self.max_body_size_bytes)
             .field("cors_permissive", &self.cors_permissive)
+            .field(
+                "metrics_registry",
+                &self.metrics_registry.as_ref().map(|_| "<registry>"),
+            )
+            .field(
+                "label_provider",
+                &self.label_provider.as_ref().map(|_| "<provider>"),
+            )
             .finish()
     }
 }
@@ -810,6 +809,7 @@ impl HttpServerConfig {
             max_body_size_bytes: None,
             cors_permissive: true,
             metrics_registry: None,
+            label_provider: None,
         }
     }
 
@@ -859,6 +859,7 @@ impl HttpServerConfig {
             max_body_size_bytes: Some(1024 * 1024), // 1MB body limit
             cors_permissive: true,
             metrics_registry: None,
+            label_provider: None,
         }
     }
 
@@ -869,6 +870,156 @@ impl HttpServerConfig {
     ) -> Self {
         self.metrics_registry = Some(registry);
         self
+    }
+
+    /// Provide a metrics label provider to decouple label derivation.
+    pub fn with_label_provider(
+        mut self,
+        provider: std::sync::Arc<dyn crate::services::robotorq_service::MetricsLabelProvider>,
+    ) -> Self {
+        self.label_provider = Some(provider);
+        self
+    }
+}
+
+/// Builder for configuring and constructing an `HttpServer` with fluent, staged options.
+///
+/// This encapsulates incremental configuration (address/port, timeouts, body limits,
+/// CORS, metrics registry, static label provider) before producing the final
+/// `HttpServer`. It reduces per‑service boilerplate when multiple optional
+/// observability components are in play.
+///
+/// # Example
+/// ```rust,no_run
+/// use std::sync::Arc; use tokio::sync::Mutex;
+/// use commons::services::robotorq_service::{HttpServerBuilder, RoboTorqService};
+/// struct Svc;
+/// impl commons::services::robotorq_service::ServiceLifecycle for Svc {}
+/// impl commons::services::robotorq_service::HealthContributor for Svc { fn health_status(&self) -> String { "OK".to_string() } }
+/// impl commons::services::robotorq_service::MetricsContributor for Svc {}
+/// impl RoboTorqService for Svc {}
+/// let svc = Arc::new(Mutex::new(Svc));
+/// let builder = HttpServerBuilder::new(svc)
+///     .with_port(0)
+///     .with_manual_registry("svc_name", "http", "0.1.0")
+///     .with_static_labels("svc_name", "http", "0.1.0", "core");
+/// // Build without starting:
+/// let server = builder.build();
+/// // Or autoload + start:
+/// // tokio::spawn(async move { builder.build_and_start_autoload().await.unwrap(); });
+/// ```
+pub struct HttpServerBuilder<S: RoboTorqService + Send + Sync + 'static> {
+    service: Arc<Mutex<S>>,
+    config: HttpServerConfig,
+}
+
+impl<S: RoboTorqService + Send + Sync + 'static> HttpServerBuilder<S> {
+    /// Create a new builder with default local configuration (localhost, ephemeral port).
+    pub fn new(service: Arc<Mutex<S>>) -> Self {
+        Self {
+            service,
+            config: HttpServerConfig::local_defaults(0),
+        }
+    }
+
+    /// Override port while keeping existing address.
+    pub fn with_port(mut self, port: u16) -> Self {
+        self.config.service.port = port;
+        tracing::debug!(port = port, "HttpServerBuilder: with_port set");
+        self
+    }
+    /// Override bind address.
+    pub fn with_address<Saddr: Into<String>>(mut self, address: Saddr) -> Self {
+        self.config.service.address = address.into();
+        tracing::debug!(address = %self.config.service.address, "HttpServerBuilder: with_address set");
+        self
+    }
+    /// Set request timeout seconds.
+    pub fn with_timeout(mut self, secs: u64) -> Self {
+        self.config.timeout_seconds = Some(secs);
+        tracing::debug!(timeout_secs = secs, "HttpServerBuilder: with_timeout set");
+        self
+    }
+    /// Remove request timeout.
+    pub fn without_timeout(mut self) -> Self {
+        self.config.timeout_seconds = None;
+        tracing::debug!("HttpServerBuilder: without_timeout called");
+        self
+    }
+    /// Set maximum body size in bytes.
+    pub fn with_body_limit(mut self, bytes: usize) -> Self {
+        self.config.max_body_size_bytes = Some(bytes);
+        tracing::debug!(body_limit = bytes, "HttpServerBuilder: with_body_limit set");
+        self
+    }
+    /// Disable body size limit.
+    pub fn without_body_limit(mut self) -> Self {
+        self.config.max_body_size_bytes = None;
+        tracing::debug!("HttpServerBuilder: without_body_limit called");
+        self
+    }
+    /// Configure permissive CORS.
+    pub fn with_cors_permissive(mut self, permissive: bool) -> Self {
+        self.config.cors_permissive = permissive;
+        tracing::debug!(
+            cors_permissive = permissive,
+            "HttpServerBuilder: with_cors_permissive set"
+        );
+        self
+    }
+    /// Attach an existing metrics registry.
+    pub fn with_registry(
+        mut self,
+        registry: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry>,
+    ) -> Self {
+        self.config.metrics_registry = Some(registry);
+        tracing::debug!("HttpServerBuilder: explicit registry attached");
+        self
+    }
+    /// Construct and attach a Prometheus registry with base labels.
+    pub fn with_manual_registry(mut self, service: &str, component: &str, version: &str) -> Self {
+        let reg: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = std::sync::Arc::new(
+            crate::util::metrics::PrometheusRegistry::new(service, component, version),
+        );
+        self.config.metrics_registry = Some(reg);
+        tracing::debug!(service = %service, component = %component, version = %version, "HttpServerBuilder: with_manual_registry created and attached");
+        self
+    }
+    /// Provide a static label set independent of `RoboTorqConfig`.
+    pub fn with_static_labels(
+        mut self,
+        service: &str,
+        component: &str,
+        version: &str,
+        subject: &str,
+    ) -> Self {
+        struct StaticLabelSetProvider(LabelSet);
+        impl MetricsLabelProvider for StaticLabelSetProvider {
+            fn labels(&self) -> LabelSet {
+                self.0.clone()
+            }
+        }
+        let provider = StaticLabelSetProvider(LabelSet {
+            service: service.to_string(),
+            component: component.to_string(),
+            version: version.to_string(),
+            subject: subject.to_string(),
+        });
+        self.config.label_provider = Some(std::sync::Arc::new(provider));
+        tracing::debug!(service = %service, component = %component, version = %version, subject = %subject, "HttpServerBuilder: with_static_labels applied");
+        self
+    }
+    /// Finalize builder returning an `HttpServer` (not started).
+    pub fn build(self) -> HttpServer<S> {
+        HttpServer::new(self.service, self.config)
+    }
+    /// Build and start with provided config.
+    pub async fn build_and_start(self, cfg: &RoboTorqConfig) -> Result<(), InvariantError> {
+        self.build().start(cfg).await
+    }
+    /// Build and start using autoloaded config.
+    pub async fn build_and_start_autoload(self) -> Result<(), InvariantError> {
+        self.build().start_autoload().await
     }
 }
 
@@ -881,7 +1032,7 @@ mod tests {
         handler: Arc<MetricsHandler>,
     }
 
-    impl robotorq_service for TestService {
+    impl RoboTorqService for TestService {
         fn health_check(&self) -> Result<String, InvariantError> {
             Ok("OK".to_string())
         }
@@ -901,6 +1052,23 @@ mod tests {
         }
         async fn shutdown(&self) -> Result<(), InvariantError> {
             Ok(())
+        }
+    }
+
+    impl ServiceLifecycle for TestService {}
+    impl HealthContributor for TestService {
+        fn health_status(&self) -> String {
+            self.health_check().unwrap_or_default()
+        }
+    }
+    impl MetricsContributor for TestService {
+        fn set_metrics_context(
+            &mut self,
+            _ctx: Option<std::sync::Arc<service_metrics_context::ServiceMetricsContext>>,
+        ) {
+        }
+        fn export_metrics(&self) -> String {
+            <TestService as RoboTorqService>::export_metrics(self)
         }
     }
 
@@ -941,5 +1109,35 @@ mod tests {
 
         // Just verify the handler works
         assert!(!handler.export_text().is_empty());
+    }
+
+    #[test]
+    fn builder_with_variants_sets_config() {
+        use crate::util::metrics::PrometheusRegistry;
+
+        let handler = MetricsHandler::new();
+        let svc = Arc::new(Mutex::new(TestService { handler }));
+        let reg: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> =
+            std::sync::Arc::new(PrometheusRegistry::new("svc", "http", "vtest"));
+
+        let builder = HttpServerBuilder::new(Arc::clone(&svc))
+            .with_port(12345)
+            .with_address("127.0.0.2")
+            .with_timeout(5)
+            .with_body_limit(4096)
+            .with_cors_permissive(false)
+            .with_registry(std::sync::Arc::clone(&reg))
+            .with_static_labels("svc", "http", "vtest", "core");
+
+        let server = builder.build();
+        // Check simple fields
+        assert_eq!(server.config.service.port, 12345);
+        assert_eq!(server.config.service.address, "127.0.0.2");
+        assert_eq!(server.config.timeout_seconds, Some(5));
+        assert_eq!(server.config.max_body_size_bytes, Some(4096));
+        assert!(!server.config.cors_permissive);
+        // Metrics registry present and label provider present
+        assert!(server.config.metrics_registry.is_some());
+        assert!(server.config.label_provider.is_some());
     }
 }
