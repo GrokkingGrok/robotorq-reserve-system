@@ -179,6 +179,18 @@ pub fn build_label_set(cfg: &RoboTorqConfig) -> LabelSet {
     }
 }
 
+/// Abstraction for deriving metric labels without binding to `RoboTorqConfig`.
+pub trait MetricsLabelProvider: Send + Sync {
+    /// Produce a complete `LabelSet` for metrics.
+    fn labels(&self) -> LabelSet;
+}
+
+impl MetricsLabelProvider for RoboTorqConfig {
+    fn labels(&self) -> LabelSet {
+        build_label_set(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,5 +320,89 @@ mod tests {
         let labels = build_label_set(&cfg);
         assert_eq!(labels.component, "http");
         assert_eq!(labels.subject, "core");
+    }
+
+    #[test]
+    fn test_derive_service_label_explicit() {
+        let obs = crate::util::config::ObservabilityConfig {
+            service_name: "my-service".to_string(),
+            ..Default::default()
+        };
+        let cfg = crate::util::config::RoboTorqConfig {
+            schema_version: crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION,
+            mode: crate::util::config::Mode::Production,
+            simulation: Default::default(),
+            ports: crate::util::config::load_ports_config_from_default(),
+            http: Default::default(),
+            nats: Default::default(),
+            persistence: Default::default(),
+            observability: obs,
+            security: Default::default(),
+            crypto: Default::default(),
+            economic: Default::default(),
+        };
+        assert_eq!(derive_service_label(&cfg), "my-service");
+    }
+
+    #[test]
+    fn test_metrics_label_provider_custom_impl() {
+        struct CustomProvider;
+        impl MetricsLabelProvider for CustomProvider {
+            fn labels(&self) -> LabelSet {
+                LabelSet {
+                    service: "custom".to_string(),
+                    component: "worker".to_string(),
+                    version: "vX".to_string(),
+                    subject: "core".to_string(),
+                }
+            }
+        }
+        let p = CustomProvider;
+        let labels = p.labels();
+        assert_eq!(labels.service, "custom");
+        assert_eq!(labels.component, "worker");
+        assert_eq!(labels.version, "vX");
+    }
+
+    #[test]
+    fn test_derive_service_label_nonempty() {
+        let obs = crate::util::config::ObservabilityConfig {
+            service_name: "my-service".to_string(),
+            ..Default::default()
+        };
+        let cfg = crate::util::config::RoboTorqConfig {
+            schema_version: crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION,
+            mode: crate::util::config::Mode::Production,
+            simulation: Default::default(),
+            ports: crate::util::config::load_ports_config_from_default(),
+            http: Default::default(),
+            nats: Default::default(),
+            persistence: Default::default(),
+            observability: obs,
+            security: Default::default(),
+            crypto: Default::default(),
+            economic: Default::default(),
+        };
+        assert_eq!(derive_service_label(&cfg), "my-service");
+    }
+
+    struct StaticProvider(LabelSet);
+    impl MetricsLabelProvider for StaticProvider {
+        fn labels(&self) -> LabelSet {
+            self.0.clone()
+        }
+    }
+
+    #[test]
+    fn test_custom_metrics_label_provider() {
+        let provider = StaticProvider(LabelSet {
+            service: "custom".to_string(),
+            component: "http".to_string(),
+            version: "v1".to_string(),
+            subject: "core".to_string(),
+        });
+        let labels = provider.labels();
+        assert_eq!(labels.service, "custom");
+        assert_eq!(labels.version, "v1");
     }
 }
