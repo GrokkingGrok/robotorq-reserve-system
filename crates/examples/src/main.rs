@@ -7,9 +7,10 @@
 use std::sync::Arc;
 
 use commons::{
-    services::robotorq_service::{HttpServer, HttpServerConfig, label_source::build_label_set},
+    services::robotorq_service::{HttpServerBuilder, label_source::build_label_set},
     util::config::load_robotorq_config,
     util::error::InvariantError,
+    util::metrics::PrometheusRegistry,
 };
 use tokio::sync::Mutex;
 
@@ -30,39 +31,44 @@ async fn main() -> Result<(), InvariantError> {
         .unwrap_or(DEFAULT_PORT);
 
     // Load config to derive labels for metrics
-    let config = load_robotorq_config(None).map_err(commons::util::error::config_error::ConfigError::Invalid)?;
+    let config = load_robotorq_config(None)
+        .map_err(commons::util::error::config_error::ConfigError::Invalid)?;
     let labels = build_label_set(&config);
 
-    // Build HTTP server config using local defaults and override port.
-    // Metrics registry will be auto-created by HttpServer using config-derived labels.
-    let http_config = HttpServerConfig::local_defaults(port);
+    // Construct shared registry with config-derived labels for unified metrics.
+    let registry: Arc<dyn commons::util::metrics::MetricsRegistry> = Arc::new(
+        PrometheusRegistry::new(&labels.service, &labels.component, &labels.version),
+    );
 
-    // Construct service and wrap for HttpServer
-    let service = Arc::new(Mutex::new(SandboxService::new(http_config.clone(), &labels)));
+    // Build service using injected registry (no internal registry duplication).
+    let service = Arc::new(Mutex::new(SandboxService::new(
+        &labels,
+        Arc::clone(&registry),
+    )));
 
-    // Create server and use commons-side lifecycle with autoload initialization
-    let server = HttpServer::new(service, http_config);
-    server.start_autoload().await
+    // Use builder pattern for HTTP server wiring.
+    HttpServerBuilder::new(service)
+        .with_port(port)
+        .with_registry(Arc::clone(&registry))
+        .with_static_labels(
+            &labels.service,
+            &labels.component,
+            &labels.version,
+            &labels.subject,
+        )
+        .build_and_start_autoload()
+        .await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commons::services::robotorq_service::{HttpEndpoint, HttpService};
-    use commons::util::config::load_robotorq_config;
     use commons::services::robotorq_service::label_source::build_label_set;
+    use commons::util::config::load_robotorq_config;
+    use commons::util::metrics::PrometheusRegistry;
 
     #[test]
     fn health_counter_increments() {
-        let test_config = HttpServerConfig {
-            service: HttpService::new("127.0.0.1", 0),
-            health: HttpEndpoint::new("/health"),
-            metrics: HttpEndpoint::new("/metrics"),
-            timeout_seconds: Some(30),
-            max_body_size_bytes: Some(1024 * 1024),
-            cors_permissive: false,
-            metrics_registry: None,
-        };
         // Create test labels
         let test_labels = commons::services::robotorq_service::label_source::LabelSet {
             service: "test".to_string(),
@@ -70,7 +76,13 @@ mod tests {
             version: "0.0.1".to_string(),
             subject: "core".to_string(),
         };
-        let service = SandboxService::new(test_config, &test_labels);
+        let registry: Arc<dyn commons::util::metrics::MetricsRegistry> =
+            Arc::new(PrometheusRegistry::new(
+                &test_labels.service,
+                &test_labels.component,
+                &test_labels.version,
+            ));
+        let service = SandboxService::new(&test_labels, Arc::clone(&registry));
         fn extract_metric_value(metrics: &str, name: &str) -> Option<f64> {
             metrics
                 .lines()
@@ -90,7 +102,7 @@ mod tests {
         }
 
         // Bring trait into scope for method resolution
-        use commons::services::robotorq_service::robotorq_service;
+        use commons::services::robotorq_service::RoboTorqService;
         service.health_check().unwrap();
         let first = extract_metric_value(&service.export_metrics(), "sandbox_health_checks_total");
         assert_eq!(first, Some(1.0));

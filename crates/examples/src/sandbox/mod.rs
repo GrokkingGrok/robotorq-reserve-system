@@ -6,40 +6,36 @@
 use std::{sync::Arc, time::Instant};
 
 use commons::{
-    services::robotorq_service::{HttpServerConfig, robotorq_service},
-    util::error::InvariantError,
-    util::metrics::{MetricCounter, MetricsRegistry, PrometheusRegistry},
+    services::robotorq_service::RoboTorqService,
     services::robotorq_service::label_source::LabelSet,
+    util::error::InvariantError,
+    util::metrics::{MetricCounter, MetricsRegistry},
 };
 
 /// Lightweight service used for playground demos.
 pub struct SandboxService {
-    metrics: Arc<PrometheusRegistry>,
+    registry: Arc<dyn MetricsRegistry>,
     health_checks: Box<dyn MetricCounter + Send + Sync>,
     start_time: Instant,
-    #[allow(dead_code)]
-    http_config: HttpServerConfig,
 }
 
 impl SandboxService {
-    /// Build the sandbox service and register the health counter.
-    pub fn new(http_config: HttpServerConfig, labels: &LabelSet) -> Self {
-        let metrics = Arc::new(PrometheusRegistry::new(&labels.service, &labels.component, &labels.version));
-        let health_checks = metrics.counter(
+    /// Build the sandbox service using an injected shared registry.
+    pub fn new(_labels: &LabelSet, registry: Arc<dyn MetricsRegistry>) -> Self {
+        let health_checks = registry.counter(
             "sandbox_health_checks_total",
             "Number of sandbox health checks",
             &[],
         );
         Self {
-            metrics,
+            registry,
             health_checks,
             start_time: Instant::now(),
-            http_config,
         }
     }
 }
 
-impl robotorq_service for SandboxService {
+impl RoboTorqService for SandboxService {
     fn health_check(&self) -> Result<String, InvariantError> {
         self.health_checks.inc();
         Ok(format!(
@@ -49,10 +45,36 @@ impl robotorq_service for SandboxService {
     }
 
     fn export_metrics(&self) -> String {
-        self.metrics.export_text()
+        self.registry.export_text()
     }
 
     async fn start(&self) -> Result<(), InvariantError> {
         Ok(())
+    }
+}
+
+impl commons::services::robotorq_service::ServiceLifecycle for SandboxService {}
+
+impl commons::services::robotorq_service::HealthContributor for SandboxService {
+    fn health_status(&self) -> String {
+        self.health_check()
+            .unwrap_or_else(|e| format!("error: {:?}", e))
+    }
+}
+
+impl commons::services::robotorq_service::MetricsContributor for SandboxService {
+    fn set_metrics_context(
+        &mut self,
+        _ctx: Option<
+            std::sync::Arc<
+                commons::services::robotorq_service::service_metrics_context::ServiceMetricsContext,
+            >,
+        >,
+    ) {
+    }
+    fn export_metrics(&self) -> String {
+        <SandboxService as commons::services::robotorq_service::RoboTorqService>::export_metrics(
+            self,
+        )
     }
 }
