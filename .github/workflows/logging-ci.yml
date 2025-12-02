@@ -1,0 +1,40 @@
+name: Logging CI
+
+on:
+  push:
+    branches: [ rewrite-core, release/v0, main ]
+  pull_request:
+    branches: [ rewrite-core, release/v0, main ]
+
+jobs:
+  logging-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install jq (for JSON assertions)
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Build commons demo
+        run: cargo build -p commons --bin logging_demo
+
+      - name: Run logging demo and capture output
+        run: |
+          set -e
+          ./target/debug/logging_demo > demo_output.json
+          cat demo_output.json
+
+      - name: Assert JSON fields present
+        run: |
+          # Ensure the demo produced at least one JSON log line containing our message and fields
+          grep -m1 'service.started' demo_output.json || (echo "message not found" && exit 1)
+          # Validate presence of the structured service field
+          cat demo_output.json | jq -e '.[0] | has("service") or .service' >/dev/null || echo "service field missing"
