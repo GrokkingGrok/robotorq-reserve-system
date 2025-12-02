@@ -7,7 +7,9 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use commons::{
-    services::robotorq_service::{HttpServer, HttpServerConfig, label_source::build_label_set, robotorq_service},
+    services::robotorq_service::{
+        HttpServer, HttpServerConfig, RoboTorqService, label_source::build_label_set,
+    },
     util::config::load_robotorq_config,
     util::error::InvariantError,
     util::metrics::{MetricsRegistry, PrometheusRegistry},
@@ -21,8 +23,13 @@ struct TestService {
 
 impl TestService {
     fn new(labels: &commons::services::robotorq_service::label_source::LabelSet) -> Self {
-        let registry = Arc::new(PrometheusRegistry::new(&labels.service, &labels.component, &labels.version));
-        let health_counter = registry.counter("test_health_checks_total", "Test health checks", &[]);
+        let registry = Arc::new(PrometheusRegistry::new(
+            &labels.service,
+            &labels.component,
+            &labels.version,
+        ));
+        let health_counter =
+            registry.counter("test_health_checks_total", "Test health checks", &[]);
         Self {
             health_counter,
             registry,
@@ -30,7 +37,7 @@ impl TestService {
     }
 }
 
-impl robotorq_service for TestService {
+impl RoboTorqService for TestService {
     fn health_check(&self) -> Result<String, InvariantError> {
         self.health_counter.inc();
         Ok("Test service healthy".to_string())
@@ -45,17 +52,49 @@ impl robotorq_service for TestService {
     }
 }
 
+// Provide explicit small-trait impls required by `RoboTorqService`.
+impl commons::services::robotorq_service::ServiceLifecycle for TestService {}
+
+impl commons::services::robotorq_service::HealthContributor for TestService {
+    fn health_status(&self) -> String {
+        self.health_check().unwrap_or_default()
+    }
+}
+
+impl commons::services::robotorq_service::MetricsContributor for TestService {
+    fn set_metrics_context(
+        &mut self,
+        _ctx: Option<
+            std::sync::Arc<
+                commons::services::robotorq_service::service_metrics_context::ServiceMetricsContext,
+            >,
+        >,
+    ) {
+    }
+    fn export_metrics(&self) -> String {
+        <TestService as RoboTorqService>::export_metrics(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use commons::util::logging::spawn_traced;
     use reqwest::Client;
+    use tracing::info;
 
     fn extract_metric_value(text: &str, name: &str) -> Option<f64> {
         for line in text.lines() {
-            if line.starts_with('#') { continue; }
-            if line.starts_with(name) && let Some(idx) = line.rfind(' ') {
-                let val_str = &line[idx+1..];
-                if let Ok(v) = val_str.trim().parse::<f64>() { return Some(v); }
+            if line.starts_with('#') {
+                continue;
+            }
+            if line.starts_with(name)
+                && let Some(idx) = line.rfind(' ')
+            {
+                let val_str = &line[idx + 1..];
+                if let Ok(v) = val_str.trim().parse::<f64>() {
+                    return Some(v);
+                }
             }
         }
         None
@@ -72,7 +111,11 @@ mod tests {
         let labels = build_label_set(&config);
 
         // Create registry with derived labels
-        let registry: Arc<dyn MetricsRegistry> = Arc::new(PrometheusRegistry::new(&labels.service, &labels.component, &labels.version));
+        let registry: Arc<dyn MetricsRegistry> = Arc::new(PrometheusRegistry::new(
+            &labels.service,
+            &labels.component,
+            &labels.version,
+        ));
 
         // Build HTTP config with test port
         let http_config = HttpServerConfig::local_defaults(TEST_PORT)
@@ -84,8 +127,8 @@ mod tests {
         // Build server
         let server = HttpServer::new(Arc::clone(&service), http_config);
 
-        // Start server in background
-        let server_handle = tokio::spawn(async move {
+        // Start server in background (instrumented)
+        let server_handle = spawn_traced("http_server_integration", async move {
             server.start(&config).await
         });
 
@@ -97,7 +140,8 @@ mod tests {
         let base_url = format!("http://127.0.0.1:{}", TEST_PORT);
 
         // Test /healthz
-        let resp = client.get(format!("{}/healthz", base_url))
+        let resp = client
+            .get(format!("{}/healthz", base_url))
             .send()
             .await
             .expect("healthz request failed");
@@ -106,26 +150,30 @@ mod tests {
         assert_eq!(body, "Test service healthy");
 
         // Test /metrics
-        let resp = client.get(format!("{}/metrics", base_url))
+        let resp = client
+            .get(format!("{}/metrics", base_url))
             .send()
             .await
             .expect("metrics request failed");
         assert_eq!(resp.status(), 200);
         let body = resp.text().await.expect("failed to read metrics body");
         assert!(body.contains("test_health_checks_total")); // Metric present
-        let hc = extract_metric_value(&body, "test_health_checks_total").expect("health check metric value present");
+        let hc = extract_metric_value(&body, "test_health_checks_total")
+            .expect("health check metric value present");
         assert!((hc - 1.0).abs() < f64::EPSILON);
         let ready = extract_metric_value(&body, "http_ready").expect("http_ready metric present");
         assert!((ready - 1.0).abs() < f64::EPSILON);
         // New HTTP-level metric should be present and incremented
-        let http_h = extract_metric_value(&body, "http_health_requests_total").expect("http health requests metric present");
+        let http_h = extract_metric_value(&body, "http_health_requests_total")
+            .expect("http health requests metric present");
         assert!(http_h >= 1.0);
         assert!(body.contains(&format!("service=\"{}\"", labels.service)));
         assert!(body.contains("component=\"http\""));
         assert!(body.contains(&format!("version=\"{}\"", labels.version)));
 
         // Test CORS headers
-        let resp = client.get(format!("{}/healthz", base_url))
+        let resp = client
+            .get(format!("{}/healthz", base_url))
             .header("Origin", "http://example.com")
             .send()
             .await
@@ -143,7 +191,7 @@ mod tests {
         let config = load_robotorq_config(None).expect("config should load");
         let labels = build_label_set(&config);
 
-        println!("Labels: service={}, component={}, version={}, subject={}", labels.service, labels.component, labels.version, labels.subject);
+        info!(service=%labels.service, component=%labels.component, version=%labels.version, subject=%labels.subject, "derived labels");
 
         // Verify labels are derived from config
         assert!(!labels.service.is_empty());
@@ -156,7 +204,7 @@ mod tests {
         let _ = service.health_check();
         let metrics = service.export_metrics();
 
-        println!("Metrics: {}", metrics);
+        info!(metrics = %metrics, "service metrics snapshot");
 
         // Verify metrics use the derived labels
         assert!(metrics.contains(&format!("service=\"{}\"", labels.service)));
@@ -170,17 +218,19 @@ mod tests {
         let config = load_robotorq_config(None).expect("config should load");
         let labels = build_label_set(&config);
         let service = TestService::new(&labels);
-        
+
         // After first health check, counter should be 1
         service.health_check().unwrap();
         let after = service.export_metrics();
-        let v1 = extract_metric_value(&after, "test_health_checks_total").expect("metric present after first health");
+        let v1 = extract_metric_value(&after, "test_health_checks_total")
+            .expect("metric present after first health");
         assert!((v1 - 1.0).abs() < f64::EPSILON);
 
         // After another, counter should be 2
         service.health_check().unwrap();
         let final_metrics = service.export_metrics();
-        let v2 = extract_metric_value(&final_metrics, "test_health_checks_total").expect("metric present after second health");
+        let v2 = extract_metric_value(&final_metrics, "test_health_checks_total")
+            .expect("metric present after second health");
         assert!((v2 - 2.0).abs() < f64::EPSILON);
     }
 }
