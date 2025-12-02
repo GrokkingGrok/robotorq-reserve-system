@@ -81,7 +81,6 @@ pub use security::SecurityConfig;
 pub use services::http::HttpConfig;
 pub use services::nats::NatsConfig;
 pub use simulation::Simulation;
-pub use simulation::sim_sleep;
 
 use crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION;
 use serde::{Deserialize, Serialize};
