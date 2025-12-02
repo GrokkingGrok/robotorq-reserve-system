@@ -13,9 +13,9 @@ use tower::{Layer, Service};
 use tracing::Span;
 
 #[cfg(feature = "otlp")]
-use tracing_opentelemetry::OpenTelemetrySpanExt;
-#[cfg(feature = "otlp")]
 use opentelemetry::trace::TraceContextExt;
+#[cfg(feature = "otlp")]
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// Axum layer that wires HTTP metrics into the request pipeline.
 #[derive(Clone)]
