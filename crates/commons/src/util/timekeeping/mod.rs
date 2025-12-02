@@ -2,7 +2,54 @@
 //!
 //! Provides an abstraction over `SystemTime::now()` to make time access
 //! testable and consistent across the codebase.
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+
+/// Abstraction over time source and sleeping.
+///
+/// Provides testable indirection for time-related operations. Production code
+/// uses `SystemTimeProvider`; simulation builds can use `SimulatedTimeProvider`.
+/// Implementations should be cheap to clone and thread-safe.
+#[allow(async_fn_in_trait)]
+pub trait TimeProvider: Send + Sync {
+    /// Current logical time.
+    fn now(&self) -> SystemTime;
+    /// Sleep for the given logical duration.
+    async fn sleep(&self, duration: Duration);
+}
+
+/// Production time provider backed by the system clock.
+#[derive(Debug, Default, Clone)]
+pub struct SystemTimeProvider;
+
+impl SystemTimeProvider {
+    /// Construct a new `SystemTimeProvider`.
+    ///
+    /// This is a trivial zero‑cost constructor returning a stateless provider
+    /// that delegates to the standard library for `now()` and `sleep()`.
+    ///
+    /// # Examples
+    /// ```
+    /// use commons::util::timekeeping::SystemTimeProvider;
+    /// use commons::util::timekeeping::TimeProvider;
+    /// let tp = SystemTimeProvider::new();
+    /// let t1 = tp.now();
+    /// tp.sleep(std::time::Duration::from_millis(1));
+    /// let t2 = tp.now();
+    /// assert!(t2 >= t1);
+    /// ```
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl TimeProvider for SystemTimeProvider {
+    fn now(&self) -> SystemTime {
+        SystemTime::now()
+    }
+    async fn sleep(&self, duration: Duration) {
+        tokio::time::sleep(duration).await
+    }
+}
 
 /// Get the current system time.
 ///
@@ -63,7 +110,9 @@ impl DeterministicTime {
         if self.paused {
             self.pause_time.unwrap_or(self.start_time)
         } else {
-            let elapsed_real = SystemTime::now().duration_since(self.start_time).unwrap_or_default();
+            let elapsed_real = SystemTime::now()
+                .duration_since(self.start_time)
+                .unwrap_or_default();
             let elapsed_sim = elapsed_real.mul_f64(self.speedup);
             self.start_time + elapsed_sim
         }
@@ -105,7 +154,11 @@ impl DeterministicTime {
             // Adjust start_time to maintain continuity
             let current_sim = self.now();
             self.speedup = speedup;
-            self.start_time = SystemTime::now() - (current_sim.duration_since(self.start_time).unwrap_or_default()).div_f64(speedup);
+            self.start_time = SystemTime::now()
+                - (current_sim
+                    .duration_since(self.start_time)
+                    .unwrap_or_default())
+                .div_f64(speedup);
         } else {
             self.speedup = speedup;
         }
@@ -122,6 +175,44 @@ impl DeterministicTime {
     pub async fn sim_sleep(&self, duration: std::time::Duration) {
         let adjusted_duration = duration.div_f64(self.speedup);
         tokio::time::sleep(adjusted_duration).await;
+    }
+}
+
+#[cfg(feature = "sim")]
+/// Simulation provider wrapping a `DeterministicTime` for logical time and speedup-aware sleeping.
+#[derive(Clone, Debug)]
+pub struct SimulatedTimeProvider {
+    inner: DeterministicTime,
+}
+
+#[cfg(feature = "sim")]
+impl SimulatedTimeProvider {
+    pub fn new(speedup: f64) -> Self {
+        Self {
+            inner: DeterministicTime::new(speedup),
+        }
+    }
+    pub fn inner(&self) -> &DeterministicTime {
+        &self.inner
+    }
+}
+
+#[cfg(feature = "sim")]
+impl TimeProvider for SimulatedTimeProvider {
+    fn now(&self) -> SystemTime {
+        self.inner.now()
+    }
+    async fn sleep(&self, duration: Duration) {
+        self.inner.sim_sleep(duration).await
+    }
+}
+
+#[cfg(feature = "sim")]
+impl SimulatedTimeProvider {
+    /// Construct from simulation config convenience.
+    pub fn from_config(cfg: &crate::util::config::simulation::Simulation) -> Self {
+        let speedup = cfg.speedup.unwrap_or(1.0);
+        Self::new(speedup.max(0.0001))
     }
 }
 
@@ -156,19 +247,24 @@ impl DeterministicTime {
 /// # });
 /// ```
 #[cfg(feature = "sim")]
-pub async fn sleep(duration: std::time::Duration, config: &crate::util::config::simulation::Simulation) {
+pub async fn sleep(
+    duration: std::time::Duration,
+    config: &crate::util::config::simulation::Simulation,
+) {
     let speedup = config.speedup.unwrap_or(1.0);
     let adjusted_duration = duration.div_f64(speedup);
     tokio::time::sleep(adjusted_duration).await;
 }
-
 
 #[cfg(not(feature = "sim"))]
 /// Sleep function for production builds.
 ///
 /// In production builds without simulation support, this function
 /// simply sleeps for the specified duration, ignoring any simulation config.
-pub async fn sleep(_duration: std::time::Duration, _config: &crate::util::config::simulation::Simulation) {
+pub async fn sleep(
+    _duration: std::time::Duration,
+    _config: &crate::util::config::simulation::Simulation,
+) {
     // In production builds, ignore simulation config and just sleep normally
     tokio::time::sleep(_duration).await;
 }
@@ -188,14 +284,17 @@ mod tests {
         // Optionally, check that it's close to SystemTime::now()
         let direct_now = SystemTime::now();
         let elapsed = direct_now.duration_since(time1).unwrap_or_default();
-        assert!(elapsed.as_millis() < 10, "now() should be very close to SystemTime::now()");
+        assert!(
+            elapsed.as_millis() < 10,
+            "now() should be very close to SystemTime::now()"
+        );
     }
 
     #[cfg(feature = "sim")]
     mod sim_tests {
         use super::*;
-        use std::time::Duration;
         use crate::util::config::simulation::Simulation;
+        use std::time::Duration;
 
         #[tokio::test]
         async fn test_deterministic_time_basic() {
@@ -215,7 +314,11 @@ mod tests {
             let end = dt.now();
             let elapsed = end.duration_since(start).unwrap();
             // Simulated time should be ~200ms (allow for timing variance)
-            assert!(elapsed.as_millis() >= 180 && elapsed.as_millis() <= 250, "Time should be sped up, got {}ms", elapsed.as_millis());
+            assert!(
+                elapsed.as_millis() >= 180 && elapsed.as_millis() <= 250,
+                "Time should be sped up, got {}ms",
+                elapsed.as_millis()
+            );
         }
 
         #[tokio::test]
@@ -227,12 +330,18 @@ mod tests {
             let paused_time = dt.now();
             tokio::time::sleep(Duration::from_millis(50)).await; // Should not advance
             let after_pause = dt.now();
-            assert_eq!(paused_time, after_pause, "Time should not advance while paused");
+            assert_eq!(
+                paused_time, after_pause,
+                "Time should not advance while paused"
+            );
             dt.resume();
             tokio::time::sleep(Duration::from_millis(10)).await;
             let resumed = dt.now();
             let total_elapsed = resumed.duration_since(start).unwrap();
-            assert!(total_elapsed.as_millis() >= 20, "Time should advance after resume");
+            assert!(
+                total_elapsed.as_millis() >= 20,
+                "Time should advance after resume"
+            );
         }
 
         #[tokio::test]
@@ -241,7 +350,11 @@ mod tests {
             let start = std::time::Instant::now();
             sleep(Duration::from_millis(50), &config).await;
             let elapsed = start.elapsed();
-            assert!(elapsed.as_millis() >= 40 && elapsed.as_millis() <= 70, "Should sleep for full duration, got {}ms", elapsed.as_millis());
+            assert!(
+                elapsed.as_millis() >= 40 && elapsed.as_millis() <= 70,
+                "Should sleep for full duration, got {}ms",
+                elapsed.as_millis()
+            );
         }
 
         #[tokio::test]
@@ -254,7 +367,11 @@ mod tests {
             let start = std::time::Instant::now();
             sleep(Duration::from_millis(100), &config).await; // Logical 100ms, real ~10ms
             let elapsed = start.elapsed();
-            assert!(elapsed.as_millis() >= 5 && elapsed.as_millis() <= 25, "Should sleep for adjusted duration, got {}ms", elapsed.as_millis());
+            assert!(
+                elapsed.as_millis() >= 5 && elapsed.as_millis() <= 25,
+                "Should sleep for adjusted duration, got {}ms",
+                elapsed.as_millis()
+            );
         }
     }
 }

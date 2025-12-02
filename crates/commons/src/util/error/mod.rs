@@ -33,18 +33,30 @@
 pub mod batch_error;
 pub mod config_error;
 pub mod logging_error;
+/// Messaging subsystem errors (NATS, JetStream, publish/subscribe errors).
+pub mod messaging_error;
+/// Persistence errors (DB pool, query, migration related errors).
+pub mod persistence_error;
 pub mod prometheus_error;
 pub mod robot_error;
 pub mod robot_gateway_error;
+/// Shutdown and cleanup errors encountered during graceful teardown.
+pub mod shutdown_error;
+/// Errors during general startup and initialization (binding, config validation).
+pub mod startup_error;
 pub mod token_error;
 pub mod triple_torq_error;
 
 use batch_error::BatchError;
 use config_error::ConfigError;
 use logging_error::LoggingError;
+use messaging_error::MessagingError;
+use persistence_error::PersistenceError;
 use prometheus_error::PrometheusError;
 use robot_error::RobotError;
 use robot_gateway_error::RobotGatewayError;
+use shutdown_error::ShutdownError;
+use startup_error::StartupError;
 use thiserror::Error;
 use token_error::TokenError;
 use triple_torq_error::TripleTorqError;
@@ -109,4 +121,20 @@ pub enum InvariantError {
     /// Metrics collection error.
     #[error(transparent)]
     Metrics(#[from] PrometheusError),
+
+    /// Startup and initialization failures (external systems, bindings)
+    #[error(transparent)]
+    Startup(#[from] StartupError),
+
+    /// Persistence layer errors (DB pools, queries)
+    #[error(transparent)]
+    Persistence(#[from] PersistenceError),
+
+    /// Messaging subsystem errors (NATS, JetStream, connectivity)
+    #[error(transparent)]
+    Messaging(#[from] MessagingError),
+
+    /// Shutdown and cleanup failures
+    #[error(transparent)]
+    Shutdown(#[from] ShutdownError),
 }

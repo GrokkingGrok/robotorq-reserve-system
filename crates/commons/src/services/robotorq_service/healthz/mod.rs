@@ -7,10 +7,17 @@
 //! Use this to signal “the process is alive and the core dependencies are
 //! reachable” to orchestrators like Kubernetes.
 
-use axum::{extract::{State, Extension}, http::StatusCode, response::IntoResponse};
+use crate::{
+    services::robotorq_service::RoboTorqService,
+    util::metrics::{MetricCounter, MetricsRegistry},
+};
+use axum::{
+    extract::{Extension, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use crate::{services::robotorq_service::robotorq_service, util::metrics::{MetricCounter, MetricsRegistry}};
 
 /// HTTP-level metrics for the `/healthz` endpoint.
 ///
@@ -34,7 +41,7 @@ impl HealthzMetrics {
 }
 
 /// Handler for liveness health checks.
-pub async fn health_handler<S: robotorq_service>(
+pub async fn health_handler<S: RoboTorqService>(
     State(service): State<Arc<Mutex<S>>>,
     maybe_metrics: Option<Extension<Arc<HealthzMetrics>>>,
 ) -> impl IntoResponse {

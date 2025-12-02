@@ -3,8 +3,8 @@
 //! Intended for use in service lifecycle orchestration where a concrete
 //! `robotorq_service` must be initialized with a `RoboTorqConfig` before
 //! becoming ready.
+use crate::services::robotorq_service::RoboTorqService;
 use crate::util::config::RoboTorqConfig;
-use crate::services::robotorq_service::robotorq_service;
 use crate::util::config::load_robotorq_config;
 use crate::util::error::InvariantError;
 use crate::util::error::config_error::ConfigError;
@@ -33,10 +33,13 @@ use tracing::info;
 ///
 /// # Examples
 /// ```rust,no_run
-/// use commons::services::robotorq_service::{initialize_service, robotorq_service};
+/// use commons::services::robotorq_service::{initialize_service, RoboTorqService};
 /// use commons::util::error::InvariantError;
 /// struct MySvc;
-/// impl robotorq_service for MySvc {}
+/// impl commons::services::robotorq_service::ServiceLifecycle for MySvc {}
+/// impl commons::services::robotorq_service::HealthContributor for MySvc { fn health_status(&self) -> String { "OK".to_string() } }
+/// impl commons::services::robotorq_service::MetricsContributor for MySvc {}
+/// impl RoboTorqService for MySvc {}
 /// #[tokio::main]
 /// async fn main() -> Result<(), InvariantError> {
 ///     let mut svc = MySvc;
@@ -45,7 +48,7 @@ use tracing::info;
 ///     Ok(())
 /// }
 /// ```
-pub async fn initialize_service<S: robotorq_service>(
+pub async fn initialize_service<S: RoboTorqService>(
     svc: &mut S,
     cfg: &RoboTorqConfig,
 ) -> Result<(), InvariantError> {
@@ -55,7 +58,7 @@ pub async fn initialize_service<S: robotorq_service>(
 /// Load `RoboTorqConfig` and initialize a service.
 ///
 /// Centralizes config loading inside commons to keep callers clean.
-pub async fn load_and_initialize_service<S: robotorq_service>(
+pub async fn load_and_initialize_service<S: RoboTorqService>(
     svc: &mut S,
 ) -> Result<RoboTorqConfig, InvariantError> {
     let cfg = load_robotorq_config(None).map_err(ConfigError::Invalid)?;
@@ -79,8 +82,7 @@ mod tests {
     struct MockService {
         should_fail: bool,
     }
-
-    impl robotorq_service for MockService {
+    impl RoboTorqService for MockService {
         fn export_metrics(&self) -> String {
             String::new()
         }
@@ -91,7 +93,9 @@ mod tests {
 
         async fn initialize(&mut self, _cfg: &RoboTorqConfig) -> Result<(), InvariantError> {
             if self.should_fail {
-                Err(InvariantError::Config(crate::util::error::config_error::ConfigError::Invalid("mock failure".into())))
+                Err(InvariantError::Config(
+                    crate::util::error::config_error::ConfigError::Invalid("mock failure".into()),
+                ))
             } else {
                 Ok(())
             }
@@ -107,6 +111,25 @@ mod tests {
 
         async fn shutdown(&self) -> Result<(), InvariantError> {
             Ok(())
+        }
+    }
+
+    impl crate::services::robotorq_service::ServiceLifecycle for MockService {}
+    impl crate::services::robotorq_service::HealthContributor for MockService {
+        fn health_status(&self) -> String {
+            self.health_check().unwrap_or_default()
+        }
+    }
+    impl crate::services::robotorq_service::MetricsContributor for MockService {
+        fn set_metrics_context(
+            &mut self,
+            _ctx: Option<std::sync::Arc<crate::services::robotorq_service::service_metrics_context::ServiceMetricsContext>>,
+        ) {
+        }
+        fn export_metrics(&self) -> String {
+            <MockService as crate::services::robotorq_service::RoboTorqService>::export_metrics(
+                self,
+            )
         }
     }
 

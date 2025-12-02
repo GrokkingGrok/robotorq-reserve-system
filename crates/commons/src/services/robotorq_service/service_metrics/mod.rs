@@ -4,7 +4,7 @@
 //! `RoboTorqService::export_metrics()` on shared state.
 //!
 //! Typical use is to expose `GET /metrics` for scraping by Prometheus.
-use super::robotorq_service;
+use super::RoboTorqService;
 use axum::{
     extract::{Extension, State},
     http::{StatusCode, header},
@@ -45,13 +45,15 @@ use tokio::sync::Mutex;
 ///         .with_state(svc)
 /// }
 /// ```
-pub async fn metrics_handler<S: robotorq_service>(
+pub async fn metrics_handler<S: RoboTorqService>(
     State(service): State<Arc<Mutex<S>>>,
     maybe_registry: Option<Extension<std::sync::Arc<dyn crate::util::metrics::MetricsRegistry>>>,
 ) -> impl IntoResponse {
     let svc = service.lock().await;
-    let service_metrics = svc.export_metrics();
-    let registry_metrics = maybe_registry.map(|Extension(reg)| reg.export_text()).unwrap_or_default();
+    let service_metrics = crate::services::robotorq_service::RoboTorqService::export_metrics(&*svc);
+    let registry_metrics = maybe_registry
+        .map(|Extension(reg)| reg.export_text())
+        .unwrap_or_default();
     let body = format!("{}{}", service_metrics, registry_metrics);
 
     (

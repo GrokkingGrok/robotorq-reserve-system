@@ -33,10 +33,10 @@
 //! ctx.refresh_uptime();
 //! ```
 
+use super::label_source::LabelSet;
+use crate::util::metrics::{MetricCounter, MetricGauge, MetricsRegistry};
 use std::sync::Arc;
 use std::time::Instant;
-use crate::util::metrics::{MetricsRegistry, MetricCounter, MetricGauge};
-use super::label_source::LabelSet;
 
 /// Shared service-level metrics with common labels and lifecycle counters.
 pub struct ServiceMetricsContext {
@@ -63,7 +63,8 @@ impl ServiceMetricsContext {
             &[],
         );
         let ready_gauge = registry.gauge("service_ready", "Service readiness flag", &[]);
-        let uptime_seconds = registry.gauge("service_uptime_seconds", "Service uptime seconds", &[]);
+        let uptime_seconds =
+            registry.gauge("service_uptime_seconds", "Service uptime seconds", &[]);
         Self {
             registry,
             labels,
@@ -78,15 +79,25 @@ impl ServiceMetricsContext {
     }
 
     /// Increment the total starts counter.
-    pub fn mark_start(&self) { self.starts_total.inc(); }
+    pub fn mark_start(&self) {
+        self.starts_total.inc();
+    }
     /// Increment the total stops counter.
-    pub fn mark_stop(&self) { self.stops_total.inc(); }
+    pub fn mark_stop(&self) {
+        self.stops_total.inc();
+    }
     /// Increment the total health checks counter.
-    pub fn inc_health(&self) { self.health_checks_total.inc(); }
+    pub fn inc_health(&self) {
+        self.health_checks_total.inc();
+    }
     /// Increment the total errors counter.
-    pub fn inc_error(&self) { self.errors_total.inc(); }
+    pub fn inc_error(&self) {
+        self.errors_total.inc();
+    }
     /// Set readiness gauge to 1 when ready, 0 otherwise.
-    pub fn set_ready(&self, ready: bool) { self.ready_gauge.set(if ready {1.0} else {0.0}); }
+    pub fn set_ready(&self, ready: bool) {
+        self.ready_gauge.set(if ready { 1.0 } else { 0.0 });
+    }
     /// Update the uptime gauge from the start instant.
     pub fn refresh_uptime(&self) {
         let secs = self.start_instant.elapsed().as_secs_f64();
@@ -94,26 +105,37 @@ impl ServiceMetricsContext {
     }
 
     /// Access the underlying metrics registry.
-    pub fn registry(&self) -> &Arc<dyn MetricsRegistry> { &self.registry }
+    pub fn registry(&self) -> &Arc<dyn MetricsRegistry> {
+        &self.registry
+    }
     /// The service label applied to emitted metrics.
-    pub fn service(&self) -> &str { &self.labels.service }
+    pub fn service(&self) -> &str {
+        &self.labels.service
+    }
     /// The component label applied to emitted metrics.
-    pub fn component(&self) -> &str { &self.labels.component }
+    pub fn component(&self) -> &str {
+        &self.labels.component
+    }
     /// The version label applied to emitted metrics.
-    pub fn version(&self) -> &str { &self.labels.version }
+    pub fn version(&self) -> &str {
+        &self.labels.version
+    }
     /// The subject label applied to emitted metrics.
-    pub fn subject(&self) -> &str { &self.labels.subject }
+    pub fn subject(&self) -> &str {
+        &self.labels.subject
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::metrics::{PrometheusRegistry, MetricsRegistry};
     use crate::services::robotorq_service::label_source::build_label_set;
+    use crate::util::metrics::{MetricsRegistry, PrometheusRegistry};
 
     #[test]
     fn context_registers_and_updates() {
-        let registry: Arc<dyn MetricsRegistry> = Arc::new(PrometheusRegistry::new("svc", "http", "dev"));
+        let registry: Arc<dyn MetricsRegistry> =
+            Arc::new(PrometheusRegistry::new("svc", "http", "dev"));
         let cfg = crate::util::config::load_robotorq_config(None).unwrap_or_else(|_| {
             crate::util::config::RoboTorqConfig {
                 schema_version: crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION,
@@ -140,5 +162,33 @@ mod tests {
         assert!(text.contains("service_health_checks_total"));
         assert!(text.contains("service_ready"));
         assert!(text.contains("service_uptime_seconds"));
+    }
+
+    #[test]
+    fn ready_and_labels_exposed() {
+        let registry: Arc<dyn MetricsRegistry> =
+            Arc::new(PrometheusRegistry::new("svc2", "http", "dev2"));
+        let cfg = crate::util::config::load_robotorq_config(None).unwrap_or_else(|_| {
+            crate::util::config::RoboTorqConfig {
+                schema_version: crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION,
+                mode: crate::util::config::Mode::Production,
+                simulation: Default::default(),
+                ports: crate::util::config::load_ports_config_from_default(),
+                http: Default::default(),
+                nats: Default::default(),
+                persistence: Default::default(),
+                observability: Default::default(),
+                security: Default::default(),
+                crypto: Default::default(),
+                economic: Default::default(),
+            }
+        });
+        let labels = build_label_set(&cfg);
+        let ctx = ServiceMetricsContext::new(registry.clone(), labels);
+        ctx.set_ready(false);
+        // service_ready should be present as a gauge with value 0.0
+        let text = registry.export_text();
+        assert!(text.contains("service_ready"));
+        assert_eq!(ctx.component(), "http");
     }
 }
