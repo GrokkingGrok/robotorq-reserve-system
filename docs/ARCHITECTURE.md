@@ -5,6 +5,29 @@ This document describes the current architecture of the HTTP service template an
 ---
 
 ## Current State
+\n+### Phase 2.0.1 Updates (Decoupling)
+The decoupling effort introduced three core structural changes while retaining backward compatibility:
+
+1. Service Trait Decomposition:
+  - Introduced marker and contributor traits: `ServiceLifecycle`, `HealthContributor`, `MetricsContributor`.
+  - `RoboTorqService` now acts as a facade with default async lifecycle + health + metrics methods (all no‑ops / healthy defaults) to minimize boilerplate.
+  - Enables future specialization (e.g., services that only need lifecycle without metrics) and clearer test surface areas.
+
+2. Metrics Decoupling:
+  - Added `MetricsLabelProvider` trait; default implementation on `RoboTorqConfig` preserves existing label derivation.
+  - `HttpServerConfig` gains optional `label_provider` and optional `metrics_registry`; server synthesizes a registry only when not supplied.
+  - Allows per‑service custom registries (tenant, shard, environment) without modifying core server logic.
+  - Metrics exposition now merges service local metrics (via `export_metrics`) and shared registry metrics in a single `/metrics` response.
+    - Example: see `crates/examples/src/bin/custom_metrics_registry.rs` for injecting a custom registry + label provider.
+    - Builder pattern (`HttpServerBuilder`) added to simplify configuration: supports manual registry injection and static labels.
+    - Dual-registry pattern is supported in examples: use a shared HTTP registry for `component="http"` and separate per-worker registries for `component="worker"` to keep cardinality low and separate concerns.
+
+3. Time Abstraction:
+  - Introduced `TimeProvider` with `SystemTimeProvider` (production) and `SimulatedTimeProvider` (feature `sim`).
+  - Existing helpers (`sim_sleep`, `DeterministicTime`) retained for staged migration; new code should inject a provider for deterministic testing.
+  - Foundation for virtual/clustered time coordination in future simulation phases.
+
+Backward compatibility is maintained: legacy implementations that only declare `robotorq_service` continue to compile; incremental adoption of new traits is opt‑in.
 
 ### **HTTP Layer (Axum)**
 - **Endpoints**:

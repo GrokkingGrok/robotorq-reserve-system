@@ -52,6 +52,100 @@ Deliverables:
 - Module path normalization and schema/version gauges consolidated (from INCONSISTENCIES)
 - Template ready for persistence implementation without regressions
 
+### Phase 2.0.1 — Decoupling
+
+Status: Completed — traits decomposed (`ServiceLifecycle`, `HealthContributor`, `MetricsContributor`), time abstraction (`TimeProvider`) implemented (production + simulation), metrics label/registry decoupling added (`MetricsLabelProvider`, optional per‑service registry). Legacy code removal scheduled and in-progress; all old helpers will be removed in follow-up cleanup.
+
+Scope: Reduce tight coupling between core components to improve modularity and extensibility, ensuring a stable foundation for future phases.
+
+Plan:
+1. **Refactor `RoboTorqService` Trait**:
+   - Split into smaller traits:
+     - `ServiceLifecycle` for `initialize` and `shutdown`.
+     - `HealthContributor` for `health_check`.
+     - `MetricsContributor` for `export_metrics`.
+   - Provide default implementations for optional methods to reduce boilerplate.
+
+2. **Abstract Timekeeping**:
+   - Introduce a `TimeProvider` trait with methods like `now()` and `sleep()`.
+   - Implementations:
+     - `SystemTimeProvider` for production.
+     - `SimulatedTimeProvider` for simulation.
+   - Replace direct calls to `sim_sleep` with injected `TimeProvider` instances.
+
+3. **Decouple Metrics Registry**:
+   - Allow services to optionally provide their own metrics registry.
+   - Update `HttpServer` to accept a registry as a parameter, falling back to a default if none is provided.
+   - Introduce a `MetricsLabelProvider` trait to decouple label derivation from `RoboTorqConfig`.
+
+4. **Standardize Error Handling**:
+  - Expand `InvariantError` into clear categories (Config, Startup, Persistence, Messaging, Shutdown).
+  - Provide feature-gated `From` conversions for common external error types (e.g., `sqlx::Error`, `async-nats::Error`) to keep the commons lightweight by default.
+  - Map error categories to appropriate HTTP/admin status codes and error codes for operational handling.
+
+Notes:
+- The commons crate now includes a migration to the new error taxonomy. Services should prefer the new typed errors (e.g. `PersistenceError::Pool`) when implementing repositories.
+- Legacy single-type `InvariantError` conversions remain source-compatible during the migration window; the plan is to remove transient compatibility helpers in the next cleanup pass.
+
+Deliverables:
+- Decoupled `RoboTorqService` lifecycle, health, and metrics traits.
+- Abstracted timekeeping with `TimeProvider` for production and simulation.
+- Modular metrics registry with optional service-specific registries.
+- Standardized error taxonomy for consistent error handling across layers.
+- **All old code must be removed before moving to the next phase.**
+
+### Phase 2.0.2 — Logging/Tracing
+
+Goal: establish consistent, structured logging and tracing across the template so services
+are observable in development, CI, and production. Provide an incremental migration path
+that improves debuggability immediately while enabling distributed trace export (OTLP)
+and standardized log formats (JSON for CI/aggregators, human text for local dev).
+
+Scope:
+- Add a single, well-documented logging initializer in `crates/commons::util::logging`.
+- Standardize on `tracing`/`tracing-subscriber` for structured logs and `opentelemetry` for
+  optional OTLP export.
+- Instrument core lifecycle boundaries: initialize/start/ready/shutdown, HTTP handlers,
+  background worker spawn points, and key error paths.
+- Provide lightweight utilities for test logging, lock-wait diagnostics, and task tracing.
+
+Deliverables:
+- `crates/commons/src/util/logging/mod.rs` — `init_test_logging()` and `init_prod_tracing(json: bool, otlp: Option<OtlpConfig>)` helpers.
+- Example `OtlpConfig` struct and feature gating for `opentelemetry-otlp` to keep commons minimal by default.
+- Instrumentation added to `HttpServer` start/shutdown paths and `shutdown::run_service_shutdown` with structured fields (service, component, duration_ms, error).
+- Lock-wait diagnostic helper `log_if_waited(mutex_name: &str, start: Instant, threshold: Duration)` used in critical Mutex/RwLock areas.
+- Task instrumentation helpers: `spawn_traced(name: &str, fut)` to attach a span and log abort/reason on join/abort.
+- Tests and examples showing JSON logs in CI and human logs locally; CI job step that asserts presence of key fields in exported logs.
+
+Plan / Work items (incremental):
+1. Draft `util::logging` API and add to `crates/commons` (idempotent init using `std::sync::Once`).
+2. Add test helper and annotate unit/integration tests to call `init_test_logging()`.
+3. Wire structured logging into `HttpServer` lifecycle (start, bind, ready, shutdown) and `run_service_shutdown` (start, stop call, shutdown call, duration).
+4. Add `spawn_traced()` helper and replace key `tokio::spawn` sites in commons and examples.
+5. Add lock-wait helper and instrument one or two hot spots (e.g., shutdown/pool locks) as examples.
+6. Add feature-guarded OTLP exporter with a sample `OtlpConfig` and environment variable mapping; add a README snippet describing how to enable OTLP in CI.
+7. Add CI smoke test that runs an example service, captures logs, and asserts required JSON fields (timestamp, level, service, span_context or trace_id).
+8. Iterate: review telemetry gaps, add missing spans, and adopt sampling defaults for production.
+
+Acceptance criteria:
+- `crates/commons::util::logging` compiles and provides two public idempotent entry points: `init_test_logging()` and `init_prod_tracing(json: bool, otlp: Option<OtlpConfig>)`.
+- At least one example service is instrumented and produces JSON logs with `service`, `component`, `level`, and `message` fields when `json=true`.
+- Trace context (trace_id) is attached to HTTP request spans and exported to logs as `trace_id` when available.
+- CI job validates the presence of structured fields in the example service's logs.
+
+Risks & mitigations:
+- Risk: Adding OTLP and exporters increases compile-time dependencies. Mitigation: gate OTLP behind a Cargo feature and default to disabled in the workspace.
+- Risk: Log noise growth. Mitigation: adopt `RUST_LOG` defaults and sensible sampling/level policies; prefer `debug` for high-frequency spans and `info` for lifecycle events.
+
+Estimated effort: 2–4 days of focused work (prototype + instrumentation + CI smoke tests).
+
+Files to add/update (proposed):
+- `crates/commons/src/util/logging/mod.rs` (new)
+- `crates/commons/src/services/robotorq_service/mod.rs` — add lifecycle span calls at start/stop (small edits)
+- `crates/commons/src/services/robotorq_service/shutdown/mod.rs` — add additional structured traces around lock wait and stop/shutdown calls
+- `crates/examples/*` — update one example to enable JSON/OTLP and show CI-friendly logs
+
+If this plan looks good I will implement step 1 (add `crates/commons/src/util/logging/mod.rs`) and instrument one lifecycle path (HttpServer start/shutdown) as a concrete example, then run tests and show sample logs for your review.
 ### Phase 2.1 — Persistence Strategy (Unified)
 Scope: unify Postgres/SQLite/Memory backends behind a common abstraction, with health, timeouts, and standardized errors
 
