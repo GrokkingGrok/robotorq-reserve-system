@@ -5,7 +5,7 @@
 //! adding logic here.
 #![allow(async_fn_in_trait)]
 use crate::util::config::RoboTorqConfig;
-use crate::util::error::{InvariantError, ServiceError};
+use crate::util::error::ServiceError;
 use axum::{Extension, Router, routing::get};
 use std::future::Future;
 use std::sync::Arc;
@@ -85,7 +85,7 @@ pub trait MetricsContributor {
 /// All methods provide no-op / healthy defaults to minimize boilerplate for simple services.
 pub trait RoboTorqService: ServiceLifecycle + HealthContributor + MetricsContributor {
     /// Liveness check used by `/healthz`.
-    fn health_check(&self) -> Result<String, InvariantError> {
+    fn health_check(&self) -> Result<String, ServiceError> {
         Ok("ok".to_string())
     }
     /// Export Prometheus metrics (service-local portion). Override for real metrics.
@@ -93,19 +93,19 @@ pub trait RoboTorqService: ServiceLifecycle + HealthContributor + MetricsContrib
         String::new()
     }
     /// Allocate dependencies & prepare resources. Override for initialization logic.
-    async fn initialize(&mut self, _cfg: &RoboTorqConfig) -> Result<(), InvariantError> {
+    async fn initialize(&mut self, _cfg: &RoboTorqConfig) -> Result<(), ServiceError> {
         Ok(())
     }
     /// Transition to active processing (spawn tasks, subscribe). Override as needed.
-    async fn start(&self) -> Result<(), InvariantError> {
+    async fn start(&self) -> Result<(), ServiceError> {
         Ok(())
     }
     /// Graceful pause of new work; finalize in-flight requests. Override for quiesce behavior.
-    async fn stop(&self) -> Result<(), InvariantError> {
+    async fn stop(&self) -> Result<(), ServiceError> {
         Ok(())
     }
     /// Final cleanup releasing all resources. Override for teardown.
-    async fn shutdown(&self) -> Result<(), InvariantError> {
+    async fn shutdown(&self) -> Result<(), ServiceError> {
         Ok(())
     }
 }
@@ -1039,7 +1039,7 @@ mod tests {
     }
 
     impl RoboTorqService for TestService {
-        fn health_check(&self) -> Result<String, InvariantError> {
+        fn health_check(&self) -> Result<String, ServiceError> {
             Ok("OK".to_string())
         }
 
@@ -1047,16 +1047,16 @@ mod tests {
             self.handler.export_text()
         }
 
-        async fn initialize(&mut self, _config: &RoboTorqConfig) -> Result<(), InvariantError> {
+        async fn initialize(&mut self, _config: &RoboTorqConfig) -> Result<(), ServiceError> {
             Ok(())
         }
-        async fn start(&self) -> Result<(), InvariantError> {
+        async fn start(&self) -> Result<(), ServiceError> {
             Ok(())
         }
-        async fn stop(&self) -> Result<(), InvariantError> {
+        async fn stop(&self) -> Result<(), ServiceError> {
             Ok(())
         }
-        async fn shutdown(&self) -> Result<(), InvariantError> {
+        async fn shutdown(&self) -> Result<(), ServiceError> {
             Ok(())
         }
     }

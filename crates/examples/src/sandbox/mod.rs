@@ -8,7 +8,7 @@ use std::{sync::Arc, time::Instant};
 use commons::{
     services::robotorq_service::RoboTorqService,
     services::robotorq_service::label_source::LabelSet,
-    util::error::InvariantError,
+    util::error::ServiceError,
     util::metrics::{MetricCounter, MetricsRegistry},
 };
 
@@ -36,7 +36,7 @@ impl SandboxService {
 }
 
 impl RoboTorqService for SandboxService {
-    fn health_check(&self) -> Result<String, InvariantError> {
+    fn health_check(&self) -> Result<String, ServiceError> {
         self.health_checks.inc();
         Ok(format!(
             "Sandbox healthy (uptime {:.2}s)",
@@ -48,7 +48,7 @@ impl RoboTorqService for SandboxService {
         self.registry.export_text()
     }
 
-    async fn start(&self) -> Result<(), InvariantError> {
+    async fn start(&self) -> Result<(), ServiceError> {
         Ok(())
     }
 }

@@ -96,29 +96,27 @@ mod tests {
             String::new()
         }
 
-        fn health_check(&self) -> Result<String, InvariantError> {
+        fn health_check(&self) -> Result<String, ServiceError> {
             Ok("OK".to_string())
         }
 
-        async fn initialize(&mut self, _cfg: &RoboTorqConfig) -> Result<(), InvariantError> {
+        async fn initialize(&mut self, _cfg: &RoboTorqConfig) -> Result<(), ServiceError> {
             if self.should_fail {
-                Err(InvariantError::Config(
-                    crate::util::error::config_error::ConfigError::Invalid("mock failure".into()),
-                ))
+                Err(ServiceError::Other("mock failure".into()))
             } else {
                 Ok(())
             }
         }
 
-        async fn start(&self) -> Result<(), InvariantError> {
+        async fn start(&self) -> Result<(), ServiceError> {
             Ok(())
         }
 
-        async fn stop(&self) -> Result<(), InvariantError> {
+        async fn stop(&self) -> Result<(), ServiceError> {
             Ok(())
         }
 
-        async fn shutdown(&self) -> Result<(), InvariantError> {
+        async fn shutdown(&self) -> Result<(), ServiceError> {
             Ok(())
         }
     }

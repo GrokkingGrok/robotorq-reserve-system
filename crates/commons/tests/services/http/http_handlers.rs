@@ -178,10 +178,10 @@ async fn labeled_metrics_include_method_status_path_and_errors() {
 // Minimal stub service implementing RoboTorqService for health handler generic
 struct TestService;
 impl RoboTorqService for TestService {
-    fn health_check(&self) -> Result<String, commons::util::error::InvariantError> { Ok("ok".to_string()) }
+    fn health_check(&self) -> Result<String, commons::util::error::ServiceError> { Ok("ok".to_string()) }
     fn export_metrics(&self) -> String { String::new() }
-    async fn initialize(&mut self, _config: &commons::util::config::RoboTorqConfig) -> Result<(), commons::util::error::InvariantError> { Ok(()) }
-    async fn start(&self) -> Result<(), commons::util::error::InvariantError> { Ok(()) }
-    async fn stop(&self) -> Result<(), commons::util::error::InvariantError> { Ok(()) }
-    async fn shutdown(&self) -> Result<(), commons::util::error::InvariantError> { Ok(()) }
+    async fn initialize(&mut self, _config: &commons::util::config::RoboTorqConfig) -> Result<(), commons::util::error::ServiceError> { Ok(()) }
+    async fn start(&self) -> Result<(), commons::util::error::ServiceError> { Ok(()) }
+    async fn stop(&self) -> Result<(), commons::util::error::ServiceError> { Ok(()) }
+    async fn shutdown(&self) -> Result<(), commons::util::error::ServiceError> { Ok(()) }
 }

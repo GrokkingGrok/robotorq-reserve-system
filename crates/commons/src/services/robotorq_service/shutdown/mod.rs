@@ -21,14 +21,14 @@ use tracing::{debug, info, instrument, warn};
 /// use commons::services::robotorq_service::{HttpServer, HttpServerConfig, RoboTorqService};
 /// use commons::services::robotorq_service::shutdown::ctrl_c_signal;
 /// use commons::util::config::load_robotorq_config;
-/// use commons::util::error::InvariantError;
+/// use commons::util::error::ServiceError;
 /// struct MyService;
 /// impl commons::services::robotorq_service::ServiceLifecycle for MyService {}
 /// impl commons::services::robotorq_service::HealthContributor for MyService { fn health_status(&self) -> String { "OK".to_string() } }
 /// impl commons::services::robotorq_service::MetricsContributor for MyService {}
 /// impl RoboTorqService for MyService {}
 /// #[tokio::main]
-/// async fn main() -> Result<(), InvariantError> {
+/// async fn main() -> Result<(), ServiceError> {
 ///     let svc = Arc::new(Mutex::new(MyService));
 ///     let _server = HttpServer::new(svc, HttpServerConfig::local_defaults(0));
 ///     let _cfg = load_robotorq_config(None).unwrap();
@@ -151,14 +151,14 @@ mod tests {
     }
 
     impl RoboTorqService for DummyService {
-        fn health_check(&self) -> Result<String, crate::util::error::InvariantError> {
+        fn health_check(&self) -> Result<String, crate::util::error::ServiceError> {
             Ok("ok".to_string())
         }
-        async fn stop(&self) -> Result<(), crate::util::error::InvariantError> {
+        async fn stop(&self) -> Result<(), crate::util::error::ServiceError> {
             self.stopped.store(true, Ordering::SeqCst);
             Ok(())
         }
-        async fn shutdown(&self) -> Result<(), crate::util::error::InvariantError> {
+        async fn shutdown(&self) -> Result<(), crate::util::error::ServiceError> {
             self.shutdown.store(true, Ordering::SeqCst);
             Ok(())
         }

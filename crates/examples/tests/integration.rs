@@ -11,7 +11,6 @@ use commons::{
         HttpServer, HttpServerConfig, RoboTorqService, label_source::build_label_set,
     },
     util::config::load_robotorq_config,
-    util::error::InvariantError,
     util::metrics::{MetricsRegistry, PrometheusRegistry},
 };
 
@@ -38,7 +37,7 @@ impl TestService {
 }
 
 impl RoboTorqService for TestService {
-    fn health_check(&self) -> Result<String, InvariantError> {
+    fn health_check(&self) -> Result<String, commons::util::error::ServiceError> {
         self.health_counter.inc();
         Ok("Test service healthy".to_string())
     }
@@ -47,7 +46,7 @@ impl RoboTorqService for TestService {
         self.registry.export_text()
     }
 
-    async fn start(&self) -> Result<(), InvariantError> {
+    async fn start(&self) -> Result<(), commons::util::error::ServiceError> {
         Ok(())
     }
 }

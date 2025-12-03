@@ -38,7 +38,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use commons::services::robotorq_service::{HttpServerBuilder, RoboTorqService};
-use commons::util::error::{ExampleError, InvariantError};
+use commons::util::error::{ExampleError, ServiceError};
 use commons::util::logging::spawn_traced;
 
 /// Integration service demonstrating lifecycle + custom metrics.
@@ -120,7 +120,7 @@ impl commons::services::robotorq_service::MetricsContributor for IntegrationServ
 }
 
 impl RoboTorqService for IntegrationService {
-    fn health_check(&self) -> Result<String, InvariantError> {
+    fn health_check(&self) -> Result<String, ServiceError> {
         self.health_counter.inc();
         Ok("ok".to_string())
     }
@@ -131,11 +131,11 @@ impl RoboTorqService for IntegrationService {
     async fn initialize(
         &mut self,
         _cfg: &commons::util::config::RoboTorqConfig,
-    ) -> Result<(), InvariantError> {
+    ) -> Result<(), ServiceError> {
         self.active_tasks_gauge.set(0.0);
         Ok(())
     }
-    async fn start(&self) -> Result<(), InvariantError> {
+    async fn start(&self) -> Result<(), ServiceError> {
         let gauge = Arc::clone(&self.active_tasks_gauge);
         let hist = Arc::clone(&self.task_duration_hist);
         let tasks_ref = Arc::clone(&self.tasks);
@@ -172,7 +172,7 @@ impl RoboTorqService for IntegrationService {
         tasks_ref.lock().await.push(handle);
         Ok(())
     }
-    async fn shutdown(&self) -> Result<(), InvariantError> {
+    async fn shutdown(&self) -> Result<(), ServiceError> {
         let mut tasks = self.tasks.lock().await;
         for t in tasks.drain(..) {
             t.abort();
