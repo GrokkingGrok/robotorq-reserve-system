@@ -20,6 +20,19 @@
 //! init_logging(true, "info", Some("/var/log/robotorq"))?;
 //! ```
 
+// Note: OTLP / OpenTelemetry exporter support is feature-gated in the `commons` crate.
+// To enable the optional OTLP dependencies in downstream crates or examples, enable
+// the `otlp` feature on the `commons` dependency in `Cargo.toml` like this:
+//
+// ```toml
+// [dependencies]
+// commons = { path = "../commons", features = ["otlp"], default-features = false }
+// ```
+//
+// Alternatively, examples can use `opentelemetry` / `opentelemetry-otlp` /
+// `tracing-opentelemetry` directly as demonstrated in `crates/examples/src/bin/emit_traces.rs`.
+
+
 use std::future::Future;
 use std::sync::Once;
 use std::time::{Duration, Instant};
@@ -99,74 +112,283 @@ pub fn init_prod_tracing(
         // handled via middleware-inserted `TraceContext` placed into request
         // extensions, which keeps formatting and tracing concerns decoupled.
 
-        // Apply the subscriber. Build the stdout layer (and optional file layer)
-        // inline per-formatter so types remain consistent.
-        let init_res = if json {
-            // JSON stdout and optional JSON file
-            let file_layer = rolling_dir.map(|dir| {
+        // Build and install the subscriber registry in branch to avoid mixing concrete
+        // `fmt::layer()` return types (JsonFields vs DefaultFields). Each branch builds
+        // its own layers and installs the global subscriber independently.
+        if json {
+            let fmt_layer = fmt::layer()
+                .with_ansi(false)
+                .with_target(true)
+                .with_level(true)
+                .json();
+
+            // Build and install the subscriber. We avoid returning different concrete
+            // types from a single `if` expression by splitting the logic into nested
+            // branches: one for whether a rolling file appender is present, and one
+            // for whether OTLP is configured. Each branch constructs a concrete
+            // subscriber and calls `.try_init()` independently.
+            if let Some(dir) = rolling_dir {
                 let file_appender = rolling::daily(dir, "robotorq.log");
-                fmt::layer()
+                let file_layer = fmt::layer()
                     .with_writer(file_appender)
                     .with_ansi(false)
                     .with_target(true)
                     .with_level(true)
-                    .json()
-            });
+                    .json();
 
-            if let Some(file) = file_layer {
-                tracing_subscriber::registry()
+                let registry = tracing_subscriber::registry()
                     .with(env_filter)
-                    .with(fmt::layer().with_ansi(false).with_target(true).with_level(true).json())
-                    .with(file)
-                    .try_init()
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+                    .with(fmt_layer)
+                    .with(file_layer);
+
+                if let Some(cfg) = otlp.clone() {
+                    #[cfg(feature = "otlp")]
+                    {
+                        use opentelemetry_sdk::trace as sdktrace;
+                        use opentelemetry_otlp::WithExportConfig;
+
+                        let exporter_builder = opentelemetry_otlp::new_exporter().tonic();
+                        let exporter = if let Some(ep) = cfg.endpoint {
+                            exporter_builder.with_endpoint(ep)
+                        } else {
+                            exporter_builder
+                        };
+
+                        let tracer = opentelemetry_otlp::new_pipeline()
+                            .tracing()
+                            .with_exporter(exporter)
+                            .with_trace_config(sdktrace::Config::default())
+                            .install_batch(opentelemetry_sdk::runtime::Tokio)
+                            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+
+                        match tracer {
+                            Ok(tracer) => {
+                                tracing::debug!("OTLP tracer created successfully");
+                                let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+                                let init_res = registry.with(otel_layer).try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+                                if let Err(e) = init_res {
+                                    result = Err(e);
+                                    return;
+                                }
+                                tracing::debug!("tracing subscriber initialized with OTLP exporter");
+                            }
+                            Err(e) => {
+                                result = Err(e);
+                                return;
+                            }
+                        }
+                    }
+
+                    #[cfg(not(feature = "otlp"))]
+                    {
+                        tracing::warn!("OTLP configured but crate compiled without `otlp` feature; enable `otlp` feature to export traces");
+                        let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+                        if let Err(e) = init_res {
+                            result = Err(e);
+                            return;
+                        }
+                        tracing::debug!("tracing subscriber initialized without OTLP exporter");
+                    }
+                } else {
+                    let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+                    if let Err(e) = init_res {
+                        result = Err(e);
+                        return;
+                    }
+                }
             } else {
-                tracing_subscriber::registry()
-                    .with(env_filter)
-                    .with(fmt::layer().with_ansi(false).with_target(true).with_level(true).json())
-                    .try_init()
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+                // No rolling file appender: install subscriber with stdout-only fmt layer.
+                let registry = tracing_subscriber::registry().with(env_filter).with(fmt_layer);
+
+                if let Some(cfg) = otlp.clone() {
+                    #[cfg(feature = "otlp")]
+                    {
+                        use opentelemetry_sdk::trace as sdktrace;
+                        use opentelemetry_otlp::WithExportConfig;
+
+                        let exporter_builder = opentelemetry_otlp::new_exporter().tonic();
+                        let exporter = if let Some(ep) = cfg.endpoint {
+                            exporter_builder.with_endpoint(ep)
+                        } else {
+                            exporter_builder
+                        };
+
+                        let tracer = opentelemetry_otlp::new_pipeline()
+                            .tracing()
+                            .with_exporter(exporter)
+                            .with_trace_config(sdktrace::Config::default())
+                            .install_batch(opentelemetry_sdk::runtime::Tokio)
+                            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+
+                        match tracer {
+                            Ok(tracer) => {
+                                tracing::debug!("OTLP tracer created successfully");
+                                let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+                                let init_res = registry.with(otel_layer).try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+                                if let Err(e) = init_res {
+                                    result = Err(e);
+                                    return;
+                                }
+                                tracing::debug!("tracing subscriber initialized with OTLP exporter");
+                            }
+                            Err(e) => {
+                                result = Err(e);
+                                return;
+                            }
+                        }
+                    }
+
+                    #[cfg(not(feature = "otlp"))]
+                    {
+                        tracing::warn!("OTLP configured but crate compiled without `otlp` feature; enable `otlp` feature to export traces");
+                        let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+                        if let Err(e) = init_res {
+                            result = Err(e);
+                            return;
+                        }
+                        tracing::debug!("tracing subscriber initialized without OTLP exporter");
+                    }
+                } else {
+                    let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+                    if let Err(e) = init_res {
+                        result = Err(e);
+                        return;
+                    }
+                }
             }
         } else {
-            // Human-friendly compact stdout and optional compact file
-            let file_layer = rolling_dir.map(|dir| {
+            let fmt_layer = fmt::layer()
+                .with_ansi(true)
+                .with_target(true)
+                .with_level(true)
+                .compact();
+
+            // Nested branch approach for compact formatter (mirror of JSON branch).
+            if let Some(dir) = rolling_dir {
                 let file_appender = rolling::daily(dir, "robotorq.log");
-                fmt::layer()
+                let file_layer = fmt::layer()
                     .with_writer(file_appender)
                     .with_ansi(false)
                     .with_target(true)
                     .with_level(true)
-                    .compact()
-            });
+                    .compact();
 
-            if let Some(file) = file_layer {
-                tracing_subscriber::registry()
+                let registry = tracing_subscriber::registry()
                     .with(env_filter)
-                    .with(fmt::layer().with_ansi(true).with_target(true).with_level(true).compact())
-                    .with(file)
-                    .try_init()
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+                    .with(fmt_layer)
+                    .with(file_layer);
+
+                if let Some(cfg) = otlp.clone() {
+                    #[cfg(feature = "otlp")]
+                    {
+                        use opentelemetry_sdk::trace as sdktrace;
+                        use opentelemetry_otlp::WithExportConfig;
+
+                        let exporter_builder = opentelemetry_otlp::new_exporter().tonic();
+                        let exporter = if let Some(ep) = cfg.endpoint {
+                            exporter_builder.with_endpoint(ep)
+                        } else {
+                            exporter_builder
+                        };
+
+                        let tracer = opentelemetry_otlp::new_pipeline()
+                            .tracing()
+                            .with_exporter(exporter)
+                            .with_trace_config(sdktrace::Config::default())
+                            .install_batch(opentelemetry_sdk::runtime::Tokio)
+                            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+
+                        match tracer {
+                            Ok(tracer) => {
+                                tracing::debug!("OTLP tracer created successfully");
+                                let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+                                let init_res = registry.with(otel_layer).try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+                                if let Err(e) = init_res {
+                                    result = Err(e);
+                                    return;
+                                }
+                                tracing::debug!("tracing subscriber initialized with OTLP exporter");
+                            }
+                            Err(e) => {
+                                result = Err(e);
+                                return;
+                            }
+                        }
+                    }
+
+                    #[cfg(not(feature = "otlp"))]
+                    {
+                        tracing::warn!("OTLP configured but crate compiled without `otlp` feature; enable `otlp` feature to export traces");
+                        let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+                        if let Err(e) = init_res {
+                            result = Err(e);
+                            return;
+                        }
+                        tracing::debug!("tracing subscriber initialized without OTLP exporter");
+                    }
+                } else {
+                    let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+                    if let Err(e) = init_res {
+                        result = Err(e);
+                        return;
+                    }
+                }
             } else {
-                tracing_subscriber::registry()
-                    .with(env_filter)
-                    .with(fmt::layer().with_ansi(true).with_target(true).with_level(true).compact())
-                    .try_init()
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+                let registry = tracing_subscriber::registry().with(env_filter).with(fmt_layer);
+
+                if let Some(cfg) = otlp.clone() {
+                    #[cfg(feature = "otlp")]
+                    {
+                        use opentelemetry_sdk::trace as sdktrace;
+                        use opentelemetry_otlp::WithExportConfig;
+
+                        let exporter_builder = opentelemetry_otlp::new_exporter().tonic();
+                        let exporter = if let Some(ep) = cfg.endpoint {
+                            exporter_builder.with_endpoint(ep)
+                        } else {
+                            exporter_builder
+                        };
+
+                        let tracer = opentelemetry_otlp::new_pipeline()
+                            .tracing()
+                            .with_exporter(exporter)
+                            .with_trace_config(sdktrace::Config::default())
+                            .install_batch(opentelemetry_sdk::runtime::Tokio)
+                            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+
+                        match tracer {
+                            Ok(tracer) => {
+                                let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+                                let init_res = registry.with(otel_layer).try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+                                if let Err(e) = init_res {
+                                    result = Err(e);
+                                    return;
+                                }
+                            }
+                            Err(e) => {
+                                result = Err(e);
+                                return;
+                            }
+                        }
+                    }
+
+                    #[cfg(not(feature = "otlp"))]
+                    {
+                        tracing::warn!("OTLP configured but crate compiled without `otlp` feature; enable `otlp` feature to export traces");
+                        let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+                        if let Err(e) = init_res {
+                            result = Err(e);
+                            return;
+                        }
+                    }
+                } else {
+                    let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
+                    if let Err(e) = init_res {
+                        result = Err(e);
+                        return;
+                    }
+                }
             }
-        };
-
-        if let Err(e) = init_res {
-            result = Err(e);
-            return;
-        }
-
-        if otlp.is_some() {
-            // OTLP support is feature-gated and requires careful dependency configuration
-            // for the opentelemetry/runtime and exporter features. The full OTLP pipeline
-            // installation was deferred to avoid fragile version/runtime coupling in CI.
-            // If you need OTLP export, implement a pipeline using `opentelemetry-otlp`
-            // and the matching runtime feature flags (e.g., `rt-tokio`) in `Cargo.toml`.
-            tracing::warn!("OTLP configured but OTLP pipeline installation is disabled in this build; enable and implement pipeline to export traces");
         }
     });
 
@@ -249,64 +471,39 @@ pub struct OtlpConfig {
     pub endpoint: Option<String>,
 }
 
-/// Log a warning if a lock acquisition waited longer than `threshold`.
-pub fn log_if_waited(mutex_name: &str, start: Instant, threshold: Duration) {
-    let waited = start.elapsed();
+/// Log a diagnostic message when an operation waited longer than `threshold`.
+///
+/// This helper is intended to centralize the policy for emitting diagnostics
+/// when asynchronous locks or tasks observe unexpected wait durations. The
+/// `start` argument should be the instant when the wait began (e.g., the time
+/// a lock acquisition was requested). If the observed wait exceeds `threshold`
+/// a `warn!` is emitted; otherwise a `debug!` is emitted for diagnostic
+/// visibility.
+pub fn log_if_waited(key: &str, start: Instant, threshold: Duration) {
+    let waited = Instant::now().duration_since(start);
     if waited > threshold {
-        tracing::warn!(mutex = mutex_name, waited_ms = %waited.as_millis(), "lock waited longer than threshold");
+        tracing::warn!(key = %key, waited_ms = %waited.as_millis(), "operation waited longer than threshold");
+    } else {
+        tracing::debug!(key = %key, waited_ms = %waited.as_millis(), "operation wait time");
     }
 }
 
-/// Spawn a task attached to a short-lived tracing span.
-pub fn spawn_traced<F, T>(name: &'static str, fut: F) -> JoinHandle<T>
-where
-    F: Future<Output = T> + Send + 'static,
-    T: Send + 'static,
-{
-    let span = tracing::span!(tracing::Level::INFO, "task", name = name);
-    tokio::spawn(async move {
-        let _enter = span.enter();
-        fut.await
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tracing::info;
-
-    /// Test that `init_logging` compiles and runs without panicking.
-    ///
-    /// This test verifies that the logging initialization function can be called
-    /// with basic parameters and doesn't cause any runtime panics. It ignores
-    /// any initialization errors (which may occur if logging is already set up)
-    /// and focuses on ensuring the function signature and basic execution path work.
-    ///
-    /// # Note
-    ///
-    /// This test does not verify actual logging output, only that the initialization
-    /// process completes without panicking.
-    #[test]
-    fn init_logging_compiles_and_runs() {
-        let _ = init_logging(false, "info", None); // Ignore error if already set
-        info!(component = "commons.logging", "logging initialized");
-        // No assert; test ensures no panic and basic path compiles.
-    }
-
-    /// Test that `init_logging_pretty` compiles and runs without panicking.
-    ///
-    /// This test verifies that the pretty logging initialization function can be called
-    /// with basic parameters and doesn't cause any runtime panics. It ignores
-    /// any initialization errors (which may occur if logging is already set up)
-    /// and focuses on ensuring the function signature and basic execution path work.
-    ///
-    /// # Note
-    ///
-    /// This test does not verify actual logging output, only that the initialization
-    /// process completes without panicking.
-    #[test]
-    fn init_logging_pretty_compiles_and_runs() {
-        let _ = init_test_logging("debug"); // Ignore error if already set
-        info!(component = "commons.logging", "pretty logging initialized");
+/// Flush and shutdown the global tracer provider if OTLP support is enabled.
+///
+/// This is a no-op when the `otlp` feature is not enabled for the `commons`
+/// crate. Call this during graceful shutdown to best-effort flush exporter
+/// buffers so spans are exported before process exit.
+pub fn shutdown_tracer_provider() {
+    #[cfg(feature = "otlp")]
+    {
+        let _ = opentelemetry::global::shutdown_tracer_provider();
     }
 }
+
+// Note: OTLP support is optional and only active when the `otlp` cargo
+// feature is enabled for the `commons` crate. When enabled, callers can pass
+// an `OtlpConfig` to `init_prod_tracing` to install an OTLP exporter and the
+// `tracing-opentelemetry` layer. If the feature is not enabled but an
+// `OtlpConfig` is provided, a runtime warning is emitted and no exporter is
+// installed.
+

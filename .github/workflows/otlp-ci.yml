@@ -1,0 +1,51 @@
+name: OTLP Collector Smoke
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  smoke:
+    name: Start Collector (prototype)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start OTLP Collector
+        run: |
+          docker run -d --rm --name otel-collector -v ${{ github.workspace }}/ci/otlp-collector/config.yaml:/etc/otel/config.yaml -p 4317:4317 -p 4318:4318 otel/opentelemetry-collector-contrib:0.79.0 --config /etc/otel/config.yaml
+
+      - name: Wait for collector
+        run: |
+          sleep 5
+
+      - name: Build emit_traces example
+        run: |
+          rustup default stable
+          cargo build -p robotorq-examples --bin emit_traces --quiet
+
+      - name: Run emit_traces example (writes OTLP to collector)
+        env:
+          OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318
+          RUST_LOG: info
+        run: |
+          # Run the example in background and allow it to emit
+          cargo run -p robotorq-examples --bin emit_traces --quiet &
+          pid=$!
+          sleep 6
+          # Dump collector logs and assert expected span/event was received
+          docker logs otel-collector --tail 500 > collector.log || true
+          cat collector.log
+          if ! grep -q "emit_traces_example" collector.log && ! grep -q "hello otlp from example" collector.log; then
+            echo "Collector did not receive expected span/event" >&2
+            exit 1
+          fi
+
+      - name: Collector logs (tail)
+        run: |
+          docker logs otel-collector --tail 200 || true
+
+      - name: Stop collector
+        if: always()
+        run: |
+          docker stop otel-collector || true
