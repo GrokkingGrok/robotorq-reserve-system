@@ -1,0 +1,62 @@
+name: OTLP E2E (manual)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  otlp-e2e:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Start OpenTelemetry Collector (Docker)
+        run: |
+          cat > otel-config.yaml <<'EOF'
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                http:
+          exporters:
+            logging:
+              logLevel: debug
+            prometheus:
+              endpoint: "0.0.0.0:8888"
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp]
+                exporters: [logging]
+              metrics:
+                receivers: [otlp]
+                exporters: [prometheus, logging]
+          EOF
+
+          docker run -d --rm --name otel-collector -p 4317:4317 -p 8888:8888 \
+            -v "$PWD/otel-config.yaml:/etc/otel-config.yaml" \
+            otel/opentelemetry-collector-contrib:0.76.0 --config /etc/otel-config.yaml
+
+          # wait for collector port
+          for i in {1..30}; do nc -z localhost 4317 && break || sleep 1; done
+
+      - name: Run tests / checks with OTLP feature
+        env:
+          RUST_LOG: info
+          OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4317
+        run: |
+          # Run a targeted check/tests for the commons crate with the otlp feature enabled
+          cargo test -p commons --features otlp -- --nocapture
+
+      - name: Tear down collector
+        if: always()
+        run: |
+          docker ps -q --filter "name=otel-collector" | xargs -r docker stop
