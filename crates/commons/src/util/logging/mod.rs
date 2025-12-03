@@ -91,6 +91,7 @@ use tracing_subscriber::{EnvFilter, fmt};
 /// This is the primary entry point for services that need structured logging
 /// and optional file rotation. It's idempotent — calling it multiple times
 /// is safe and subsequent calls are no-ops.
+#[allow(unused_variables)]
 pub fn init_prod_tracing(
     json: bool,
     default_level: &str,

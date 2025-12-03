@@ -98,7 +98,7 @@ Deliverables:
 
 ### Phase 2.0.2 — Logging/Tracing
 
-Status: Core implementation completed (Phase 2.0.2 — progress update)
+Status: Completed
 
 Goal: establish consistent, structured logging and tracing across the template so services
 are observable in development, CI, and production. The work provides an incremental migration
@@ -135,33 +135,82 @@ Next actions (suggested):
 - Add a short `docs/` or `CONTRIBUTING.md` snippet describing how to enable OTLP and the `RUST_LOG` defaults for local vs CI.
 - Decide whether to push the `rewrite-core` commits to the remote branch (I can push on your instruction).
 
+OTLP prototype (status):
+- Centralized OTLP wiring implemented in `crates/commons::util::logging` and gated behind the `otlp` Cargo feature.
+- Example `crates/examples/src/bin/emit_traces.rs` emits a test span with attribute `example_id = "robotorq_emit_traces_test_001"` for smoke testing.
+- Local collector compose: `ci/otlp-collector/docker-compose.yml` and pre-check script `scripts/run_otlp_precheck.py` exist to run a local end-to-end smoke test. A manual GitHub Actions workflow (`.github/workflows/otlp-e2e.yml`) uses the script and uploads `otel-collector.log` as an artifact.
+- Recommended next steps: perform a `cargo tree` check for opentelemetry transitive versions; decide when to enable the e2e workflow on default branches; optionally add the short OTLP setup doc (`docs/OTLP_LOCAL_SETUP.md`) and a message envelope spec (`docs/MESSAGE_ENVELOPE.md`) for Phase 3 adapter work.
+
 Notes:
 - All changes were implemented to be minimal, feature-gated, and backwards-compatible. Tests in `crates/commons` pass and clippy was run and fixed.
 
 
 ### Phase 2.1 — Persistence Strategy (Unified)
 Scope: unify Postgres/SQLite/Memory backends behind a common abstraction, with health, timeouts, and standardized errors
+Plan (Option A — Commons-based persistence utilities; do not enact without follow-up):
 
-Plan:
-- Implement multi-backend repository abstraction supporting Postgres/SQLite/Memory
-  - Use sqlx with feature flags: `postgres`, `sqlite`; `runtime-tokio`
-  - Memory backend via in-process store for tests/examples
-- Add health contributions, connection pooling, and timeout handling
-  - Pooled connections (sqlx::Pool), per-op timeouts via tokio timeouts
-- Implement database migrations with multi-backend support
-  - Use sqlx migrate (avoid name collision with service “Refinery” crate)
-  - Seed example migrations and a migration runner utility
-- Standardize error mapping from persistence layer to service errors
-  - Define PersistenceError enum and map driver errors
-- Add repository pattern for common data access operations
-  - Traits for read/write ops; typed IDs; pagination helpers
+- Goal: provide a trace-aware, transport-agnostic persistence abstraction implemented inside `crates/commons::util::persistence` so services can reuse a single, well-tested set of repository traits, backends, migration tooling, and error mappings.
 
-Deliverables:
-- Multi-backend persistence module with repository abstraction
-- Migration system (sqlx migrate) supporting configured backends
-- Health checks and connection management with timeouts
-- Standardized persistence error types and mapping
-- Examples and comprehensive tests (including testcontainers for Postgres)
+- Key requirements (trace-first, non-invasive):
+  - Repository methods accept a small `Context` or trace carrier so DB operations can create child spans and attach standard attributes (`db.system`, `db.name`, `db.statement` (truncated), `persistence.operation`, and `db.rows_affected` when available).
+  - Backends must not depend on OTLP directly — use `commons` tracing helpers for span creation and propagation. OTLP remains feature-gated behind `commons/otlp`.
+  - Per-op timeouts must cancel queries and return `PersistenceError::Timeout` with metric/span annotations.
+
+- Proposed file layout (follow File Creation Rules — place under `crates/commons`):
+  - `crates/commons/src/util/persistence/mod.rs` — public traits, `Context` type, `PersistenceError` enum, and re-exports.
+  - `crates/commons/src/util/persistence/backends/memory/mod.rs` — in-memory backend used for fast unit tests and examples.
+  - `crates/commons/src/util/persistence/backends/sqlite/mod.rs` — sqlite backend (in-memory option for tests).
+  - `crates/commons/src/util/persistence/backends/postgres/mod.rs` — Postgres backend implemented with `sqlx::Pool` and timeouts.
+  - `crates/commons/src/util/persistence/migrations.rs` — migration runner and instrumentation helpers.
+  - Tests:
+    - `crates/commons/tests/persistence/memory.rs` — unit tests for in-memory backend.
+    - `crates/commons/tests/persistence/sqlite_integration.rs` — sqlite integration tests.
+    - `crates/commons/tests/persistence/postgres_integration.rs` — Postgres integration with Testcontainers (branch-local CI).
+
+- API & design notes:
+  - `Context` shape: small, transport-agnostic holder for trace headers, optional deadline/tokio timeout and a few convenience helpers to start child spans. Keep implementation minimal so adapters (HTTP/NATS) can convert incoming headers into `Context` without pulling tracing heavy deps.
+  - Repository trait pattern (example signature):
+    - `async fn insert_item(&self, ctx: &Context, item: NewItem) -> Result<ItemId, PersistenceError>;`
+  - All DB ops should start a child span (via `commons::util::tracing` helpers) and annotate errors before mapping to `PersistenceError`.
+
+- Configuration & features:
+  - Extend `RoboTorqConfig` with a `persistence` section: `driver`, `url`, `pool_size`, `connect_timeout`, `statement_timeout`, `migration_path`, and `enable_query_tracing: bool`.
+  - Cargo features (per crate): `persistence-postgres`, `persistence-sqlite`, `persistence-memory`, `persistence-testcontainers` (optional). Keep `commons/otlp` as the only place enabling OTLP exporter.
+  - Suggested runtime dependencies only in backend modules (feature-gated): `sqlx` (postgres/sqlite features), `testcontainers` (optional, dev-only), `tokio` runtime features.
+
+- Tests & CI policy (branch-local first):
+  - Unit tests: exercise memory backend and trait implementations (fast, deterministic).
+  - SQLite integration: run in-memory sqlite tests in CI as quick smoke tests.
+  - Postgres integration: use Testcontainers in branch-local workflows to validate behavior (connection pooling, migrations, timeouts). Keep Postgres integration off default CI until shielding/infra is accepted.
+  - Tests must assert that spans include at least the `db.system` and an obfuscated `db.statement` attribute when tracing enabled.
+
+- Migration runner:
+  - Provide a simple migration runner (`migrations.rs`) that applies migrations from `migration_path`, exposes a traced span per migration, records durations, and returns structured results for health checks.
+
+- Error taxonomy & mapping:
+  - Define `PersistenceError` enum (e.g., `Connection`, `Query`, `Timeout`, `ConstraintViolation`, `NotFound`, `PoolExhausted`, `MigrationError`) and map driver errors into these canonical variants at the backend boundary.
+  - Ensure mapping happens *before* propagating errors to service layers so public service APIs use `ServiceError` consistently.
+
+- Deliverables (Option A):
+  - `crates/commons::util::persistence` module with traits, `Context`, `PersistenceError`, and re-exports.
+  - Implementations: memory, sqlite, postgres backends with tests.
+  - Migration runner with tracing and health outputs.
+  - Unit and integration tests (memory, sqlite, Postgres via Testcontainers) with assertions for trace attributes.
+  - Docs: `docs/` snippets describing persistence config and tracing requirements.
+
+- Prioritized checklist (suggested order; estimates):
+  1. Design `Context` + repository trait scaffolding in `crates/commons/src/util/persistence` (1–2 days).
+  2. Implement memory backend + unit tests and a simple example that shows traced DB ops (0.5–1 day).
+  3. Implement sqlite backend (in-memory option) + tests (0.5–1 day).
+  4. Implement Postgres backend (sqlx pool + timeouts) + basic tests (1–2 days).
+  5. Migration runner + spans + health hooks (0.5–1 day).
+  6. Integration tests with Testcontainers Postgres and branch-local CI workflow (1–2 days).
+  7. Docs and config schema updates (0.5 day).
+
+Notes:
+ - This Option A proposal follows the project's File Creation Rules by placing code under `crates/commons/src/util/persistence` and keeping tests decoupled under `crates/commons/tests/**`.
+ - No code or CI changes will be enacted by this update — this is a roadmap update only. Implementations and any CI adjustments will be created on `rewrite-core` or feature branches and will not be merged to `release/v0` without your instruction.
+
 
 ### Phase 3 — NATS & JetStream
 - Client abstraction over `async-nats`: connect, publish, subscribe, request/reply.

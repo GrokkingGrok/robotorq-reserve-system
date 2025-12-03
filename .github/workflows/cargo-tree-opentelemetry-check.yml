@@ -1,0 +1,41 @@
+name: Cargo Tree — OpenTelemetry Check
+
+on:
+  push:
+    branches: [ 'rewrite-core' ]
+
+jobs:
+  opentelemetry-versions:
+    name: Check OpenTelemetry major versions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Run cargo tree and evaluate opentelemetry versions
+        run: |
+          cargo tree --workspace > cargo-tree.txt
+          echo "Filtered OpenTelemetry-related lines:"
+          grep -E 'opentelemetry|tracing-opentelemetry|opentelemetry-otlp' cargo-tree.txt || true
+
+          # Extract major versions from lines like: '... opentelemetry v0.23.0'
+          grep -E 'opentelemetry|tracing-opentelemetry|opentelemetry-otlp' cargo-tree.txt \
+            | sed -E 's/.* ([a-zA-Z0-9_-]+) v([0-9]+)\..*/\1 v\2/' \
+            | awk '{print $2}' \
+            | sed 's/v//' \
+            | cut -d. -f1 \
+            | sort -u > otel-major-versions.txt || true
+
+          echo "Detected opentelemetry major versions:"; cat otel-major-versions.txt || true
+          count=$(cat otel-major-versions.txt | wc -l)
+          echo "Unique major versions count: $count"
+          if [ "$count" -gt 1 ]; then
+            echo "Multiple OpenTelemetry major versions detected; failing the job to prevent regressions."
+            exit 1
+          fi

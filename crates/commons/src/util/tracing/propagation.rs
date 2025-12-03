@@ -28,7 +28,11 @@ use std::collections::HashMap;
 /// This function performs a simple string insertion and does not validate
 /// the `traceparent` format beyond storing it. Adapters that need
 /// strict validation should apply format checks before calling this helper.
-pub fn inject_trace_context(map: &mut HashMap<String, String>, traceparent: &str, tracestate: Option<&str>) {
+pub fn inject_trace_context(
+    map: &mut HashMap<String, String>,
+    traceparent: &str,
+    tracestate: Option<&str>,
+) {
     map.insert("traceparent".to_string(), traceparent.to_string());
     if let Some(ts) = tracestate {
         map.insert("tracestate".to_string(), ts.to_string());
@@ -40,10 +44,8 @@ pub fn inject_trace_context(map: &mut HashMap<String, String>, traceparent: &str
 /// Returns `Some((traceparent, tracestate_opt))` if `traceparent` is present,
 /// otherwise returns `None`.
 pub fn extract_trace_context(map: &HashMap<String, String>) -> Option<(String, Option<String>)> {
-    match map.get("traceparent") {
-        Some(tp) => Some((tp.clone(), map.get("tracestate").cloned())),
-        None => None,
-    }
+    map.get("traceparent")
+        .map(|tp| (tp.clone(), map.get("tracestate").cloned()))
 }
 
 /// Convenience: convert from iterator of header-like pairs to a HashMap and extract context.
@@ -60,4 +62,31 @@ where
         map.insert(k.as_ref().to_string(), v.as_ref().to_string());
     }
     extract_trace_context(&map)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn inject_and_extract_roundtrip() {
+        let mut headers = HashMap::new();
+        inject_trace_context(
+            &mut headers,
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            Some("vendor=example"),
+        );
+        let extracted = extract_trace_context(&headers).expect("traceparent missing");
+        assert_eq!(extracted.0, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+        assert_eq!(extracted.1.as_deref(), Some("vendor=example"));
+    }
+
+    #[test]
+    fn extract_from_iter_works() {
+        let vec = vec![("traceparent", "00-aaaa-0001-01"), ("other", "value")];
+        let got = extract_from_iter(vec).expect("should extract traceparent");
+        assert_eq!(got.0, "00-aaaa-0001-01");
+    }
 }

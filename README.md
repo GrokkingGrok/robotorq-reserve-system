@@ -124,3 +124,28 @@ Other parts of the repository — including many architecture deep-dive docs, an
 `1 JouleTorq = 1 joule x 1 token / 1 second`
 `1 TokenTorq = 3600 JouleTorq`
 `1 RoboTorq = 1000 Tokentorq = 3.6 million JouleTorq`
+
+## Developer: OTLP (local smoke test)
+
+If you want to exercise tracing locally (no CI required), the workspace includes an example and a small local OpenTelemetry Collector compose file.
+
+Quick steps (PowerShell):
+
+```powershell
+# Start the local collector
+docker compose -f .\ci\otlp-collector\docker-compose.yml up -d
+
+# Run the example that emits a test span (enable OTLP feature)
+cargo run --bin emit_traces --features otlp --release
+
+# Optional: run the pre-check script which starts the collector, runs the example, collects logs, and tears down
+python .\scripts\run_otlp_precheck.py --post-wait 8
+```
+
+Docs:
+- Local OTLP setup: `docs/OTLP_LOCAL_SETUP.md`
+- Message envelope & propagation guidance: `docs/MESSAGE_ENVELOPE.md`
+
+Notes:
+- The OTLP export is feature-gated on the `commons` crate (`otlp` feature). Examples and services must enable it to export traces.
+- The CI e2e workflow for OTLP is intentionally kept off the default branch while we iterate on stability.
