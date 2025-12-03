@@ -64,7 +64,6 @@ where
     extract_trace_context(&map)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -79,7 +78,10 @@ mod tests {
             Some("vendor=example"),
         );
         let extracted = extract_trace_context(&headers).expect("traceparent missing");
-        assert_eq!(extracted.0, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+        assert_eq!(
+            extracted.0,
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        );
         assert_eq!(extracted.1.as_deref(), Some("vendor=example"));
     }
 

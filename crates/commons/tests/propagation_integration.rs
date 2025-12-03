@@ -17,6 +17,9 @@ fn propagation_helpers_roundtrip_integration() {
     let extracted = commons::util::tracing::extract_trace_context(&headers)
         .expect("traceparent should be present after injection");
 
-    assert_eq!(extracted.0, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+    assert_eq!(
+        extracted.0,
+        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+    );
     assert_eq!(extracted.1.as_deref(), Some("vendor=integration"));
 }
