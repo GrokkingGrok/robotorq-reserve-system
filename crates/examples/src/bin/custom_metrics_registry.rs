@@ -38,7 +38,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use commons::services::robotorq_service::{HttpServerBuilder, RoboTorqService};
-use commons::util::error::InvariantError;
+use commons::util::error::{ExampleError, InvariantError};
 use commons::util::logging::spawn_traced;
 
 /// Integration service demonstrating lifecycle + custom metrics.
@@ -140,8 +140,24 @@ impl RoboTorqService for IntegrationService {
         let hist = Arc::clone(&self.task_duration_hist);
         let tasks_ref = Arc::clone(&self.tasks);
         let handle = spawn_traced("integration_worker", async move {
-            use rand::{Rng, SeedableRng, rngs::StdRng};
-            let mut rng = StdRng::from_entropy();
+            // Lightweight, local RNG for the example to avoid dependency/version mismatches
+            struct SimpleRng(u64);
+            impl SimpleRng {
+                fn next(&mut self) -> u64 {
+                    // xorshift-ish deterministic step (sufficient for example purposes)
+                    self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1);
+                    self.0
+                }
+                fn gen_range(&mut self, range: std::ops::Range<u64>) -> u64 {
+                    let n = self.next();
+                    range.start + (n % (range.end - range.start))
+                }
+            }
+            let seed = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0);
+            let mut rng = SimpleRng(seed);
             loop {
                 gauge.inc();
                 let sleep_ms: u64 = rng.gen_range(100..500); // slowed loop rate
@@ -167,7 +183,7 @@ impl RoboTorqService for IntegrationService {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), InvariantError> {
+async fn main() -> Result<(), ExampleError> {
     tracing_subscriber::fmt().with_env_filter("info").init();
 
     // Allow an explicit port for deterministic testing via `CUSTOM_METRICS_PORT`.
@@ -191,6 +207,7 @@ async fn main() -> Result<(), InvariantError> {
         // Static labels unnecessary; using manual registry labels directly.
         .build_and_start_autoload()
         .await
+        .map_err(|e| ExampleError::Other(format!("service failed: {}", e)))
 }
 
 #[cfg(test)]

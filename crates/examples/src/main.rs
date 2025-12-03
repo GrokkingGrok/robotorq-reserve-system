@@ -9,7 +9,7 @@ use std::sync::Arc;
 use commons::{
     services::robotorq_service::{HttpServerBuilder, label_source::build_label_set},
     util::config::load_robotorq_config,
-    util::error::InvariantError,
+    util::error::ExampleError,
     util::metrics::PrometheusRegistry,
 };
 use tokio::sync::Mutex;
@@ -20,7 +20,7 @@ mod sandbox;
 use crate::sandbox::SandboxService;
 
 #[tokio::main]
-async fn main() -> Result<(), InvariantError> {
+async fn main() -> Result<(), ExampleError> {
     // Initialize logging
     tracing_subscriber::fmt().with_env_filter("info").init();
 
@@ -32,7 +32,7 @@ async fn main() -> Result<(), InvariantError> {
 
     // Load config to derive labels for metrics
     let config = load_robotorq_config(None)
-        .map_err(commons::util::error::config_error::ConfigError::Invalid)?;
+        .map_err(|e| ExampleError::Other(format!("config load: {}", e)))?;
     let labels = build_label_set(&config);
 
     // Construct shared registry with config-derived labels for unified metrics.
@@ -58,6 +58,7 @@ async fn main() -> Result<(), InvariantError> {
         )
         .build_and_start_autoload()
         .await
+        .map_err(|e| ExampleError::Other(format!("service failed: {}", e)))
 }
 
 #[cfg(test)]

@@ -5,6 +5,7 @@
 //!
 //! Typical use is to expose `GET /metrics` for scraping by Prometheus.
 use super::RoboTorqService;
+use crate::util::error::ServiceError;
 use axum::{
     extract::{Extension, State},
     http::{StatusCode, header},
@@ -33,9 +34,11 @@ use tokio::sync::Mutex;
 /// # struct MySvc; /* impl RoboTorqService for MySvc { /* ... */ } */
 /// # impl commons::services::http::RoboTorqService for MySvc {
 /// #     fn export_metrics(&self) -> String { "# HELP demo demo\n".into() }
+/// #     // Note: the public `RoboTorqService` trait currently uses `InvariantError`
+/// #     // as a backward-compatible unified error type at the crate boundary.
+/// #     // Implementations may use domain-specific errors internally; those
+/// #     // errors are converted into `InvariantError` via `From` conversions.
 /// #     fn health_check(&self) -> Result<String, commons::util::error::InvariantError> { Ok("OK".into()) }
-/// #     fn shutdown<'a>(&'a self) -> core::pin::Pin<Box<dyn core::future::Future<Output = Result<(), commons::util::error::InvariantError>> + Send + 'a>> { Box::pin(async { Ok(()) }) }
-/// #     fn initialize<'a>(&'a mut self, _cfg: &commons::util::config::RoboTorqConfig) -> core::pin::Pin<Box<dyn core::future::Future<Output = Result<(), commons::util::error::InvariantError>> + Send + 'a>> { Box::pin(async { Ok(()) }) }
 /// # }
 ///
 /// async fn router() -> Router {
@@ -49,12 +52,16 @@ pub async fn metrics_handler<S: RoboTorqService>(
     State(service): State<Arc<Mutex<S>>>,
     maybe_registry: Option<Extension<std::sync::Arc<dyn crate::util::metrics::MetricsRegistry>>>,
 ) -> impl IntoResponse {
-    let svc = service.lock().await;
-    let service_metrics = crate::services::robotorq_service::RoboTorqService::export_metrics(&*svc);
-    let registry_metrics = maybe_registry
-        .map(|Extension(reg)| reg.export_text())
-        .unwrap_or_default();
-    let body = format!("{}{}", service_metrics, registry_metrics);
+    // Use an internal fallible helper returning `ServiceError` so internals
+    // can adopt the typed error progressively.
+    let body = match export_metrics_text(Arc::clone(&service), maybe_registry).await {
+        Ok(b) => b,
+        Err(err) => {
+            tracing::error!(error = ?err, "failed to build metrics text");
+            // Return an empty body on failure but 200 to avoid scraping disruption.
+            String::new()
+        }
+    };
 
     (
         StatusCode::OK,
@@ -64,4 +71,16 @@ pub async fn metrics_handler<S: RoboTorqService>(
         )],
         body,
     )
+}
+
+async fn export_metrics_text<S: RoboTorqService>(
+    service: Arc<Mutex<S>>,
+    maybe_registry: Option<Extension<std::sync::Arc<dyn crate::util::metrics::MetricsRegistry>>>,
+) -> Result<String, ServiceError> {
+    let svc = service.lock().await;
+    let service_metrics = crate::services::robotorq_service::RoboTorqService::export_metrics(&*svc);
+    let registry_metrics = maybe_registry
+        .map(|Extension(reg)| reg.export_text())
+        .unwrap_or_default();
+    Ok(format!("{}{}", service_metrics, registry_metrics))
 }

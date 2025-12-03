@@ -13,7 +13,6 @@
 //! maximum values, automatically rolling over excess to higher-level units.
 
 use crate::types::ids::TripleTorqId;
-use crate::util::error::InvariantError;
 use crate::util::error::config_error::ConfigError;
 use crate::util::error::triple_torq_error::TripleTorqError;
 use crate::util::hashing::hash_struct;
@@ -166,7 +165,7 @@ impl TripleTorq {
     /// * `jouletorq_balance` - JouleTorq balance (must be < 3,600)
     ///
     /// # Returns
-    /// Returns a `Result` containing the new TripleTorq or an `InvariantError` if validation fails.
+    /// Returns a `Result` containing the new TripleTorq or a `TripleTorqError` if validation fails.
     ///
     /// # Errors
     /// - `TripleTorqError::TokenTorqRolloverError` if tokentorq_balance >= 1,000
@@ -184,16 +183,12 @@ impl TripleTorq {
         robotorq_balance: u128,
         tokentorq_balance: u16,
         jouletorq_balance: u16,
-    ) -> Result<Self, InvariantError> {
+    ) -> Result<Self, TripleTorqError> {
         if tokentorq_balance >= 1000 {
-            return Err(InvariantError::from(
-                TripleTorqError::TokenTorqRolloverError,
-            ));
+            return Err(TripleTorqError::TokenTorqRolloverError);
         }
         if jouletorq_balance >= 3600 {
-            return Err(InvariantError::from(
-                TripleTorqError::JouleTorqRolloverError,
-            ));
+            return Err(TripleTorqError::JouleTorqRolloverError);
         }
         let provisional = Self {
             id: TripleTorqId::new(),
@@ -378,7 +373,7 @@ impl TripleTorq {
     /// * `other` - The TripleTorq balance to subtract
     ///
     /// # Returns
-    /// Returns a `Result` containing the difference or an `InvariantError` if the result would be negative.
+    /// Returns a `Result` containing the difference or a `TripleTorqError` if the result would be negative.
     ///
     /// # Errors
     /// Returns `TripleTorqError::NegativeTripleTorqError` if other > self.
@@ -392,13 +387,11 @@ impl TripleTorq {
     /// assert_eq!(result.total_smallest_units(), a.total_smallest_units() - b.total_smallest_units());
     /// ```
     #[allow(clippy::arithmetic_side_effects)]
-    pub fn subtract(&self, other: &TripleTorq) -> Result<TripleTorq, InvariantError> {
+    pub fn subtract(&self, other: &TripleTorq) -> Result<TripleTorq, TripleTorqError> {
         let self_total = self.total_smallest_units();
         let other_total = other.total_smallest_units();
         if other_total > self_total {
-            return Err(InvariantError::from(
-                TripleTorqError::NegativeTripleTorqError,
-            ));
+            return Err(TripleTorqError::NegativeTripleTorqError);
         }
         Ok(TripleTorq::from_smallest_units(self_total - other_total))
     }
@@ -437,7 +430,7 @@ impl TripleTorq {
     /// * `divisor` - The scalar division divisor (must not be zero)
     ///
     /// # Returns
-    /// Returns a `Result` containing the quotient or an `InvariantError` on division by zero.
+    /// Returns a `Result` containing the quotient or a `ConfigError` on division by zero.
     ///
     /// # Errors
     /// Returns `ConfigError::Invalid` if divisor is zero.
@@ -450,11 +443,9 @@ impl TripleTorq {
     /// assert_eq!(halved.tokentorq_balance, 1);
     /// ```
     #[allow(clippy::arithmetic_side_effects)]
-    pub fn div_floor(&self, divisor: u128) -> Result<TripleTorq, InvariantError> {
+    pub fn div_floor(&self, divisor: u128) -> Result<TripleTorq, ConfigError> {
         if divisor == 0 {
-            return Err(InvariantError::from(ConfigError::Invalid(
-                "division by zero".to_string(),
-            )));
+            return Err(ConfigError::Invalid("division by zero".to_string()));
         }
         Ok(TripleTorq::from_smallest_units(
             self.total_smallest_units() / divisor,
@@ -611,10 +602,7 @@ mod tests {
     /// enforcing the economic invariant that TokenTorq must rollover to RoboTorq.
     fn triple_torq_token_rollover_error() {
         let err = TripleTorq::new(0, 1000, 0).unwrap_err();
-        matches!(
-            err,
-            InvariantError::TripleTorq(TripleTorqError::TokenTorqRolloverError)
-        );
+        matches!(err, TripleTorqError::TokenTorqRolloverError);
     }
 
     #[test]
@@ -624,10 +612,7 @@ mod tests {
     /// enforcing the economic invariant that JouleTorq must rollover to TokenTorq.
     fn triple_torq_joule_rollover_error() {
         let err = TripleTorq::new(0, 0, 3600).unwrap_err();
-        matches!(
-            err,
-            InvariantError::TripleTorq(TripleTorqError::JouleTorqRolloverError)
-        );
+        matches!(err, TripleTorqError::JouleTorqRolloverError);
     }
 
     #[test]
@@ -659,10 +644,7 @@ mod tests {
         let a = TripleTorq::new(0, 10, 0).unwrap();
         let b = TripleTorq::new(0, 11, 0).unwrap();
         let err = a.subtract(&b).unwrap_err();
-        matches!(
-            err,
-            InvariantError::TripleTorq(TripleTorqError::NegativeTripleTorqError)
-        );
+        matches!(err, TripleTorqError::NegativeTripleTorqError);
     }
 
     #[test]

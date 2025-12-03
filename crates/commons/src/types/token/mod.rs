@@ -7,7 +7,6 @@
 //! for further processing in the economic hierarchy.
 
 use crate::types::ids::TokenId;
-use crate::util::error::InvariantError;
 use crate::util::error::token_error::TokenError;
 use crate::util::hashing::hash_struct;
 use crate::util::schema::TOKEN_SCHEMA_VERSION;
@@ -61,7 +60,7 @@ impl Token {
     /// * `joule_count` - Number of joules of work this token represents (must be > 0)
     ///
     /// # Returns
-    /// Returns a `Result` containing the new token or an `InvariantError` if validation fails.
+    /// Returns a `Result` containing the new token or a `TokenError` if validation fails.
     ///
     /// # Errors
     /// Returns `TokenError::ZeroJoules` if joule_count is 0.
@@ -72,7 +71,7 @@ impl Token {
     /// let token = Token::new(100).unwrap();
     /// assert_eq!(token.joule_count, 100);
     /// ```
-    pub fn new(joule_count: u32) -> Result<Self, InvariantError> {
+    pub fn new(joule_count: u32) -> Result<Self, TokenError> {
         Self::map(joule_count)
     }
 
@@ -86,7 +85,7 @@ impl Token {
     /// * `joule_count` - Number of joules of work this token represents (must be > 0)
     ///
     /// # Returns
-    /// Returns a `Result` containing the new token or an `InvariantError` if validation fails.
+    /// Returns a `Result` containing the new token or a `TokenError` if validation fails.
     ///
     /// # Errors
     /// Returns `TokenError::ZeroJoules` if joule_count is 0.
@@ -98,9 +97,9 @@ impl Token {
     /// assert_eq!(token.joule_count, 500);
     /// assert!(token.joule_count > 0);
     /// ```
-    pub fn map(joule_count: u32) -> Result<Self, InvariantError> {
+    pub fn map(joule_count: u32) -> Result<Self, TokenError> {
         if joule_count == 0 {
-            return Err(InvariantError::from(TokenError::ZeroJoules(joule_count)));
+            return Err(TokenError::ZeroJoules(joule_count));
         }
         let provisional = Self {
             id: TokenId::new(),

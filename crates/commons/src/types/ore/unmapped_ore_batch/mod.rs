@@ -10,7 +10,6 @@
 
 use crate::types::Token;
 use crate::types::ids::{RobotId, UnmappedOreBatchId};
-use crate::util::error::InvariantError;
 use crate::util::error::batch_error::BatchError;
 use crate::util::hashing::hash_struct;
 use crate::util::schema::UNMAPPED_ORE_BATCH_SCHEMA_VERSION;
@@ -67,7 +66,7 @@ impl UnmappedOreBatch {
     /// * `tokens` - Vector of tokens representing work performed (must not be empty)
     ///
     /// # Returns
-    /// Returns a `Result` containing the new batch or an `InvariantError` if validation fails.
+    /// Returns a `Result` containing the new batch or a `BatchError` if validation fails.
     ///
     /// # Errors
     /// Returns `BatchError::EmptyBatch` if the tokens vector is empty.
@@ -84,9 +83,9 @@ impl UnmappedOreBatch {
     /// assert_eq!(batch.robot_id, robot_id);
     /// assert!(!batch.tokens.is_empty());
     /// ```
-    pub fn new(robot_id: RobotId, tokens: Vec<Token>) -> Result<Self, InvariantError> {
+    pub fn new(robot_id: RobotId, tokens: Vec<Token>) -> Result<Self, BatchError> {
         if tokens.is_empty() {
-            return Err(InvariantError::from(BatchError::EmptyBatch));
+            return Err(BatchError::EmptyBatch);
         }
         let provisional = Self {
             id: UnmappedOreBatchId::new(),

@@ -12,6 +12,8 @@ use axum::{
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use crate::util::error::ServiceError;
+use crate::services::robotorq_service::RoboTorqService;
 
 /// Handler for Prometheus metrics.
 /// # Arguments
@@ -49,10 +51,13 @@ pub async fn metrics_handler<S: RoboTorqService>(
     State(service): State<Arc<Mutex<S>>>,
     maybe_registry: Option<Extension<std::sync::Arc<dyn crate::util::metrics::MetricsRegistry>>>,
 ) -> impl IntoResponse {
-    let svc = service.lock().await;
-    let service_metrics = svc.export_metrics();
-    let registry_metrics = maybe_registry.map(|Extension(reg)| reg.export_text()).unwrap_or_default();
-    let body = format!("{}{}", service_metrics, registry_metrics);
+    let body = match export_metrics_text(Arc::clone(&service), maybe_registry).await {
+        Ok(b) => b,
+        Err(err) => {
+            tracing::error!(error = ?err, "failed to build metrics text");
+            String::new()
+        }
+    };
 
     (
         StatusCode::OK,
@@ -62,4 +67,14 @@ pub async fn metrics_handler<S: RoboTorqService>(
         )],
         body,
     )
+}
+
+async fn export_metrics_text<S: RoboTorqService>(
+    service: Arc<Mutex<S>>,
+    maybe_registry: Option<Extension<std::sync::Arc<dyn crate::util::metrics::MetricsRegistry>>>,
+) -> Result<String, ServiceError> {
+    let svc = service.lock().await;
+    let service_metrics = svc.export_metrics();
+    let registry_metrics = maybe_registry.map(|Extension(reg)| reg.export_text()).unwrap_or_default();
+    Ok(format!("{}{}", service_metrics, registry_metrics))
 }

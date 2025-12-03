@@ -5,7 +5,7 @@
 //! adding logic here.
 #![allow(async_fn_in_trait)]
 use crate::util::config::RoboTorqConfig;
-use crate::util::error::{InvariantError, logging_error::LoggingError};
+use crate::util::error::{InvariantError, ServiceError};
 use axum::{Extension, Router, routing::get};
 use std::future::Future;
 use std::sync::Arc;
@@ -253,7 +253,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
     /// }
     /// ```
     #[tracing::instrument(skip(self, config))]
-    pub async fn start(mut self, config: &RoboTorqConfig) -> Result<(), InvariantError> {
+    pub async fn start(mut self, config: &RoboTorqConfig) -> Result<(), ServiceError> {
         // Initialize the service
         {
             let mut service = self.service.lock().await;
@@ -299,7 +299,10 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
             let service = self.service.lock().await;
             tracing::info!("invoking service.start()");
             let start_ts = std::time::Instant::now();
-            service.start().await?;
+            service
+                .start()
+                .await
+                .map_err(|e| ServiceError::Other(format!("service.start failed: {:?}", e)))?;
             tracing::info!(duration_ms=%start_ts.elapsed().as_millis(), "service.start() completed");
         }
 
@@ -316,7 +319,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
     /// within commons and driving the full lifecycle. Errors during
     /// initialization are logged and the server continues, per policy.
     #[tracing::instrument(skip(self))]
-    pub async fn start_autoload(mut self) -> Result<(), InvariantError> {
+    pub async fn start_autoload(mut self) -> Result<(), ServiceError> {
         // Initialize with autoloaded config
         {
             let mut service = self.service.lock().await;
@@ -397,7 +400,10 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
             let service = self.service.lock().await;
             tracing::info!("invoking service.start() (autoload)");
             let start_ts = std::time::Instant::now();
-            service.start().await?;
+            service
+                .start()
+                .await
+                .map_err(|e| ServiceError::Other(format!("service.start failed: {:?}", e)))?;
             tracing::info!(duration_ms=%start_ts.elapsed().as_millis(), "service.start() completed (autoload)");
         }
 
@@ -414,7 +420,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
     /// an existing signal source (Ctrl+C, health failures, etc.) instead of
     /// relying on a single internal listener.
     #[tracing::instrument(skip(self, shutdown_signal))]
-    pub async fn start_with_shutdown<F>(self, shutdown_signal: F) -> Result<(), InvariantError>
+    pub async fn start_with_shutdown<F>(self, shutdown_signal: F) -> Result<(), ServiceError>
     where
         F: Future<Output = ()> + Send + 'static,
     {
@@ -474,7 +480,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
         // Create listener
         let listener = TcpListener::bind(&addr)
             .await
-            .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
+            .map_err(|e| ServiceError::Other(format!("listener bind failed: {}", e)))?;
         tracing::info!(addr=%addr, "listener created and bound");
         // If ephemeral port (0) requested, capture the actual bound port and update config for clarity.
         if self.config.service.port == 0 {
@@ -507,7 +513,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal)
             .await
-            .map_err(|e| InvariantError::Logging(LoggingError::from(e.to_string())))?;
+            .map_err(|e| ServiceError::Other(format!("http serve failed: {}", e)))?;
         tracing::info!(duration_ms=%serve_start.elapsed().as_millis(), "http serve completed/shutdown signal received");
 
         // Invoke graceful cleanup hooks after server stops (Ctrl+C or error)
@@ -1014,11 +1020,11 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServerBuilder<S> {
         HttpServer::new(self.service, self.config)
     }
     /// Build and start with provided config.
-    pub async fn build_and_start(self, cfg: &RoboTorqConfig) -> Result<(), InvariantError> {
+    pub async fn build_and_start(self, cfg: &RoboTorqConfig) -> Result<(), ServiceError> {
         self.build().start(cfg).await
     }
     /// Build and start using autoloaded config.
-    pub async fn build_and_start_autoload(self) -> Result<(), InvariantError> {
+    pub async fn build_and_start_autoload(self) -> Result<(), ServiceError> {
         self.build().start_autoload().await
     }
 }

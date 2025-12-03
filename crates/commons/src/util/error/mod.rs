@@ -29,9 +29,20 @@
 //!
 //! The `InvariantError` enum provides transparent error conversion from all
 //! subsystem errors, allowing consistent error handling throughout the codebase.
+//!
+//! Migration note:
+//! - Internal modules are being migrated to return domain-specific, strongly-typed
+//!   errors (e.g., `TokenError`, `TripleTorqError`, `RobotError`).
+//! - To preserve backwards compatibility, public-facing APIs and traits currently
+//!   continue to use `InvariantError` as a unified error type; `InvariantError`
+//!   includes `#[from]` conversions so domain errors convert automatically at
+//!   crate boundaries. Over time the project will reduce reliance on the
+//!   unified error and prefer domain-specific errors internally.
 
 pub mod batch_error;
 pub mod config_error;
+/// Example-focused errors used by small integration binaries and examples.
+pub mod example_error;
 pub mod logging_error;
 /// Messaging subsystem errors (NATS, JetStream, publish/subscribe errors).
 pub mod messaging_error;
@@ -46,6 +57,10 @@ pub mod shutdown_error;
 pub mod startup_error;
 pub mod token_error;
 pub mod triple_torq_error;
+pub use example_error::ExampleError;
+/// Service-level helper errors used internally by commons service utilities.
+pub mod service_error;
+pub use service_error::ServiceError;
 
 use batch_error::BatchError;
 use config_error::ConfigError;
@@ -137,4 +152,10 @@ pub enum InvariantError {
     /// Shutdown and cleanup failures
     #[error(transparent)]
     Shutdown(#[from] ShutdownError),
+    /// Example / sample binaries errors (examples crate)
+    #[error(transparent)]
+    Example(#[from] ExampleError),
+    /// Service-level errors for rich internal handling
+    #[error(transparent)]
+    Service(#[from] ServiceError),
 }

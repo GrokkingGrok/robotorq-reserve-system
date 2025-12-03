@@ -6,8 +6,8 @@
 use crate::services::robotorq_service::RoboTorqService;
 use crate::util::config::RoboTorqConfig;
 use crate::util::config::load_robotorq_config;
-use crate::util::error::InvariantError;
 use crate::util::error::config_error::ConfigError;
+use crate::util::error::{InvariantError, ServiceError};
 use tracing::info;
 
 /// Initialize a service with the given configuration.
@@ -51,8 +51,13 @@ use tracing::info;
 pub async fn initialize_service<S: RoboTorqService>(
     svc: &mut S,
     cfg: &RoboTorqConfig,
-) -> Result<(), InvariantError> {
-    svc.initialize(cfg).await
+) -> Result<(), ServiceError> {
+    // Internally prefer the richer `ServiceError` type; map `InvariantError` from
+    // implementations into `ServiceError::Other` for now.
+    match svc.initialize(cfg).await {
+        Ok(()) => Ok(()),
+        Err(e) => Err(ServiceError::Other(format!("initialize failed: {}", e))),
+    }
 }
 
 /// Load `RoboTorqConfig` and initialize a service.
@@ -69,7 +74,11 @@ pub async fn load_and_initialize_service<S: RoboTorqService>(
         http_port = cfg.http.port,
         "loaded RoboTorq configuration (commons init)"
     );
-    initialize_service(svc, &cfg).await?;
+    // Call the internal initializer which returns `ServiceError` and convert
+    // it into `InvariantError` at this public boundary.
+    initialize_service(svc, &cfg)
+        .await
+        .map_err(InvariantError::from)?;
     Ok(cfg)
 }
 

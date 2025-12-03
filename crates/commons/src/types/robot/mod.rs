@@ -9,7 +9,6 @@
 pub mod printer;
 
 use crate::types::ids::{ContractId, RobotId};
-use crate::util::error::InvariantError;
 use crate::util::error::robot_error::RobotError;
 use crate::util::schema::ROBOT_SCHEMA_VERSION;
 use serde::{Deserialize, Serialize};
@@ -78,7 +77,7 @@ impl Robot {
     /// * `active_contract` - Contract this robot will execute
     ///
     /// # Returns
-    /// Returns a `Result` containing the new robot or an `InvariantError` if validation fails.
+    /// Returns a `Result` containing the new robot or a `RobotError` if validation fails.
     ///
     /// # Errors
     /// - `RobotError::InvalidRobotName` if name is empty or whitespace-only
@@ -112,16 +111,16 @@ impl Robot {
         joule_throughput_rating: u32,
         is_working: bool,
         active_contract: ContractId,
-    ) -> Result<Self, InvariantError> {
+    ) -> Result<Self, RobotError> {
         let name = name.into();
         if name.trim().is_empty() {
-            return Err(InvariantError::from(RobotError::InvalidRobotName));
+            return Err(RobotError::InvalidRobotName);
         }
         if token_throughput_rating == 0 {
-            return Err(InvariantError::from(RobotError::ZeroTokenThroughput));
+            return Err(RobotError::ZeroTokenThroughput);
         }
         if joule_throughput_rating == 0 {
-            return Err(InvariantError::from(RobotError::ZeroJouleThroughput));
+            return Err(RobotError::ZeroJouleThroughput);
         }
 
         Ok(Self {
@@ -154,20 +153,20 @@ mod tests {
     fn robot_new_rejects_empty_name() {
         let id = RobotId::new();
         let err = Robot::new(id, "  ", 5, 500, true, ContractId::new()).unwrap_err();
-        matches!(err, InvariantError::Robot(RobotError::InvalidRobotName));
+        matches!(err, RobotError::InvalidRobotName);
     }
 
     #[test]
     fn robot_new_rejects_zero_token_rate() {
         let id = RobotId::new();
         let err = Robot::new(id, "A", 0, 500, true, ContractId::new()).unwrap_err();
-        matches!(err, InvariantError::Robot(RobotError::ZeroTokenThroughput));
+        matches!(err, RobotError::ZeroTokenThroughput);
     }
 
     #[test]
     fn robot_new_rejects_non_positive_watts() {
         let id = RobotId::new();
         let err = Robot::new(id, "A", 5, 0, true, ContractId::new()).unwrap_err();
-        matches!(err, InvariantError::Robot(RobotError::ZeroJouleThroughput));
+        matches!(err, RobotError::ZeroJouleThroughput);
     }
 }
