@@ -6,6 +6,7 @@ pub mod config;
 pub mod error;
 pub mod hashing;
 pub mod logging;
+pub mod tracing;
 pub mod metrics;
 pub mod schema;
 pub mod timekeeping;
