@@ -6,7 +6,6 @@
 use crate::services::robotorq_service::RoboTorqService;
 use crate::util::config::RoboTorqConfig;
 use crate::util::config::load_robotorq_config;
-use crate::util::error::config_error::ConfigError;
 use crate::util::error::ServiceError;
 use tracing::info;
 
