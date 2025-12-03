@@ -187,11 +187,31 @@ pub struct SimulatedTimeProvider {
 
 #[cfg(feature = "sim")]
 impl SimulatedTimeProvider {
+    /// Create a new `SimulatedTimeProvider` wrapping a `DeterministicTime`.
+    ///
+    /// This is a convenience constructor used by simulation harnesses and
+    /// integration tests. The `speedup` parameter controls logical time
+    /// dilation: values >1.0 run simulated time faster than real time, values
+    /// in (0,1) slow it down.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use commons::util::timekeeping::SimulatedTimeProvider;
+    /// let provider = SimulatedTimeProvider::new(2.0); // 2x speed
+    /// ```
     pub fn new(speedup: f64) -> Self {
         Self {
             inner: DeterministicTime::new(speedup),
         }
     }
+
+    /// Get a reference to the underlying `DeterministicTime` instance.
+    ///
+    /// Callers that need direct access to pause/resume or inspect the
+    /// deterministic clock may use this accessor. Prefer using the
+    /// `TimeProvider` trait methods (`now`, `sleep`) for most code paths to
+    /// preserve abstraction boundaries.
     pub fn inner(&self) -> &DeterministicTime {
         &self.inner
     }

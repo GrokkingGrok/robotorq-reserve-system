@@ -21,3 +21,6 @@ reqwest = { version = "0.12", features = ["json"] }
 
 [features]
 with-otlp = []
+## Passthrough feature to enable OTLP in workspace commons from the examples crate
+## Allows running: `cargo run --bin emit_traces --features otlp`
+otlp = ["commons/otlp"]

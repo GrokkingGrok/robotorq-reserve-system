@@ -18,43 +18,25 @@ jobs:
           profile: minimal
           override: true
 
-      - name: Start OpenTelemetry Collector (Docker)
-        run: |
-          cat > otel-config.yaml <<'EOF'
-          receivers:
-            otlp:
-              protocols:
-                grpc:
-                http:
-          exporters:
-            logging:
-              logLevel: debug
-            prometheus:
-              endpoint: "0.0.0.0:8888"
-          service:
-            pipelines:
-              traces:
-                receivers: [otlp]
-                exporters: [logging]
-              metrics:
-                receivers: [otlp]
-                exporters: [prometheus, logging]
-          EOF
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
 
-          docker run -d --rm --name otel-collector -p 4317:4317 -p 8888:8888 \
-            -v "$PWD/otel-config.yaml:/etc/otel-config.yaml" \
-            otel/opentelemetry-collector-contrib:0.76.0 --config /etc/otel-config.yaml
-
-          # wait for collector port
-          for i in {1..30}; do nc -z localhost 4317 && break || sleep 1; done
-
-      - name: Run tests / checks with OTLP feature
+      - name: Run OTLP precheck script
         env:
           RUST_LOG: info
           OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4317
+          OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: grpc
         run: |
-          # Run a targeted check/tests for the commons crate with the otlp feature enabled
-          cargo test -p commons --features otlp -- --nocapture
+          python3 scripts/run_otlp_precheck.py --verbose
+
+      - name: Upload collector logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: otel-collector-logs
+          path: otel-collector.log
 
       - name: Tear down collector
         if: always()
