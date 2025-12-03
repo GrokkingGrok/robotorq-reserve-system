@@ -7,7 +7,7 @@ use crate::services::robotorq_service::RoboTorqService;
 use crate::util::config::RoboTorqConfig;
 use crate::util::config::load_robotorq_config;
 use crate::util::error::config_error::ConfigError;
-use crate::util::error::{InvariantError, ServiceError};
+use crate::util::error::ServiceError;
 use tracing::info;
 
 /// Initialize a service with the given configuration.
@@ -21,11 +21,11 @@ use tracing::info;
 ///
 /// # Returns
 /// - `Ok(())` when initialization completes successfully.
-/// - `Err(InvariantError)` if the service reports a failure.
+/// - `Err(ServiceError)` if the service reports a failure.
 ///
 /// # Errors
 ///
-/// Returns `InvariantError` if the underlying service's `initialize` method fails.
+/// Returns `ServiceError` if the underlying service's `initialize` method fails.
 /// The specific error depends on the service implementation.
 ///
 /// # Panics
@@ -34,14 +34,14 @@ use tracing::info;
 /// # Examples
 /// ```rust,no_run
 /// use commons::services::robotorq_service::{initialize_service, RoboTorqService};
-/// use commons::util::error::InvariantError;
+/// use commons::util::error::ServiceError;
 /// struct MySvc;
 /// impl commons::services::robotorq_service::ServiceLifecycle for MySvc {}
 /// impl commons::services::robotorq_service::HealthContributor for MySvc { fn health_status(&self) -> String { "OK".to_string() } }
 /// impl commons::services::robotorq_service::MetricsContributor for MySvc {}
 /// impl RoboTorqService for MySvc {}
 /// #[tokio::main]
-/// async fn main() -> Result<(), InvariantError> {
+/// async fn main() -> Result<(), ServiceError> {
 ///     let mut svc = MySvc;
 ///     let cfg = commons::util::config::load_robotorq_config(None).unwrap();
 ///     initialize_service(&mut svc, &cfg).await?;
@@ -52,8 +52,9 @@ pub async fn initialize_service<S: RoboTorqService>(
     svc: &mut S,
     cfg: &RoboTorqConfig,
 ) -> Result<(), ServiceError> {
-    // Internally prefer the richer `ServiceError` type; map `InvariantError` from
-    // implementations into `ServiceError::Other` for now.
+    // Internally prefer the richer `ServiceError` type; service helpers return
+    // `ServiceError` and public boundaries no longer map into a single unified
+    // error enum.
     match svc.initialize(cfg).await {
         Ok(()) => Ok(()),
         Err(e) => Err(ServiceError::Other(format!("initialize failed: {}", e))),
@@ -65,8 +66,9 @@ pub async fn initialize_service<S: RoboTorqService>(
 /// Centralizes config loading inside commons to keep callers clean.
 pub async fn load_and_initialize_service<S: RoboTorqService>(
     svc: &mut S,
-) -> Result<RoboTorqConfig, InvariantError> {
-    let cfg = load_robotorq_config(None).map_err(ConfigError::Invalid)?;
+) -> Result<RoboTorqConfig, ServiceError> {
+    let cfg = load_robotorq_config(None)
+        .map_err(|e| ServiceError::Other(format!("config load failed: {}", e)))?;
     info!(
         schema_version = cfg.schema_version,
         mode = ?cfg.mode,
@@ -74,11 +76,8 @@ pub async fn load_and_initialize_service<S: RoboTorqService>(
         http_port = cfg.http.port,
         "loaded RoboTorq configuration (commons init)"
     );
-    // Call the internal initializer which returns `ServiceError` and convert
-    // it into `InvariantError` at this public boundary.
-    initialize_service(svc, &cfg)
-        .await
-        .map_err(InvariantError::from)?;
+    // Call the internal initializer which returns `ServiceError`.
+    initialize_service(svc, &cfg).await?;
     Ok(cfg)
 }
 

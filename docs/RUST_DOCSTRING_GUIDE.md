@@ -68,8 +68,12 @@ Example (`services/robot_gateway/robot_gateway.rs`):
 /// Captures a batch for `robot_id`.
 ///
 /// Errors
-/// - `InvariantError::Gateway(UnknownRobotId)`: when the robot is not registered.
-/// - `InvariantError::Batch(...)`: if batch validation fails.
+/// - `RobotGatewayError::UnknownRobotId`: when the robot is not registered.
+/// - `BatchError::Validation(...)`: if batch validation fails.
+///
+/// Note: The legacy `InvariantError` type has been removed. Prefer domain-specific
+/// error enums (for example `TokenError`, `TripleTorqError`, `RobotError`,
+/// `BatchError`) and map them to `ServiceError` at public service boundaries.
 ```
 
 ## Metrics Docs
@@ -102,7 +106,7 @@ Example (`services/robot_gateway/robot_gateway.rs`):
 /// ```
 ///
 /// Errors
-/// - `InvariantError::X`: reason
+/// - Prefer domain-specific errors, e.g. `DomainError::X`: reason
 pub fn your_api(...) { /* ... */ }
 ```
 

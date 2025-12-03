@@ -131,11 +131,14 @@ Backward compatibility is maintained: legacy implementations that only declare `
 ---
 
 ### 4. **Error Taxonomy**
-- **Current State**:
-  - `InvariantError` exists but is not yet categorized.
-- **Planned**:
-  - Expand `InvariantError` into categories: Config, Startup, Bind, DependencyInit, RequestHandling, Messaging, Persistence, Shutdown.
-  - Map to HTTP statuses for admin endpoints and include error codes for programmatic handling.
+**Current State**:
+- The legacy unified `InvariantError` type has been removed in the `rewrite-core` refactor.
+  Errors are now expressed as domain-specific enums (Config, Startup, Bind, DependencyInit,
+  RequestHandling, Messaging, Persistence, Shutdown) and mapped to a lightweight
+  `ServiceError` at service boundaries where a uniform admin response is required.
+
+**Planned**:
+- Continue to refine domain error enums and ensure consistent HTTP/admin mappings and error codes.
 
 ---
 

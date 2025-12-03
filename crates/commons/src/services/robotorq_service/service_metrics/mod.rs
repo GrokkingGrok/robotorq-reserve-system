@@ -34,11 +34,10 @@ use tokio::sync::Mutex;
 /// # struct MySvc; /* impl RoboTorqService for MySvc { /* ... */ } */
 /// # impl commons::services::http::RoboTorqService for MySvc {
 /// #     fn export_metrics(&self) -> String { "# HELP demo demo\n".into() }
-/// #     // Note: the public `RoboTorqService` trait currently uses `InvariantError`
-/// #     // as a backward-compatible unified error type at the crate boundary.
-/// #     // Implementations may use domain-specific errors internally; those
-/// #     // errors are converted into `InvariantError` via `From` conversions.
-/// #     fn health_check(&self) -> Result<String, commons::util::error::InvariantError> { Ok("OK".into()) }
+/// #     // Note: the public `RoboTorqService` trait uses `ServiceError` for
+/// #     // service-level errors. Implementations may still use domain-specific
+/// #     // errors internally and map them to `ServiceError` at the boundary.
+/// #     fn health_check(&self) -> Result<String, commons::util::error::ServiceError> { Ok("OK".into()) }
 /// # }
 ///
 /// async fn router() -> Router {

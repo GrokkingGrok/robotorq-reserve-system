@@ -35,9 +35,9 @@ use crate::services::robotorq_service::RoboTorqService;
 /// # struct MySvc; /* impl RoboTorqService for MySvc { /* ... */ } */
 /// # impl commons::services::http::RoboTorqService for MySvc {
 /// #     fn export_metrics(&self) -> String { "# HELP demo demo\n".into() }
-/// #     fn health_check(&self) -> Result<String, commons::util::error::InvariantError> { Ok("OK".into()) }
-/// #     fn shutdown<'a>(&'a self) -> core::pin::Pin<Box<dyn core::future::Future<Output = Result<(), commons::util::error::InvariantError>> + Send + 'a>> { Box::pin(async { Ok(()) }) }
-/// #     fn initialize<'a>(&'a mut self, _cfg: &commons::util::config::RoboTorqConfig) -> core::pin::Pin<Box<dyn core::future::Future<Output = Result<(), commons::util::error::InvariantError>> + Send + 'a>> { Box::pin(async { Ok(()) }) }
+/// #     fn health_check(&self) -> Result<String, commons::util::error::ServiceError> { Ok("OK".into()) }
+/// #     fn shutdown<'a>(&'a self) -> core::pin::Pin<Box<dyn core::future::Future<Output = Result<(), commons::util::error::ServiceError>> + Send + 'a>> { Box::pin(async { Ok(()) }) }
+/// #     fn initialize<'a>(&'a mut self, _cfg: &commons::util::config::RoboTorqConfig) -> core::pin::Pin<Box<dyn core::future::Future<Output = Result<(), commons::util::error::ServiceError>> + Send + 'a>> { Box::pin(async { Ok(()) }) }
 /// # }
 ///
 /// async fn router() -> Router {

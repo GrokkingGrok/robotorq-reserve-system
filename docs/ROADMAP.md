@@ -79,13 +79,15 @@ Plan:
    - Introduce a `MetricsLabelProvider` trait to decouple label derivation from `RoboTorqConfig`.
 
 4. **Standardize Error Handling**:
-  - Expand `InvariantError` into clear categories (Config, Startup, Persistence, Messaging, Shutdown).
+  - Error taxonomy: replace the legacy `InvariantError` with domain-specific enums
+    (Config, Startup, Persistence, Messaging, Shutdown) and a `ServiceError` type
+    for service boundary responses.
   - Provide feature-gated `From` conversions for common external error types (e.g., `sqlx::Error`, `async-nats::Error`) to keep the commons lightweight by default.
   - Map error categories to appropriate HTTP/admin status codes and error codes for operational handling.
 
 Notes:
 - The commons crate now includes a migration to the new error taxonomy. Services should prefer the new typed errors (e.g. `PersistenceError::Pool`) when implementing repositories.
-- Legacy single-type `InvariantError` conversions remain source-compatible during the migration window; the plan is to remove transient compatibility helpers in the next cleanup pass.
+- Legacy single-type `InvariantError` conversions were used during an earlier migration window and have been removed in the `rewrite-core` refactor. Services should now use domain-specific errors and map them to `ServiceError` at public boundaries; see the ARCHITECTURE and docs/ migration notes for details.
 
 Deliverables:
 - Decoupled `RoboTorqService` lifecycle, health, and metrics traits.

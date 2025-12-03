@@ -43,7 +43,7 @@ pub use label_source::{LabelSet, MetricsLabelProvider, build_label_set};
 /// Contributes to health-check endpoints.
 /// Contributes auxiliary health status details beyond simple liveness.
 ///
-/// The `RoboTorqService::health_check` method returns a `Result<String, InvariantError>`
+/// The `RoboTorqService::health_check` method returns a `Result<String, ServiceError>`
 /// for liveness gating; `HealthContributor` supplies a lightweight, fallible‐free
 /// string snapshot (e.g. dependency summary) that can be merged into richer endpoints
 /// in later phases. For now it is a simple extension point.
@@ -137,14 +137,14 @@ pub trait RoboTorqService: ServiceLifecycle + HealthContributor + MetricsContrib
 /// use tokio::sync::Mutex;
 /// use commons::services::robotorq_service::{HttpServer, HttpServerConfig, RoboTorqService};
 /// use commons::util::config::load_robotorq_config;
-/// use commons::util::error::InvariantError;
+/// use commons::util::error::ServiceError;
 /// struct MySvc;
 /// impl commons::services::robotorq_service::ServiceLifecycle for MySvc {}
 /// impl commons::services::robotorq_service::HealthContributor for MySvc { fn health_status(&self) -> String { "OK".to_string() } }
 /// impl commons::services::robotorq_service::MetricsContributor for MySvc {}
 /// impl RoboTorqService for MySvc {}
 /// #[tokio::main]
-/// async fn main() -> Result<(), InvariantError> {
+/// async fn main() -> Result<(), ServiceError> {
 ///     let svc = Arc::new(Mutex::new(MySvc));
 ///     let server = HttpServer::new(svc, HttpServerConfig::local_defaults(0));
 ///     let cfg = load_robotorq_config(None).unwrap();
@@ -222,13 +222,13 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
     ///
     /// # Errors
     ///
-    /// Returns `InvariantError` if the server fails to bind to the configured
+    /// Returns `ServiceError` if the server fails to bind to the configured
     /// address and port, or if the HTTP server encounters an unrecoverable error.
     ///
     /// # Panics
     ///
     /// This method does not panic under normal circumstances. Network binding errors
-    /// and HTTP server errors are returned as `InvariantError` results.
+    /// and HTTP server errors are returned as `ServiceError` results.
     ///
     /// # Examples
     ///
@@ -237,14 +237,14 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
     /// use tokio::sync::Mutex;
     /// use commons::services::robotorq_service::{HttpServer, HttpServerConfig, RoboTorqService};
     /// use commons::util::config::load_robotorq_config;
-    /// use commons::util::error::InvariantError;
+    /// use commons::util::error::ServiceError;
     /// struct MySvc;
     /// impl commons::services::robotorq_service::ServiceLifecycle for MySvc {}
     /// impl commons::services::robotorq_service::HealthContributor for MySvc { fn health_status(&self) -> String { "OK".to_string() } }
     /// impl commons::services::robotorq_service::MetricsContributor for MySvc {}
     /// impl RoboTorqService for MySvc {}
     /// #[tokio::main]
-    /// async fn main() -> Result<(), InvariantError> {
+    /// async fn main() -> Result<(), ServiceError> {
     ///     let http_config = HttpServerConfig::local_defaults(0);
     ///     let cfg = load_robotorq_config(None).unwrap();
     ///     let server = HttpServer::new(Arc::new(Mutex::new(MySvc)), http_config);
