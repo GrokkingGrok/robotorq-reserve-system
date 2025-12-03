@@ -1,5 +1,5 @@
+use commons::util::logging::{OtlpConfig, init_prod_tracing};
 use std::time::Duration;
-use commons::util::logging::{init_prod_tracing, OtlpConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -11,7 +11,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Emit a span and an event that the collector should receive.
     // Add a searchable attribute `example_id` to make collector verification easy.
-    let span = tracing::info_span!("emit_traces_example", example = "emit_traces", example_id = "robotorq_emit_traces_test_001");
+    let span = tracing::info_span!(
+        "emit_traces_example",
+        example = "emit_traces",
+        example_id = "robotorq_emit_traces_test_001"
+    );
     let _enter = span.enter();
     tracing::info!(message = "hello otlp from example");
 

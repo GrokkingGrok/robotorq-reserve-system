@@ -32,7 +32,6 @@
 // Alternatively, examples can use `opentelemetry` / `opentelemetry-otlp` /
 // `tracing-opentelemetry` directly as demonstrated in `crates/examples/src/bin/emit_traces.rs`.
 
-
 use std::future::Future;
 use std::sync::Once;
 use std::time::{Duration, Instant};
@@ -506,4 +505,3 @@ pub fn shutdown_tracer_provider() {
 // `tracing-opentelemetry` layer. If the feature is not enabled but an
 // `OtlpConfig` is provided, a runtime warning is emitted and no exporter is
 // installed.
-
