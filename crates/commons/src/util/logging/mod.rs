@@ -46,7 +46,6 @@ use tracing_subscriber::{EnvFilter, fmt};
 // Note: we avoid importing private `tracing-subscriber` internals or unused
 // helper crates here. The module uses the stable `fmt::layer().json()` for
 // JSON output and middleware-inserted trace context for correlation.
-use tokio::task::JoinHandle;
 
 /// Initialize tracing with optional JSON output and rolling file appender.
 ///
@@ -173,7 +172,6 @@ pub fn init_prod_tracing(
                             }
                             Err(e) => {
                                 result = Err(e);
-                                return;
                             }
                         }
                     }
@@ -192,7 +190,6 @@ pub fn init_prod_tracing(
                     let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
                     if let Err(e) = init_res {
                         result = Err(e);
-                        return;
                     }
                 }
             } else {
@@ -232,7 +229,6 @@ pub fn init_prod_tracing(
                             }
                             Err(e) => {
                                 result = Err(e);
-                                return;
                             }
                         }
                     }
@@ -251,7 +247,6 @@ pub fn init_prod_tracing(
                     let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
                     if let Err(e) = init_res {
                         result = Err(e);
-                        return;
                     }
                 }
             }
@@ -310,7 +305,6 @@ pub fn init_prod_tracing(
                             }
                             Err(e) => {
                                 result = Err(e);
-                                return;
                             }
                         }
                     }
@@ -329,7 +323,6 @@ pub fn init_prod_tracing(
                     let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
                     if let Err(e) = init_res {
                         result = Err(e);
-                        return;
                     }
                 }
             } else {
@@ -361,12 +354,10 @@ pub fn init_prod_tracing(
                                 let init_res = registry.with(otel_layer).try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
                                 if let Err(e) = init_res {
                                     result = Err(e);
-                                    return;
                                 }
                             }
                             Err(e) => {
                                 result = Err(e);
-                                return;
                             }
                         }
                     }
@@ -384,7 +375,6 @@ pub fn init_prod_tracing(
                     let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
                     if let Err(e) = init_res {
                         result = Err(e);
-                        return;
                     }
                 }
             }
@@ -495,8 +485,24 @@ pub fn log_if_waited(key: &str, start: Instant, threshold: Duration) {
 pub fn shutdown_tracer_provider() {
     #[cfg(feature = "otlp")]
     {
-        let _ = opentelemetry::global::shutdown_tracer_provider();
+        opentelemetry::global::shutdown_tracer_provider();
     }
+}
+
+/// Spawn a background task with an attached tracing span.
+///
+/// The created span will have the static name `background_task` and include
+/// the provided `task` field for easier identification in logs/traces.
+pub fn spawn_traced<Fut, T>(name: &str, fut: Fut) -> tokio::task::JoinHandle<T>
+where
+    Fut: Future<Output = T> + Send + 'static,
+    T: Send + 'static,
+{
+    let span = tracing::info_span!("background_task", task = %name);
+    tokio::spawn(async move {
+        let _enter = span.enter();
+        fut.await
+    })
 }
 
 // Note: OTLP support is optional and only active when the `otlp` cargo

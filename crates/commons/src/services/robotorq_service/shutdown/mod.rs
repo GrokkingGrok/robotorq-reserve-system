@@ -117,7 +117,7 @@ where
     {
         tracing::info!("shutting down tracer provider (flushing spans)");
         // Best-effort flush; ignore errors during shutdown.
-        let _ = opentelemetry::global::shutdown_tracer_provider();
+        opentelemetry::global::shutdown_tracer_provider();
     }
 }
 
