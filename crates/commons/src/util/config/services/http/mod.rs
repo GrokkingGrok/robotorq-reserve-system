@@ -1,4 +1,4 @@
-//! HTTP server configuration for RoboTorq services.
+//! HTTP server configuration for `RoboTorq` services.
 //!
 //! This module defines configuration options for HTTP servers including
 //! middleware settings, CORS policies, timeouts, and security options.
@@ -123,7 +123,7 @@ impl Default for HttpConfig {
 /// CORS (Cross-Origin Resource Sharing) configuration.
 ///
 /// Controls which origins, methods, and headers are allowed for cross-origin requests.
-/// This is essential for web applications that need to communicate with RoboTorq services.
+/// This is essential for web applications that need to communicate with `RoboTorq` services.
 ///
 /// # Examples
 ///
@@ -173,23 +173,23 @@ pub struct CorsConfig {
 
     /// Allowed origins for CORS requests.
     ///
-    /// List of origins that can make cross-origin requests. Use ["*"] for
+    /// List of origins that can make cross-origin requests. Use `["*"]` for
     /// permissive access (development only) or specify exact domains like
-    /// ["https://dashboard.robotorq.com", "https://admin.robotorq.com"].
+    /// `["https://dashboard.robotorq.com", "https://admin.robotorq.com"]`.
     #[serde(default = "default_cors_origins")]
     pub allowed_origins: Vec<String>,
 
     /// Allowed HTTP methods for CORS requests.
     ///
     /// HTTP methods that can be used in cross-origin requests.
-    /// Common: ["GET", "POST", "PUT", "DELETE", "OPTIONS"].
+    /// Common: `["GET", "POST", "PUT", "DELETE", "OPTIONS"]`.
     #[serde(default = "default_cors_methods")]
     pub allowed_methods: Vec<String>,
 
     /// Allowed headers for CORS requests.
     ///
     /// HTTP headers that can be included in cross-origin requests.
-    /// Common: ["Content-Type", "Authorization", "X-Requested-With"].
+    /// Common: `["Content-Type", "Authorization", "X-Requested-With"]`.
     #[serde(default = "default_cors_headers")]
     pub allowed_headers: Vec<String>,
 
@@ -304,6 +304,7 @@ fn default_http_port() -> u16 {
 /// Returns `Some(30)` seconds as a reasonable default for most HTTP operations.
 /// This prevents requests from hanging indefinitely while allowing time for
 /// complex operations like database queries or external API calls.
+#[allow(clippy::unnecessary_wraps)]
 fn default_request_timeout_seconds() -> Option<u64> {
     Some(30)
 }
@@ -312,6 +313,7 @@ fn default_request_timeout_seconds() -> Option<u64> {
 ///
 /// Returns `Some(1MB)` to prevent abuse while allowing reasonable payload sizes
 /// for configuration updates, bulk operations, and file uploads.
+#[allow(clippy::unnecessary_wraps)]
 fn default_max_body_size_bytes() -> Option<usize> {
     Some(1024 * 1024)
 } // 1MB
@@ -319,7 +321,7 @@ fn default_max_body_size_bytes() -> Option<usize> {
 /// Returns the default CORS enabled state.
 ///
 /// Returns `true` to enable CORS by default, supporting web applications
-/// that need to communicate with RoboTorq services.
+/// that need to communicate with `RoboTorq` services.
 fn default_cors_enabled() -> bool {
     true
 }
@@ -397,7 +399,7 @@ fn default_health_endpoint_config() -> EndpointConfig {
     }
 }
 
-/// Default metrics endpoint config used by RoboTorq HTTP services.
+/// Default metrics endpoint config used by `RoboTorq` HTTP services.
 fn default_metrics_endpoint_config() -> EndpointConfig {
     EndpointConfig {
         path: default_metrics_endpoint_path(),

@@ -1,7 +1,7 @@
 //! Prometheus Metrics Error Types
 //!
 //! This module defines error types related to Prometheus metrics collection
-//! and exposition in the RoboTorq Reserve System. Metrics errors handle failures
+//! and exposition in the `RoboTorq` Reserve System. Metrics errors handle failures
 //! in metric registration, updating, and serving.
 //!
 //! # Metrics Architecture
@@ -25,7 +25,7 @@ use thiserror::Error;
 /// Errors that occur during Prometheus metrics operations.
 ///
 /// This enum wraps Prometheus library errors to provide consistent error
-/// handling throughout the RoboTorq metrics system.
+/// handling throughout the `RoboTorq` metrics system.
 #[derive(Debug, Error)]
 pub enum PrometheusError {
     /// An error occurred in the underlying Prometheus library.

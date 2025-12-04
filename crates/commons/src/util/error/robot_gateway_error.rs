@@ -2,7 +2,7 @@
 //!
 //! This module defines error types specific to the Robot Gateway service operations.
 //! These errors handle various failure conditions that can occur during robot registration,
-//! batch processing, and gateway management in the RoboTorq Reserve System.
+//! batch processing, and gateway management in the `RoboTorq` Reserve System.
 //!
 //! # Error Categories
 //!

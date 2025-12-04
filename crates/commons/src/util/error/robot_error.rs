@@ -1,7 +1,7 @@
 //! Robot Validation Error Types
 //!
 //! This module defines error types related to robot validation and configuration
-//! in the RoboTorq Reserve System. Robot errors handle violations of robot
+//! in the `RoboTorq` Reserve System. Robot errors handle violations of robot
 //! specification invariants and operational constraints.
 //!
 //! # Robot Invariants
@@ -65,7 +65,7 @@ pub enum RobotError {
     /// - Invalid configuration parsing
     ///
     /// # Economic Impact
-    /// Zero joule throughput violates the JouleTorqOre work proof invariant.
+    /// Zero joule throughput violates the `JouleTorqOre` work proof invariant.
     #[error("Joule throughput (watts) must be > 0")]
     ZeroJouleThroughput,
 }

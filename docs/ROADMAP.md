@@ -205,11 +205,90 @@ Plan (Option A — Commons-based persistence utilities; do not enact without fol
   4. Implement Postgres backend (sqlx pool + timeouts) + basic tests (1–2 days).
   5. Migration runner + spans + health hooks (0.5–1 day).
   6. Integration tests with Testcontainers Postgres and branch-local CI workflow (1–2 days).
-  7. Docs and config schema updates (0.5 day).
+   7. Docs and config schema updates (0.5 day).
+
+  #### Design refinements (from critique)
+
+  These concise rules address common implementation questions and reduce future bikeshedding. They should be treated as required defaults for Option A and implemented or documented as part of the sprint work.
+
+  - **Monotonic deadlines (Timekeeper integration):** `Context` deadlines MUST be monotonic instants (use `std::time::Instant` / `tokio::time::Instant` via the project's `TimeProvider`/timekeeper). For cross-process propagation, transmit a remaining timeout (milliseconds) in headers; the receiver converts that to a local monotonic `Instant = now_monotonic() + duration`. Do not rely on `SystemTime` for cancellations; keep `SystemTime` only for human-facing logs if needed.
+
+  - **Structured DB span attributes (`DbAttributes`):** provide a small `DbAttributes` struct (or builder/macro) in `commons` so backends call a single helper to attach DB attributes. Example API:
+    - `span.add_db_attributes(DbAttributes { system: "postgres", name: db_name, statement: obfuscated_sql, rows_affected: Some(n) })`
+    - Centralize `db.statement` obfuscation and canonical attribute names to avoid stringly-typed keys and copy/paste bugs.
+
+  - **Migration runner failure behavior (clarity):** the runner defaults to *fail-fast* — a failed migration aborts subsequent migrations; the runner detects and reports "dirty" states and returns structured results. Transactional guarantees are driver-dependent: Postgres migrations should be applied in a transaction per file where possible; SQLite may not support transactional changes for every operation — document per-DB caveats.
+
+  - **Schema version validation (startup rule):** services MUST validate the DB schema version at startup (compare `current_db_version` vs `app_expected_version`); a mismatch yields a startup error and readiness=false. Document how to recover (migration steps) in admin docs.
+
+  - **Statement obfuscation policy (stable defaults):** default obfuscation rules to prevent leaking sensitive data in production:
+    - Truncate obfuscated statements to 512 bytes by default.
+    - Strip or replace parameter values with placeholders (`?`) or tokens.
+    - Remove SQL comments and normalize whitespace.
+    - Allow full SQL logging only when `enable_query_tracing = true` (dev/CI opt-in).
+
+  Map these small policies into the sprints: Timekeeper + Context in Sprint 1; `DbAttributes` + obfuscation helpers in Sprint 2; schema/version checks and `PersistenceHealth` in Sprint 3; migration-runner semantics & tests in Sprint 4; policy docs and final obfuscation polish in Sprint 5.
+
+  #### Driver & test guidance
+
+  These small conventions make driver injection and testing ergonomic and should be implemented alongside the Sprint work:
+
+  - **`PersistenceDriver` trait & `DriverFactory`:** add a narrow trait in `crates/commons::util::persistence` exposing `async fn health(&self) -> PersistenceHealth` (and optional `shutdown()`). Provide `DriverFactory::build(config) -> Arc<dyn PersistenceDriver>` as the single injection point for services. Keep the trait small — domain repository methods remain typed and separate.
+
+  - **`with_db_span` naming and behavior:** standardize the span helper as `with_db_span(...)` (or `with_db_span_async`) that every backend calls once per repository method. Responsibilities: start a `persistence.<operation>` span, attach `DbAttributes`, observe cancellation from `Context`, map backend errors into `PersistenceError`, and annotate spans on error.
+
+  - **`is_ready` / readiness probe:** expose a cheap readiness helper that calls `driver.health().await` and returns a bool. Services should use this in their HTTP readiness endpoints so Kubernetes probes only pass when persistence and schema versions are acceptable.
+
+  - **`persistence::test::memory_driver()` helper:** provide a test helper that returns an `Arc<dyn PersistenceDriver>` backed by the memory backend. Re-export under a test helper path so other crates can write integration-style tests without spinning up Testcontainers.
+
+  These items should be captured in Sprint 1 design docs (trait shapes and helper names) and implemented incrementally in Sprints 2/3 (memory driver, factory, readiness, and Postgres wiring).
+
+  #### Phase 2.1 Subphases (sprints)
+
+To make progress predictable, the Phase 2.1 work is split into five short sprints. Each sprint maps to the prioritized checklist above and is small enough to complete in a day or two.
+
+- **Phase 2.1.1 — Sprint 1: Design Context & Traits**
+  - Scope: define the minimal `Context` type (trace headers, optional deadline/cancellation token), `PersistenceError` taxonomy, repository trait patterns, and `exec_with_span` helper API.
+  - Deliverables: `Context` design document, example trait signatures, `PersistenceError` enum sketch, `exec_with_span` helper spec, and unit tests asserting expected contracts.
+  - Estimate: 1–2 days.
+
+- **Phase 2.1.2 — Sprint 2: Memory + SQLite Backends**
+  - Scope: implement a fast in-memory backend and an in-memory SQLite backend wired to `Context` and `exec_with_span` helpers; provide unit tests and a small example demonstrating traced DB ops.
+  - Deliverables: `memory` backend implementation, `sqlite` (in-memory) backend, unit tests under `crates/commons/tests/persistence/`, and an example binary showing traced DB operations.
+  - Estimate: 0.5–1.5 days.
+
+- **Phase 2.1.3 — Sprint 3: Postgres Backend & Pooling**
+  - Scope: implement the Postgres backend using `sqlx::Pool`, add per-operation timeouts/cancellation mapping to `PersistenceError::Timeout`, and provide `PersistenceHealth` hooks exposing pool health metrics and readiness checks.
+  - Deliverables: `postgres` backend module, pooling guidance in config, `PersistenceHealth` trait, mapping of driver errors to canonical `PersistenceError` variants, and unit tests.
+  - Estimate: 1–2 days.
+
+- **Phase 2.1.4 — Sprint 4: Migrations + Integration CI**
+  - Scope: implement a traced migration runner, produce migrations health outputs, and add branch-local integration tests using Testcontainers for Postgres alongside a branch-local CI workflow to exercise migrations and pooled connections.
+  - Deliverables: `migrations.rs` runner with tracing, integration tests under `crates/commons/tests/persistence/`, `scripts/` helpers for local reproduction, and a branch-local GitHub Actions workflow (kept off default CI).
+  - Estimate: 1–2 days.
+
+- **Phase 2.1.5 — Sprint 5: Docs, Instrumentation, and Polish**
+  - Scope: finalize docs (config schema `RoboTorqConfig.persistence`, docs/persistence.md), formalize span naming and `db.statement` obfuscation policy, add `DriverFactory` guidance, and finish CI/test polish (clippy/tests/docs).
+  - Deliverables: documentation snippets, sample config, query obfuscation guidance, span naming conventions, and a checklist for rolling Option A into feature branches.
+  - Estimate: 0.5–1 day.
 
 Notes:
  - This Option A proposal follows the project's File Creation Rules by placing code under `crates/commons/src/util/persistence` and keeping tests decoupled under `crates/commons/tests/**`.
  - No code or CI changes will be enacted by this update — this is a roadmap update only. Implementations and any CI adjustments will be created on `rewrite-core` or feature branches and will not be merged to `release/v0` without your instruction.
+
+#### Gaps, Risks, and Suggested Improvements
+
+- **Repository Trait Shape Risk:** repository traits that accept a large or tracing-heavy Context may leak implementation details into service layers. Keep `Context` minimal (trace headers, optional deadline) and provide helpers in `commons` to start spans. This reduces coupling and keeps backends swappable.
+- **Cancellation & Deadlines Gap:** ensure `Context` supports cancellation/deadline semantics that map cleanly to drivers (e.g., sqlx query timeouts, cancellation tokens). Without this, timeouts may not cancel in-flight queries and can lead to resource leaks.
+- **Migration Runner Guarantees:** migration runner must expose an idempotent, observable contract. Document expected transactional guarantees per DB (e.g., sqlite single-writer / Postgres transactional migrations) and record per-migration spans and results for auditability.
+- **Query Obfuscation & Privacy Risk:** when tracing queries, avoid logging full SQL text in production. Implement an obfuscation/truncation strategy for `db.statement` and make full statements a CI/dev-only option behind `enable_query_tracing`.
+- **Pooling & Resource Contention Risk:** different drivers have different pooling semantics; document pool sizing guidance and expose `pool.health` hooks. Provide a `PersistenceHealth` trait in `commons` that backends implement to expose pool metrics and simple readiness checks.
+- **Driver Feature Divergence:** driver-specific features (e.g., Postgres LISTEN/NOTIFY, sqlite WAL) can encourage feature creep on repository traits. Keep domain-facing traits small and add driver-capability traits only when necessary behind feature flags.
+- **Testing Strategy Gap:** rely on fast memory + in-memory sqlite unit tests for default CI; run Postgres Testcontainers in branch-local CI. Document how to reproduce integration failures locally with `scripts/` helpers.
+- **Span Naming & Attributes Improvement:** standardize span names and attributes for DB ops (`persistence.<operation>`, `db.system`, `db.name`, `db.statement.obfuscated`, `db.rows_affected`) and add a helper `exec_with_span(ctx, name, attrs, async_op)` to reduce boilerplate and ensure consistent instrumentation.
+- **Driver Factory & Injection Suggestion:** provide a small `DriverFactory` in `commons` responsible for creating typed backend instances from configuration. This centralizes connection setup, pooling, and instrumentation wiring.
+- **Operational Risk — Migrations & Rollbacks:** migrations can cause downtime if long-running; provide a recommended strategy (online-friendly migrations, feature-flags for schema changes, per-migration timeouts) and ensure migrations are observable and cancellable.
+
 
 
 ### Phase 3 — NATS & JetStream

@@ -1,4 +1,4 @@
-//! Security configuration for RoboTorq services.
+//! Security configuration for `RoboTorq` services.
 //!
 //! This module defines configuration options for TLS, authentication,
 //! authorization, and other security-related settings.
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Security configuration.
 ///
-/// Configures TLS, authentication, and authorization for RoboTorq services.
+/// Configures TLS, authentication, and authorization for `RoboTorq` services.
 /// Security is critical for protecting sensitive financial and operational data.
 ///
 /// # Examples
@@ -225,7 +225,7 @@ pub enum TlsVersion {
 
 /// Authentication configuration.
 ///
-/// Configures how users and services authenticate with RoboTorq services.
+/// Configures how users and services authenticate with `RoboTorq` services.
 ///
 /// # Examples
 ///
@@ -629,7 +629,7 @@ pub enum SecretsBackend {
     Env,
     /// Local files
     File,
-    /// HashiCorp Vault
+    /// `HashiCorp` Vault
     Vault,
     /// AWS Secrets Manager
     Aws,
@@ -689,7 +689,7 @@ fn default_api_key_header() -> String {
 
 /// Default API key query parameter name.
 ///
-/// Returns "api_key" for URL query parameter authentication.
+/// Returns "`api_key`" for URL query parameter authentication.
 /// Useful for API clients that can't set custom headers.
 fn default_api_key_query_param() -> String {
     "api_key".to_string()
@@ -729,7 +729,7 @@ fn default_session_secure_cookies() -> bool {
 
 /// Default session cookie name.
 ///
-/// Returns "robotorq_session" for session identification.
+/// Returns "`robotorq_session`" for session identification.
 /// Choose a unique name to avoid conflicts with other applications.
 fn default_session_cookie_name() -> String {
     "robotorq_session".to_string()

@@ -1,14 +1,14 @@
-//! Economic Configuration for RoboTorq Reserve System
+//! Economic Configuration for `RoboTorq` Reserve System
 //!
 //! This module provides configuration for the economic parameters and monetary policy
-//! of the RoboTorq Reserve System. It defines the economic invariants, reserve ratios,
+//! of the `RoboTorq` Reserve System. It defines the economic invariants, reserve ratios,
 //! token economics, and circulation parameters that govern the system's behavior.
 //!
 //! # Economic Invariants
 //!
 //! The system maintains strict economic invariants:
-//! - **1 TokenTorqIngot = 3,600 JouleTorqOre units**
-//! - **1 RoboTorq Certificate = 1,000 ingots = 3,600,000 Ore units**
+//! - **1 `TokenTorqIngot` = 3,600 `JouleTorqOre` units**
+//! - **1 `RoboTorq` Certificate = 1,000 ingots = 3,600,000 Ore units**
 //!
 //! These invariants ensure the monetary system remains backed by measurable robotic labor.
 //!
@@ -16,10 +16,10 @@
 //!
 //! | Layer | Artifact | Aggregation | Resulting Count | Role |
 //! |-------|----------|-------------|-----------------|------|
-//! | L0 | JouleTorqOre | 1 token × 1 joule | 3,600 per ingot | Atomic work proof |
-//! | L1 | TokenTorqIngot | 3,600 units of Ore | 1,000 per certificate | Batched for minting |
-//! | L2 | RoboTorq Certificate | 1,000 ingots (3.6M units of Ore) | Basis for reserve | Monetary Backing |
-//! | L3 | RoboTorqUnits | Certificate-Backed, Digital, 1:1 | Dynamic | Circulation |
+//! | L0 | `JouleTorqOre` | 1 token × 1 joule | 3,600 per ingot | Atomic work proof |
+//! | L1 | `TokenTorqIngot` | 3,600 units of Ore | 1,000 per certificate | Batched for minting |
+//! | L2 | `RoboTorq` Certificate | 1,000 ingots (3.6M units of Ore) | Basis for reserve | Monetary Backing |
+//! | L3 | `RoboTorqUnits` | Certificate-Backed, Digital, 1:1 | Dynamic | Circulation |
 //! | L4 | Bearer Bond | Certificate-Backed, Physical, N:1 mapping | Dynamic | Circulation |
 //!
 //! # Monetary Policy
@@ -33,14 +33,14 @@
 //! # Reserve Management
 //!
 //! The reserve system maintains multiple vault subsystems:
-//! - **CertVault**: Holds certificate proofs and timing metadata
-//! - **StakeVault**: Provides stake constraint for labor contracts
-//! - **DistoVault**: Executes UBD payments and balance adjustments
-//! - **ShortVault**: Liquid member balances for active circulation
+//! - **`CertVault`**: Holds certificate proofs and timing metadata
+//! - **`StakeVault`**: Provides stake constraint for labor contracts
+//! - **`DistoVault`**: Executes UBD payments and balance adjustments
+//! - **`ShortVault`**: Liquid member balances for active circulation
 
 use serde::{Deserialize, Serialize};
 
-/// Economic configuration for the RoboTorq Reserve System.
+/// Economic configuration for the `RoboTorq` Reserve System.
 ///
 /// Defines the economic parameters, monetary policy, and reserve management
 /// settings that govern the behavior of the token economy.
@@ -61,23 +61,23 @@ use serde::{Deserialize, Serialize};
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EconomicConfig {
-    /// JouleTorqOre units per TokenTorqIngot (economic invariant).
+    /// `JouleTorqOre` units per `TokenTorqIngot` (economic invariant).
     ///
     /// This fundamental invariant ensures each ingot represents exactly
     /// 3,600 units of atomic robotic work. Must not be changed in production.
     #[serde(default = "default_joule_per_ingot")]
     pub joule_per_ingot: u32,
 
-    /// TokenTorqIngots per RoboTorq Certificate (economic invariant).
+    /// `TokenTorqIngots` per `RoboTorq` Certificate (economic invariant).
     ///
     /// This invariant ensures each certificate represents 1,000 ingots
-    /// (3.6 million JouleTorqOre units). Must not be changed in production.
+    /// (3.6 million `JouleTorqOre` units). Must not be changed in production.
     #[serde(default = "default_ingots_per_certificate")]
     pub ingots_per_certificate: u32,
 
     /// Demurrage model configuration.
     ///
-    /// Defines how idle RoboTorq is collected to encourage circulation
+    /// Defines how idle `RoboTorq` is collected to encourage circulation
     /// and prevent hoarding.
     #[serde(default)]
     pub demurrage_model: DemurrageModel,
@@ -282,15 +282,15 @@ impl Default for ReserveConfig {
 /// to prevent inflation and ensure controlled monetary expansion.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SupplyConfig {
-    /// Maximum total JouleTorqOre supply
+    /// Maximum total `JouleTorqOre` supply
     #[serde(default = "default_supply_max_joule")]
     pub max_joule: Option<u128>,
 
-    /// Maximum total TokenTorqIngot supply
+    /// Maximum total `TokenTorqIngot` supply
     #[serde(default = "default_supply_max_ingot")]
     pub max_ingot: Option<u128>,
 
-    /// Maximum total RoboTorq Certificate supply
+    /// Maximum total `RoboTorq` Certificate supply
     #[serde(default = "default_supply_max_certificate")]
     pub max_certificate: Option<u128>,
 
@@ -326,7 +326,7 @@ pub struct DistributionConfig {
     #[serde(default)]
     pub activation: ActivationConfig,
 
-    /// BidNet marketplace configuration
+    /// `BidNet` marketplace configuration
     #[serde(default)]
     pub bidnet: BidnetConfig,
 }
@@ -370,13 +370,13 @@ impl Default for ActivationConfig {
     }
 }
 
-/// BidNet marketplace configuration.
+/// `BidNet` marketplace configuration.
 ///
 /// Defines parameters for the decentralized labor exchange and marketplace
-/// where RoboTorq can be converted to goods and services.
+/// where `RoboTorq` can be converted to goods and services.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BidnetConfig {
-    /// Whether BidNet marketplace is enabled
+    /// Whether `BidNet` marketplace is enabled
     #[serde(default = "default_bidnet_enabled")]
     pub enabled: bool,
 
@@ -406,12 +406,12 @@ impl Default for BidnetConfig {
 
 // Default value functions
 
-/// Default JouleTorqOre units per TokenTorqIngot (economic invariant).
+/// Default `JouleTorqOre` units per `TokenTorqIngot` (economic invariant).
 fn default_joule_per_ingot() -> u32 {
     3600
 }
 
-/// Default TokenTorqIngots per RoboTorq Certificate (economic invariant).
+/// Default `TokenTorqIngots` per `RoboTorq` Certificate (economic invariant).
 fn default_ingots_per_certificate() -> u32 {
     1000
 }
@@ -476,17 +476,17 @@ fn default_reserve_emergency_threshold() -> f64 {
     0.95
 } // 95%
 
-/// Default maximum JouleTorqOre supply (None = unlimited).
+/// Default maximum `JouleTorqOre` supply (None = unlimited).
 fn default_supply_max_joule() -> Option<u128> {
     None
 }
 
-/// Default maximum TokenTorqIngot supply (None = unlimited).
+/// Default maximum `TokenTorqIngot` supply (None = unlimited).
 fn default_supply_max_ingot() -> Option<u128> {
     None
 }
 
-/// Default maximum RoboTorq Certificate supply (None = unlimited).
+/// Default maximum `RoboTorq` Certificate supply (None = unlimited).
 fn default_supply_max_certificate() -> Option<u128> {
     None
 }
@@ -511,7 +511,7 @@ fn default_activation_grace_period_hours() -> u32 {
     168
 } // 1 week
 
-/// Default BidNet enabled state.
+/// Default `BidNet` enabled state.
 fn default_bidnet_enabled() -> bool {
     true
 }

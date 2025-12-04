@@ -1,4 +1,4 @@
-//! Cryptographic Configuration for RoboTorq Reserve System
+//! Cryptographic Configuration for `RoboTorq` Reserve System
 //!
 //! This module provides configuration for cryptographic operations including
 //! digital signatures, key management, and certificate handling. It supports
@@ -30,7 +30,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Cryptographic configuration for the RoboTorq system.
+/// Cryptographic configuration for the `RoboTorq` system.
 ///
 /// Configures digital signatures, key management, and certificate handling
 /// for securing economic transactions and service communication.

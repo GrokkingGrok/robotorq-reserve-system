@@ -1,7 +1,7 @@
 //! Batch Processing Error Types
 //!
 //! This module defines error types related to batch processing operations in the
-//! RoboTorq Reserve System. Batch errors handle violations of system invariants
+//! `RoboTorq` Reserve System. Batch errors handle violations of system invariants
 //! during the processing of ore batches, token collections, and other batched operations.
 //!
 //! # Batch Invariants
@@ -12,15 +12,15 @@
 //!
 //! # Common Batch Operations
 //!
-//! - Ore batch aggregation (3,600 JouleTorqOre units per TokenTorqIngot)
-//! - Token batch processing (1,000 TokenTorqIngots per RoboTorq Certificate)
+//! - Ore batch aggregation (3,600 `JouleTorqOre` units per `TokenTorqIngot`)
+//! - Token batch processing (1,000 `TokenTorqIngots` per `RoboTorq` Certificate)
 //! - Merkle tree batch construction
 
 use thiserror::Error;
 
 /// Errors that occur during batch processing operations.
 ///
-/// These errors represent violations of batch-related invariants in the RoboTorq
+/// These errors represent violations of batch-related invariants in the `RoboTorq`
 /// system, ensuring that all batched operations maintain economic and cryptographic
 /// integrity.
 #[derive(Debug, Error)]
@@ -28,8 +28,8 @@ pub enum BatchError {
     /// The batch size does not match the expected invariant requirements.
     ///
     /// This error occurs when a batch contains an incorrect number of items,
-    /// violating the system's economic invariants. For example, a TokenTorqIngot
-    /// batch must contain exactly 3,600 JouleTorqOre units.
+    /// violating the system's economic invariants. For example, a `TokenTorqIngot`
+    /// batch must contain exactly 3,600 `JouleTorqOre` units.
     ///
     /// # Fields
     /// - `actual`: The actual size of the batch
@@ -48,7 +48,7 @@ pub enum BatchError {
     BatchSize {
         /// The actual size of the batch encountered at runtime.
         actual: usize,
-        /// The expected batch size according to RoboTorq economic invariants.
+        /// The expected batch size according to `RoboTorq` economic invariants.
         expected: usize,
     },
 

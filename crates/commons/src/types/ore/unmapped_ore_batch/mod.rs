@@ -1,9 +1,9 @@
-//! Raw JouleTorqOre batches produced by robots.
+//! Raw `JouleTorqOre` batches produced by robots.
 //!
 //! Unmapped ore batches represent the initial output from robots performing work.
 //! These batches contain raw tokens that haven't yet been aggregated into higher-level
-//! structures like TokenTorqIngots or RoboTorqCertificates. They serve as the
-//! foundation of the work proof chain in the RoboTorq Reserve System.
+//! structures like `TokenTorqIngots` or `RoboTorqCertificates`. They serve as the
+//! foundation of the work proof chain in the `RoboTorq` Reserve System.
 //!
 //! Each batch is cryptographically sealed with a hash and timestamped to ensure
 //! immutability and temporal ordering of work performed.
@@ -16,16 +16,16 @@ use crate::util::schema::UNMAPPED_ORE_BATCH_SCHEMA_VERSION;
 use crate::util::timekeeping::now;
 use serde::{Deserialize, Serialize};
 
-/// A batch of raw JouleTorqOre tokens produced by a robot.
+/// A batch of raw `JouleTorqOre` tokens produced by a robot.
 ///
-/// Unmapped ore batches are the atomic units of work proof in the RoboTorq system.
+/// Unmapped ore batches are the atomic units of work proof in the `RoboTorq` system.
 /// They contain tokens representing individual joules of robotic labor that haven't
 /// yet been aggregated into higher-level economic structures. Each batch is
 /// cryptographically sealed and timestamped to maintain the integrity of the
 /// work proof chain.
 ///
 /// # Economic Role
-/// - Foundation of the JouleTorqOre → TokenTorqIngot → RoboTorqCertificate hierarchy
+/// - Foundation of the `JouleTorqOre` → `TokenTorqIngot` → `RoboTorqCertificate` hierarchy
 /// - Provides raw work proof data for batching and aggregation operations
 /// - Enables tracking of work performed by individual robots over time
 ///
@@ -83,6 +83,7 @@ impl UnmappedOreBatch {
     /// assert_eq!(batch.robot_id, robot_id);
     /// assert!(!batch.tokens.is_empty());
     /// ```
+    #[allow(clippy::cast_possible_wrap)]
     pub fn new(robot_id: RobotId, tokens: Vec<Token>) -> Result<Self, BatchError> {
         if tokens.is_empty() {
             return Err(BatchError::EmptyBatch);

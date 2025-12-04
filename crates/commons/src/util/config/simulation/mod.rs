@@ -1,7 +1,7 @@
 //! Simulation Configuration Parameters
 //!
 //! This module defines configuration parameters for simulation mode operation
-//! in the RoboTorq Reserve System. Simulation mode allows testing and development
+//! in the `RoboTorq` Reserve System. Simulation mode allows testing and development
 //! without requiring physical robotic hardware or real economic transactions.
 //!
 //! # Simulation Architecture
@@ -28,7 +28,7 @@
 //!
 //! # Legal Notice
 //!
-//! The RoboTorq Reserve System Simulator cannot be legally activated
+//! The `RoboTorq` Reserve System Simulator cannot be legally activated
 //! from this repository. Simulation mode is provided for development
 //! and testing purposes only.
 
@@ -37,7 +37,7 @@ use serde::{Deserialize, Serialize};
 /// Configuration parameters for simulation mode.
 ///
 /// This struct contains all parameters that control the behavior of the
-/// RoboTorq system when operating in simulation mode. All fields are optional
+/// `RoboTorq` system when operating in simulation mode. All fields are optional
 /// and will use sensible defaults if not specified.
 ///
 /// # Usage Context

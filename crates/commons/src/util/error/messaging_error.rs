@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-/// Messaging subsystem errors (NATS, JetStream, connectivity).
+/// Messaging subsystem errors (NATS, `JetStream`, connectivity).
 #[derive(Debug, Error)]
 pub enum MessagingError {
     /// Underlying client error (e.g. async-nats).

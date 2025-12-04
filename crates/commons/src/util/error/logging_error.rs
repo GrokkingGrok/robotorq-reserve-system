@@ -1,7 +1,7 @@
 //! Logging System Error Types
 //!
 //! This module defines error types related to the logging system initialization
-//! and configuration in the RoboTorq Reserve System. Logging errors handle failures
+//! and configuration in the `RoboTorq` Reserve System. Logging errors handle failures
 //! during the setup of structured logging, file output, and tracing infrastructure.
 //!
 //! # Logging Architecture

@@ -1,7 +1,7 @@
 //! Configuration Error Types
 //!
 //! This module defines error types related to configuration parsing, validation,
-//! and loading in the RoboTorq Reserve System. Configuration errors handle issues
+//! and loading in the `RoboTorq` Reserve System. Configuration errors handle issues
 //! with system configuration files, environment variables, and runtime settings.
 //!
 //! # Configuration Sources
@@ -25,7 +25,7 @@ use thiserror::Error;
 /// Errors that occur during configuration operations.
 ///
 /// These errors represent problems with loading, parsing, or validating
-/// the RoboTorq system configuration.
+/// the `RoboTorq` system configuration.
 #[derive(Debug, Error)]
 pub enum ConfigError {
     /// The configuration contains invalid or malformed data.

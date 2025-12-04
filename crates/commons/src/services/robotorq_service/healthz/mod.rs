@@ -30,6 +30,7 @@ pub struct HealthzMetrics {
 
 impl HealthzMetrics {
     /// Construct HTTP health endpoint metrics from the shared registry.
+    #[allow(clippy::needless_pass_by_value)]
     pub fn new(registry: Arc<dyn MetricsRegistry>) -> Self {
         let requests_total = registry.counter(
             "http_health_requests_total",
@@ -54,7 +55,7 @@ pub async fn health_handler<S: RoboTorqService>(
         Ok(message) => (StatusCode::OK, message),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Health check failed: {:?}", e),
+            format!("Health check failed: {e:?}"),
         ),
     }
 }

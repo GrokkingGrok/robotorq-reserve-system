@@ -1,6 +1,6 @@
 //! Operational Mode Configuration
 //!
-//! This module defines the operational modes available in the RoboTorq Reserve System.
+//! This module defines the operational modes available in the `RoboTorq` Reserve System.
 //! The system can operate in either Production or Simulation mode, each with different
 //! behavioral characteristics and safety guarantees.
 //!
@@ -22,7 +22,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Operational mode of the RoboTorq Reserve System.
+/// Operational mode of the `RoboTorq` Reserve System.
 ///
 /// This enum determines the fundamental behavior of the system, controlling
 /// whether it operates with real robotic hardware and economic transactions

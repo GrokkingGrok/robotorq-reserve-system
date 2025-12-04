@@ -1,0 +1,10 @@
+[package]
+name = "cargo-robotorq-migrate"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Use the workspace `commons` crate for migration runner and config types
+commons = { path = "../commons", features = ["persistence"] }
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

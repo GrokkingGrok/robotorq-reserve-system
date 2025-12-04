@@ -43,12 +43,13 @@ pub fn inject_trace_context(
 ///
 /// Returns `Some((traceparent, tracestate_opt))` if `traceparent` is present,
 /// otherwise returns `None`.
+#[must_use]
 pub fn extract_trace_context(map: &HashMap<String, String>) -> Option<(String, Option<String>)> {
     map.get("traceparent")
         .map(|tp| (tp.clone(), map.get("tracestate").cloned()))
 }
 
-/// Convenience: convert from iterator of header-like pairs to a HashMap and extract context.
+/// Convenience: convert from iterator of header-like pairs to a `HashMap` and extract context.
 ///
 /// Useful for adapters that receive headers in a slice or iterator form.
 pub fn extract_from_iter<I, K, V>(iter: I) -> Option<(String, Option<String>)>

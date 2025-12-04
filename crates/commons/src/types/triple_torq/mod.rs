@@ -1,13 +1,13 @@
-//! TripleTorq monetary accounting system.
+//! `TripleTorq` monetary accounting system.
 //!
-//! TripleTorq represents the hierarchical monetary balances in the RoboTorq Reserve System.
-//! It maintains three levels of currency units (RoboTorq, TokenTorq, JouleTorq) with
+//! `TripleTorq` represents the hierarchical monetary balances in the `RoboTorq` Reserve System.
+//! It maintains three levels of currency units (`RoboTorq`, `TokenTorq`, `JouleTorq`) with
 //! automatic normalization to prevent overflow and maintain mathematical invariants.
 //!
 //! The system enforces strict economic relationships:
-//! - 1 RoboTorq = 1,000 TokenTorq
-//! - 1 TokenTorq = 3,600 JouleTorq
-//! - 1 RoboTorq = 3,600,000 JouleTorq (derived)
+//! - 1 `RoboTorq` = 1,000 `TokenTorq`
+//! - 1 `TokenTorq` = 3,600 `JouleTorq`
+//! - 1 `RoboTorq` = 3,600,000 `JouleTorq` (derived)
 //!
 //! Balances are kept in canonical form where sub-level balances never exceed their
 //! maximum values, automatically rolling over excess to higher-level units.
@@ -29,40 +29,41 @@ use serde::{Deserialize, Serialize};
 // - jouletorq_balance < 3_600
 // The canonical form keeps sub-balances within bounds rolling upward.
 
-/// Number of TokenTorq units that equal one RoboTorq unit.
+/// Number of `TokenTorq` units that equal one `RoboTorq` unit.
 ///
 /// This fundamental economic constant defines the exchange rate between
-/// TokenTorq and RoboTorq in the TripleTorq monetary hierarchy.
+/// `TokenTorq` and `RoboTorq` in the `TripleTorq` monetary hierarchy.
 pub const TOKEN_TORQS_PER_ROBOTORQ: u128 = 1_000;
 
-/// Number of JouleTorq units that equal one TokenTorq unit.
+/// Number of `JouleTorq` units that equal one `TokenTorq` unit.
 ///
 /// This fundamental economic constant defines the exchange rate between
-/// JouleTorq and TokenTorq in the TripleTorq monetary hierarchy.
+/// `JouleTorq` and `TokenTorq` in the `TripleTorq` monetary hierarchy.
 pub const JOULE_TORQS_PER_TOKEN_TORQ: u128 = 3_600;
 
-/// Number of JouleTorq units that equal one RoboTorq unit (derived constant).
+/// Number of `JouleTorq` units that equal one `RoboTorq` unit (derived constant).
 ///
-/// This is calculated as TOKEN_TORQS_PER_ROBOTORQ * JOULE_TORQS_PER_TOKEN_TORQ.
-/// It represents the total JouleTorq units in one RoboTorq unit.
+/// This is calculated as `TOKEN_TORQS_PER_ROBOTORQ` * `JOULE_TORQS_PER_TOKEN_TORQ`.
+/// It represents the total `JouleTorq` units in one `RoboTorq` unit.
 pub const JOULE_TORQS_PER_ROBOTORQ: u128 = TOKEN_TORQS_PER_ROBOTORQ * JOULE_TORQS_PER_TOKEN_TORQ; // 3_600_000
 
 /// Normalize raw (robot, token, joule) balances into canonical bounded representation.
 ///
-/// This function enforces the TripleTorq invariants by rolling over excess
+/// This function enforces the `TripleTorq` invariants by rolling over excess
 /// sub-level balances to higher-level units:
-/// - Excess JouleTorq (> 3,600) rolls into TokenTorq
-/// - Excess TokenTorq (> 1,000) rolls into RoboTorq
+/// - Excess `JouleTorq` (> 3,600) rolls into `TokenTorq`
+/// - Excess `TokenTorq` (> 1,000) rolls into `RoboTorq`
 ///
 /// # Arguments
-/// * `robotorq` - Raw RoboTorq balance
-/// * `tokentorq` - Raw TokenTorq balance (may exceed 1,000)
-/// * `jouletorq` - Raw JouleTorq balance (may exceed 3,600)
+/// * `robotorq` - Raw `RoboTorq` balance
+/// * `tokentorq` - Raw `TokenTorq` balance (may exceed 1,000)
+/// * `jouletorq` - Raw `JouleTorq` balance (may exceed 3,600)
 ///
 /// # Returns
 /// Returns a tuple `(robotorq, tokentorq, jouletorq)` in canonical form where
 /// tokentorq < 1,000 and jouletorq < 3,600.
 #[allow(clippy::arithmetic_side_effects)]
+#[allow(clippy::cast_possible_truncation)]
 fn normalize(mut robotorq: u128, mut tokentorq: u128, mut jouletorq: u128) -> (u128, u16, u16) {
     // Roll excess JouleTorq into TokenTorq.
     if jouletorq >= JOULE_TORQS_PER_TOKEN_TORQ {
@@ -80,36 +81,37 @@ fn normalize(mut robotorq: u128, mut tokentorq: u128, mut jouletorq: u128) -> (u
     (robotorq, tokentorq as u16, jouletorq as u16)
 }
 
-/// Convert a canonical triple to total JouleTorq units.
+/// Convert a canonical triple to total `JouleTorq` units.
 ///
-/// This function converts normalized TripleTorq balances back to the total
-/// number of JouleTorq units they represent.
+/// This function converts normalized `TripleTorq` balances back to the total
+/// number of `JouleTorq` units they represent.
 ///
 /// # Arguments
-/// * `robotorq` - RoboTorq balance (canonical form)
-/// * `tokentorq` - TokenTorq balance (must be < 1,000)
-/// * `jouletorq` - JouleTorq balance (must be < 3,600)
+/// * `robotorq` - `RoboTorq` balance (canonical form)
+/// * `tokentorq` - `TokenTorq` balance (must be < 1,000)
+/// * `jouletorq` - `JouleTorq` balance (must be < 3,600)
 ///
 /// # Returns
-/// Returns the total JouleTorq units represented by the triple.
+/// Returns the total `JouleTorq` units represented by the triple.
 #[allow(clippy::arithmetic_side_effects)]
 fn to_smallest_units(robotorq: u128, tokentorq: u16, jouletorq: u16) -> u128 {
     robotorq * JOULE_TORQS_PER_ROBOTORQ
-        + (tokentorq as u128) * JOULE_TORQS_PER_TOKEN_TORQ
-        + (jouletorq as u128)
+        + u128::from(tokentorq) * JOULE_TORQS_PER_TOKEN_TORQ
+        + u128::from(jouletorq)
 }
 
-/// Decompose total JouleTorq units into canonical triple balances.
+/// Decompose total `JouleTorq` units into canonical triple balances.
 ///
-/// This function converts a total JouleTorq amount into the normalized
-/// TripleTorq representation with proper rollover.
+/// This function converts a total `JouleTorq` amount into the normalized
+/// `TripleTorq` representation with proper rollover.
 ///
 /// # Arguments
-/// * `total` - Total JouleTorq units to decompose
+/// * `total` - Total `JouleTorq` units to decompose
 ///
 /// # Returns
 /// Returns a tuple `(robotorq, tokentorq, jouletorq)` in canonical form.
 #[allow(clippy::arithmetic_side_effects)]
+#[allow(clippy::cast_possible_truncation)]
 fn from_smallest_units(total: u128) -> (u128, u16, u16) {
     let robotorq = total / JOULE_TORQS_PER_ROBOTORQ;
     let rem_after_robot = total % JOULE_TORQS_PER_ROBOTORQ;
@@ -118,33 +120,33 @@ fn from_smallest_units(total: u128) -> (u128, u16, u16) {
     (robotorq, tokentorq as u16, jouletorq as u16)
 }
 
-/// TripleTorq monetary account representing hierarchical currency balances.
+/// `TripleTorq` monetary account representing hierarchical currency balances.
 ///
-/// TripleTorq is the core monetary data structure in the RoboTorq Reserve System.
+/// `TripleTorq` is the core monetary data structure in the `RoboTorq` Reserve System.
 /// It maintains three levels of currency units with automatic normalization to
 /// prevent overflow and maintain economic invariants.
 ///
 /// # Economic Invariants
-/// - tokentorq_balance < 1,000 (must rollover to robotorq_balance)
-/// - jouletorq_balance < 3,600 (must rollover to tokentorq_balance)
+/// - `tokentorq_balance` < 1,000 (must rollover to `robotorq_balance`)
+/// - `jouletorq_balance` < 3,600 (must rollover to `tokentorq_balance`)
 /// - All balances are kept in canonical normalized form
 ///
 /// # Fields
-/// - `id`: Unique identifier for this TripleTorq account
-/// - `robotorq_balance`: Balance in RoboTorq units (unlimited)
-/// - `tokentorq_balance`: Balance in TokenTorq units (0-999)
-/// - `jouletorq_balance`: Balance in JouleTorq units (0-3599)
-/// - `schema_version`: Version of the TripleTorq schema for compatibility
+/// - `id`: Unique identifier for this `TripleTorq` account
+/// - `robotorq_balance`: Balance in `RoboTorq` units (unlimited)
+/// - `tokentorq_balance`: Balance in `TokenTorq` units (0-999)
+/// - `jouletorq_balance`: Balance in `JouleTorq` units (0-3599)
+/// - `schema_version`: Version of the `TripleTorq` schema for compatibility
 /// - `hash`: Cryptographic hash of the account state for integrity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TripleTorq {
-    /// Unique identifier for this TripleTorq account.
+    /// Unique identifier for this `TripleTorq` account.
     pub id: TripleTorqId,
-    /// Balance in RoboTorq units (unbounded 128-bit).
+    /// Balance in `RoboTorq` units (unbounded 128-bit).
     pub robotorq_balance: u128,
-    /// Balance in TokenTorq units (0–999; rolls into RoboTorq when exceeding bound).
+    /// Balance in `TokenTorq` units (0–999; rolls into `RoboTorq` when exceeding bound).
     pub tokentorq_balance: u16,
-    /// Balance in JouleTorq units (0–3599; rolls into TokenTorq when exceeding bound).
+    /// Balance in `JouleTorq` units (0–3599; rolls into `TokenTorq` when exceeding bound).
     pub jouletorq_balance: u16,
     /// Schema version for compatibility and migrations.
     pub schema_version: u32,
@@ -153,23 +155,23 @@ pub struct TripleTorq {
 }
 
 impl TripleTorq {
-    /// Creates a new TripleTorq with canonical balances.
+    /// Creates a new `TripleTorq` with canonical balances.
     ///
     /// This constructor validates that the provided balances are already in
     /// canonical form (no rollover needed). For balances that may need
     /// normalization, use `from_components_unchecked` instead.
     ///
     /// # Arguments
-    /// * `robotorq_balance` - RoboTorq balance
-    /// * `tokentorq_balance` - TokenTorq balance (must be < 1,000)
-    /// * `jouletorq_balance` - JouleTorq balance (must be < 3,600)
+    /// * `robotorq_balance` - `RoboTorq` balance
+    /// * `tokentorq_balance` - `TokenTorq` balance (must be < 1,000)
+    /// * `jouletorq_balance` - `JouleTorq` balance (must be < 3,600)
     ///
     /// # Returns
-    /// Returns a `Result` containing the new TripleTorq or a `TripleTorqError` if validation fails.
+    /// Returns a `Result` containing the new `TripleTorq` or a `TripleTorqError` if validation fails.
     ///
     /// # Errors
-    /// - `TripleTorqError::TokenTorqRolloverError` if tokentorq_balance >= 1,000
-    /// - `TripleTorqError::JouleTorqRolloverError` if jouletorq_balance >= 3,600
+    /// - `TripleTorqError::TokenTorqRolloverError` if `tokentorq_balance` >= 1,000
+    /// - `TripleTorqError::JouleTorqRolloverError` if `jouletorq_balance` >= 3,600
     ///
     /// # Examples
     /// ```rust
@@ -205,18 +207,18 @@ impl TripleTorq {
         })
     }
 
-    /// Creates a TripleTorq from raw components with automatic normalization.
+    /// Creates a `TripleTorq` from raw components with automatic normalization.
     ///
     /// This constructor accepts potentially overflowing balances and normalizes
     /// them into canonical form by rolling over excess sub-level balances.
     ///
     /// # Arguments
-    /// * `robot` - Raw RoboTorq balance
-    /// * `token` - Raw TokenTorq balance (may exceed 1,000)
-    /// * `joule` - Raw JouleTorq balance (may exceed 3,600)
+    /// * `robot` - Raw `RoboTorq` balance
+    /// * `token` - Raw `TokenTorq` balance (may exceed 1,000)
+    /// * `joule` - Raw `JouleTorq` balance (may exceed 3,600)
     ///
     /// # Returns
-    /// Returns a normalized TripleTorq in canonical form.
+    /// Returns a normalized `TripleTorq` in canonical form.
     ///
     /// # Examples
     /// ```rust
@@ -245,16 +247,16 @@ impl TripleTorq {
         }
     }
 
-    /// Creates a TripleTorq from total JouleTorq units.
+    /// Creates a `TripleTorq` from total `JouleTorq` units.
     ///
-    /// This constructor converts a total JouleTorq amount into the normalized
-    /// TripleTorq representation with proper rollover to higher-level units.
+    /// This constructor converts a total `JouleTorq` amount into the normalized
+    /// `TripleTorq` representation with proper rollover to higher-level units.
     ///
     /// # Arguments
-    /// * `total` - Total JouleTorq units to represent
+    /// * `total` - Total `JouleTorq` units to represent
     ///
     /// # Returns
-    /// Returns a normalized TripleTorq equivalent to the total JouleTorq units.
+    /// Returns a normalized `TripleTorq` equivalent to the total `JouleTorq` units.
     ///
     /// # Examples
     /// ```rust
@@ -283,13 +285,13 @@ impl TripleTorq {
         }
     }
 
-    /// Returns the total JouleTorq units represented by this TripleTorq.
+    /// Returns the total `JouleTorq` units represented by this `TripleTorq`.
     ///
     /// This method converts the hierarchical balances back to the total
-    /// number of JouleTorq units they represent.
+    /// number of `JouleTorq` units they represent.
     ///
     /// # Returns
-    /// The total JouleTorq units in this account.
+    /// The total `JouleTorq` units in this account.
     ///
     /// # Examples
     /// ```rust
@@ -299,6 +301,7 @@ impl TripleTorq {
     /// // 1 RoboTorq + 500 TokenTorq + 1800 JouleTorq
     /// assert_eq!(total, 3_600_000 + 500 * 3_600 + 1800);
     /// ```
+    #[must_use]
     pub fn total_smallest_units(&self) -> u128 {
         to_smallest_units(
             self.robotorq_balance,
@@ -307,16 +310,16 @@ impl TripleTorq {
         )
     }
 
-    /// Adds another TripleTorq balance, returning the normalized sum.
+    /// Adds another `TripleTorq` balance, returning the normalized sum.
     ///
-    /// This method adds two TripleTorq balances and automatically normalizes
+    /// This method adds two `TripleTorq` balances and automatically normalizes
     /// the result to maintain canonical form.
     ///
     /// # Arguments
-    /// * `other` - The TripleTorq balance to add
+    /// * `other` - The `TripleTorq` balance to add
     ///
     /// # Returns
-    /// A new normalized TripleTorq representing the sum.
+    /// A new normalized `TripleTorq` representing the sum.
     ///
     /// # Examples
     /// ```rust
@@ -332,21 +335,21 @@ impl TripleTorq {
     pub fn add(&self, other: &TripleTorq) -> TripleTorq {
         TripleTorq::from_components_unchecked(
             self.robotorq_balance + other.robotorq_balance,
-            self.tokentorq_balance as u128 + other.tokentorq_balance as u128,
-            self.jouletorq_balance as u128 + other.jouletorq_balance as u128,
+            u128::from(self.tokentorq_balance) + u128::from(other.tokentorq_balance),
+            u128::from(self.jouletorq_balance) + u128::from(other.jouletorq_balance),
         )
     }
 
-    /// Adds JouleTorq units directly, returning the normalized result.
+    /// Adds `JouleTorq` units directly, returning the normalized result.
     ///
-    /// This method adds a raw JouleTorq amount and automatically normalizes
+    /// This method adds a raw `JouleTorq` amount and automatically normalizes
     /// the result across all balance levels.
     ///
     /// # Arguments
-    /// * `add_units` - JouleTorq units to add
+    /// * `add_units` - `JouleTorq` units to add
     ///
     /// # Returns
-    /// A new normalized TripleTorq with the added units.
+    /// A new normalized `TripleTorq` with the added units.
     ///
     /// # Examples
     /// ```rust
@@ -363,14 +366,14 @@ impl TripleTorq {
         TripleTorq::from_smallest_units(self.total_smallest_units() + add_units)
     }
 
-    /// Subtracts another TripleTorq balance with borrowing across levels.
+    /// Subtracts another `TripleTorq` balance with borrowing across levels.
     ///
-    /// This method subtracts one TripleTorq from another, borrowing from
+    /// This method subtracts one `TripleTorq` from another, borrowing from
     /// higher-level balances when needed. Returns an error if the result
     /// would be negative.
     ///
     /// # Arguments
-    /// * `other` - The TripleTorq balance to subtract
+    /// * `other` - The `TripleTorq` balance to subtract
     ///
     /// # Returns
     /// Returns a `Result` containing the difference or a `TripleTorqError` if the result would be negative.
@@ -405,7 +408,7 @@ impl TripleTorq {
     /// * `factor` - The scalar multiplication factor
     ///
     /// # Returns
-    /// A new normalized TripleTorq representing the product.
+    /// A new normalized `TripleTorq` representing the product.
     ///
     /// # Examples
     /// ```rust
@@ -424,7 +427,7 @@ impl TripleTorq {
     /// Divides the balance by a scalar divisor using floor division.
     ///
     /// This method divides all balance levels by the divisor using floor
-    /// division on the total JouleTorq units.
+    /// division on the total `JouleTorq` units.
     ///
     /// # Arguments
     /// * `divisor` - The scalar division divisor (must not be zero)
@@ -452,16 +455,16 @@ impl TripleTorq {
         ))
     }
 
-    /// Returns the absolute difference between two TripleTorq balances.
+    /// Returns the absolute difference between two `TripleTorq` balances.
     ///
     /// This method calculates the absolute difference (always non-negative)
-    /// between two balances by comparing their total JouleTorq units.
+    /// between two balances by comparing their total `JouleTorq` units.
     ///
     /// # Arguments
-    /// * `other` - The TripleTorq balance to compare against
+    /// * `other` - The `TripleTorq` balance to compare against
     ///
     /// # Returns
-    /// A new TripleTorq representing the absolute difference.
+    /// A new `TripleTorq` representing the absolute difference.
     ///
     /// # Examples
     /// ```rust
@@ -480,13 +483,13 @@ impl TripleTorq {
         TripleTorq::from_smallest_units(diff)
     }
 
-    /// Compares two TripleTorq balances by their total value.
+    /// Compares two `TripleTorq` balances by their total value.
     ///
-    /// This method compares balances by converting both to total JouleTorq
+    /// This method compares balances by converting both to total `JouleTorq`
     /// units and comparing those values.
     ///
     /// # Arguments
-    /// * `other` - The TripleTorq balance to compare against
+    /// * `other` - The `TripleTorq` balance to compare against
     ///
     /// # Returns
     /// An `Ordering` indicating the relative values of the balances.
@@ -499,15 +502,16 @@ impl TripleTorq {
     /// let b = TripleTorq::new(0, 2, 0).unwrap();
     /// assert_eq!(a.compare(&b), Ordering::Less);
     /// ```
+    #[must_use]
     pub fn compare(&self, other: &TripleTorq) -> Ordering {
         self.total_smallest_units()
             .cmp(&other.total_smallest_units())
     }
 
-    /// Returns the minimum of two TripleTorq balances by total value.
+    /// Returns the minimum of two `TripleTorq` balances by total value.
     ///
     /// # Arguments
-    /// * `other` - The TripleTorq balance to compare against
+    /// * `other` - The `TripleTorq` balance to compare against
     ///
     /// # Returns
     /// A clone of the smaller balance.
@@ -529,10 +533,10 @@ impl TripleTorq {
         }
     }
 
-    /// Returns the maximum of two TripleTorq balances by total value.
+    /// Returns the maximum of two `TripleTorq` balances by total value.
     ///
     /// # Arguments
-    /// * `other` - The TripleTorq balance to compare against
+    /// * `other` - The `TripleTorq` balance to compare against
     ///
     /// # Returns
     /// A clone of the larger balance.

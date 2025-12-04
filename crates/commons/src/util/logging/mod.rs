@@ -1,4 +1,4 @@
-//! Logging utilities for the RoboTorq Reserve System.
+//! Logging utilities for the `RoboTorq` Reserve System.
 //!
 //! This module provides centralized logging configuration using the `tracing` crate.
 //! It supports both human-readable output for development and JSON output for production
@@ -92,6 +92,7 @@ use tracing_subscriber::{EnvFilter, fmt};
 /// and optional file rotation. It's idempotent — calling it multiple times
 /// is safe and subsequent calls are no-ops.
 #[allow(unused_variables)]
+#[allow(clippy::needless_pass_by_value)]
 pub fn init_prod_tracing(
     json: bool,
     default_level: &str,
@@ -167,7 +168,6 @@ pub fn init_prod_tracing(
                                 let init_res = registry.with(otel_layer).try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
                                 if let Err(e) = init_res {
                                     result = Err(e);
-                                    return;
                                 }
                                 tracing::debug!("tracing subscriber initialized with OTLP exporter");
                             }
@@ -183,7 +183,6 @@ pub fn init_prod_tracing(
                         let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
                         if let Err(e) = init_res {
                             result = Err(e);
-                            return;
                         }
                         tracing::debug!("tracing subscriber initialized without OTLP exporter");
                     }
@@ -240,7 +239,6 @@ pub fn init_prod_tracing(
                         let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
                         if let Err(e) = init_res {
                             result = Err(e);
-                            return;
                         }
                         tracing::debug!("tracing subscriber initialized without OTLP exporter");
                     }
@@ -316,7 +314,6 @@ pub fn init_prod_tracing(
                         let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
                         if let Err(e) = init_res {
                             result = Err(e);
-                            return;
                         }
                         tracing::debug!("tracing subscriber initialized without OTLP exporter");
                     }
@@ -369,7 +366,6 @@ pub fn init_prod_tracing(
                         let init_res = registry.try_init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
                         if let Err(e) = init_res {
                             result = Err(e);
-                            return;
                         }
                     }
                 } else {

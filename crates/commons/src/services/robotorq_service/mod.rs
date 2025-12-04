@@ -6,6 +6,7 @@
 #![allow(async_fn_in_trait)]
 use crate::util::config::RoboTorqConfig;
 use crate::util::error::ServiceError;
+use crate::util::persistence::PersistenceDriver;
 use axum::{Extension, Router, routing::get};
 use std::future::Future;
 use std::sync::Arc;
@@ -17,7 +18,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
 
-/// Marker trait indicating a type participates in the RoboTorq service lifecycle.
+/// Marker trait indicating a type participates in the `RoboTorq` service lifecycle.
 ///
 /// Implementors typically also implement the `RoboTorqService` facade trait which
 /// provides default async lifecycle hooks (`initialize`, `start`, `stop`, `shutdown`).
@@ -72,7 +73,7 @@ pub trait MetricsContributor {
 }
 
 // Update RoboTorqService to compose the smaller traits
-/// RoboTorq facade trait combining lifecycle, health, and metrics behaviors with defaults.
+/// `RoboTorq` facade trait combining lifecycle, health, and metrics behaviors with defaults.
 ///
 /// Implement this trait for each service entry point. Override only what you need:
 /// - `initialize` to allocate dependencies (DB pools, NATS clients, etc.)
@@ -108,6 +109,13 @@ pub trait RoboTorqService: ServiceLifecycle + HealthContributor + MetricsContrib
     async fn shutdown(&self) -> Result<(), ServiceError> {
         Ok(())
     }
+
+    /// Optional hook for wiring a persistence driver into the service implementation.
+    ///
+    /// Commons will attempt to construct a configured `PersistenceDriver` during
+    /// initialization and call this method before invoking `initialize`. Default
+    /// implementation is a no-op so existing services are unaffected.
+    fn set_persistence_driver(&mut self, _drv: Option<std::sync::Arc<dyn PersistenceDriver>>) {}
 }
 
 // Note: No blanket impl for `RoboTorqService` to avoid conflicts with explicit impls in services.
@@ -117,7 +125,7 @@ pub trait RoboTorqService: ServiceLifecycle + HealthContributor + MetricsContrib
 
 /// Lightweight Axum server exposing standardized endpoints for a service.
 ///
-/// The HttpServer automatically creates HTTP endpoints for any service that
+/// The `HttpServer` automatically creates HTTP endpoints for any service that
 /// implements `robotorq_service`. It provides standard `/health` and `/metrics`
 /// endpoints, CORS support, and proper error handling.
 ///
@@ -159,6 +167,8 @@ pub struct HttpServer<S: RoboTorqService + Send + Sync + 'static> {
     config: HttpServerConfig,
     /// Readiness flag indicating whether the server is ready to serve traffic.
     ready: Arc<AtomicBool>,
+    /// Optional persistence driver instance created during initialization.
+    persistence: Option<std::sync::Arc<dyn crate::util::persistence::PersistenceDriver>>,
     // Optional metrics registry for middleware; can be None in minimal setups
     // (Will be extended in Phase 1 wiring.)
 }
@@ -176,7 +186,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
     ///
     /// # Returns
     ///
-    /// A new HttpServer instance ready to be started.
+    /// A new `HttpServer` instance ready to be started.
     ///
     /// # Examples
     ///
@@ -196,7 +206,23 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
             service,
             config,
             ready: Arc::new(AtomicBool::new(false)),
+            persistence: None,
         }
+    }
+
+    /// Test helper: attach a persistence driver to the server before starting.
+    ///
+    /// This is intended for tests and examples that need to ensure the readyz
+    /// handler consults a concrete driver. It allows constructing the driver
+    /// in the test harness and supplying it to the server prior to `start`.
+    #[cfg(feature = "test_helpers")]
+    #[must_use]
+    pub fn with_persistence_driver(
+        mut self,
+        drv: std::sync::Arc<dyn crate::util::persistence::PersistenceDriver>,
+    ) -> Self {
+        self.persistence = Some(drv);
+        self
     }
 
     /// Bind, route, and serve until shutdown.
@@ -213,7 +239,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
     ///
     /// # Arguments
     ///
-    /// * `config` - The system-wide RoboTorq configuration for service initialization
+    /// * `config` - The system-wide `RoboTorq` configuration for service initialization
     ///
     /// # Returns
     ///
@@ -289,6 +315,23 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
             tracing::info!(service=%labels.service, component=%labels.component, version=%labels.version, "metrics registry attached");
             tracing::debug!(service=%labels.service, component=%labels.component, "metrics context created and attached to service");
             service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
+            // Attempt to construct and inject a configured persistence driver before
+            // invoking the service initialize hook. Failure to create a driver is
+            // non-fatal and simply results in `None` being passed.
+            match crate::util::persistence::make_driver(&config.persistence).await {
+                Ok(boxed) => {
+                    let arc: std::sync::Arc<dyn crate::util::persistence::PersistenceDriver> =
+                        std::sync::Arc::from(boxed);
+                    // store on the server and on the service so both can access it
+                    self.persistence = Some(std::sync::Arc::clone(&arc));
+                    service.set_persistence_driver(Some(arc));
+                }
+                Err(err) => {
+                    tracing::warn!(error = ?err, "failed to create persistence driver; continuing without persistence");
+                    self.persistence = None;
+                    service.set_persistence_driver(None);
+                }
+            }
             if let Err(err) = service.initialize(config).await {
                 tracing::warn!(error = ?err, "service initialize failed, continuing");
             }
@@ -302,7 +345,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
             service
                 .start()
                 .await
-                .map_err(|e| ServiceError::Other(format!("service.start failed: {:?}", e)))?;
+                .map_err(|e| ServiceError::Other(format!("service.start failed: {e:?}")))?;
             tracing::info!(duration_ms=%start_ts.elapsed().as_millis(), "service.start() completed");
         }
 
@@ -323,7 +366,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
         // Initialize with autoloaded config
         {
             let mut service = self.service.lock().await;
-            match load_and_initialize_service(&mut *service).await {
+            let cfg = match load_and_initialize_service(&mut *service).await {
                 Ok(cfg) => {
                     let labels = if let Some(provider) = &self.config.label_provider {
                         let l = provider.labels();
@@ -352,6 +395,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
                         labels,
                     );
                     service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
+                    cfg
                 }
                 Err(err) => {
                     tracing::warn!(error = ?err, "service initialize failed, continuing");
@@ -391,6 +435,22 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
                         labels,
                     );
                     service.set_metrics_context(Some(std::sync::Arc::new(ctx)));
+                    cfg
+                }
+            };
+            // Ensure persistence driver is created and attached to server when using autoload init
+            match crate::util::persistence::make_driver(&cfg.persistence).await {
+                Ok(boxed) => {
+                    let arc: std::sync::Arc<dyn crate::util::persistence::PersistenceDriver> =
+                        std::sync::Arc::from(boxed);
+                    self.persistence = Some(std::sync::Arc::clone(&arc));
+                    // also tell the service about it
+                    let mut svc = self.service.lock().await;
+                    svc.set_persistence_driver(Some(arc));
+                }
+                Err(err) => {
+                    tracing::warn!(error = ?err, "failed to create persistence driver during autoload init; continuing without persistence");
+                    self.persistence = None;
                 }
             }
         }
@@ -403,7 +463,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
             service
                 .start()
                 .await
-                .map_err(|e| ServiceError::Other(format!("service.start failed: {:?}", e)))?;
+                .map_err(|e| ServiceError::Other(format!("service.start failed: {e:?}")))?;
             tracing::info!(duration_ms=%start_ts.elapsed().as_millis(), "service.start() completed (autoload)");
         }
 
@@ -434,11 +494,18 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
 
         // Build the application with routes
         let ready_flag = Arc::clone(&self.ready);
+        // Capture the optional persistence driver for the readyz handler; clone the Option and inner Arc.
+        let persistence_for_route = self.persistence.clone();
         let mut app = Router::new()
             .route("/healthz", get(health_handler))
             .route(
                 "/readyz",
-                get(move || readyz::readyz_handler(Arc::clone(&ready_flag))),
+                get(move || async move {
+                    readyz::readyz_handler_with_driver(
+                        Arc::clone(&ready_flag),
+                        persistence_for_route.clone(),
+                    )
+                }),
             )
             .route(self.config.metrics.0.as_str(), get(metrics_handler::<S>))
             .with_state(Arc::clone(&self.service));
@@ -480,7 +547,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
         // Create listener
         let listener = TcpListener::bind(&addr)
             .await
-            .map_err(|e| ServiceError::Other(format!("listener bind failed: {}", e)))?;
+            .map_err(|e| ServiceError::Other(format!("listener bind failed: {e}")))?;
         tracing::info!(addr=%addr, "listener created and bound");
         // If ephemeral port (0) requested, capture the actual bound port and update config for clarity.
         if self.config.service.port == 0 {
@@ -513,7 +580,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal)
             .await
-            .map_err(|e| ServiceError::Other(format!("http serve failed: {}", e)))?;
+            .map_err(|e| ServiceError::Other(format!("http serve failed: {e}")))?;
         tracing::info!(duration_ms=%serve_start.elapsed().as_millis(), "http serve completed/shutdown signal received");
 
         // Invoke graceful cleanup hooks after server stops (Ctrl+C or error)
@@ -527,6 +594,13 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
             if let Err(err) = service.shutdown().await {
                 tracing::warn!(error = ?err, "service shutdown hook failed");
             }
+        }
+
+        // Also call persistence driver shutdown if present. This is a best-effort
+        // cleanup for drivers that hold background resources.
+        if let Some(drv) = &self.persistence {
+            tracing::info!("calling persistence driver.shutdown()");
+            drv.shutdown();
         }
 
         // After shutdown, mark not ready
@@ -587,7 +661,7 @@ pub struct HttpService {
 }
 
 impl HttpService {
-    /// Creates a new HttpService with the given address and port.
+    /// Creates a new `HttpService` with the given address and port.
     ///
     /// This constructor accepts any type that can be converted into a String
     /// for the address, allowing convenient creation from string literals,
@@ -600,7 +674,7 @@ impl HttpService {
     ///
     /// # Returns
     ///
-    /// A new HttpService instance with the specified configuration.
+    /// A new `HttpService` instance with the specified configuration.
     ///
     /// # Examples
     ///
@@ -659,7 +733,7 @@ impl HttpService {
 pub struct HttpEndpoint(pub String);
 
 impl HttpEndpoint {
-    /// Creates a new HttpEndpoint with the given path.
+    /// Creates a new `HttpEndpoint` with the given path.
     ///
     /// This constructor accepts any type that can be converted into a String,
     /// allowing convenient creation from string literals, String instances,
@@ -671,7 +745,7 @@ impl HttpEndpoint {
     ///
     /// # Returns
     ///
-    /// A new HttpEndpoint instance with the specified path.
+    /// A new `HttpEndpoint` instance with the specified path.
     ///
     /// # Examples
     ///
@@ -775,7 +849,7 @@ impl std::fmt::Debug for HttpServerConfig {
 }
 
 impl HttpServerConfig {
-    /// Creates a new HttpServerConfig with the specified service and endpoints.
+    /// Creates a new `HttpServerConfig` with the specified service and endpoints.
     ///
     /// This constructor allows full customization of all HTTP server parameters.
     ///
@@ -787,7 +861,7 @@ impl HttpServerConfig {
     ///
     /// # Returns
     ///
-    /// A new HttpServerConfig instance with the specified configuration.
+    /// A new `HttpServerConfig` instance with the specified configuration.
     ///
     /// # Examples
     ///
@@ -821,7 +895,7 @@ impl HttpServerConfig {
 
     /// Convenience for local development defaults.
     ///
-    /// Creates an HttpServerConfig with sensible defaults for local development:
+    /// Creates an `HttpServerConfig` with sensible defaults for local development:
     /// - Address: "127.0.0.1" (localhost only)
     /// - Health endpoint: "/health"
     /// - Metrics endpoint: "/metrics"
@@ -833,7 +907,7 @@ impl HttpServerConfig {
     ///
     /// # Returns
     ///
-    /// An HttpServerConfig instance configured for local development.
+    /// An `HttpServerConfig` instance configured for local development.
     ///
     /// # Examples
     ///
@@ -870,6 +944,7 @@ impl HttpServerConfig {
     }
 
     /// Enable HTTP observability by providing a metrics registry used by middleware and /metrics.
+    #[must_use]
     pub fn with_metrics_registry(
         mut self,
         registry: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry>,
@@ -879,6 +954,7 @@ impl HttpServerConfig {
     }
 
     /// Provide a metrics label provider to decouple label derivation.
+    #[must_use]
     pub fn with_label_provider(
         mut self,
         provider: std::sync::Arc<dyn crate::services::robotorq_service::MetricsLabelProvider>,
@@ -929,42 +1005,49 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServerBuilder<S> {
     }
 
     /// Override port while keeping existing address.
+    #[must_use]
     pub fn with_port(mut self, port: u16) -> Self {
         self.config.service.port = port;
         tracing::debug!(port = port, "HttpServerBuilder: with_port set");
         self
     }
     /// Override bind address.
+    #[must_use]
     pub fn with_address<Saddr: Into<String>>(mut self, address: Saddr) -> Self {
         self.config.service.address = address.into();
         tracing::debug!(address = %self.config.service.address, "HttpServerBuilder: with_address set");
         self
     }
     /// Set request timeout seconds.
+    #[must_use]
     pub fn with_timeout(mut self, secs: u64) -> Self {
         self.config.timeout_seconds = Some(secs);
         tracing::debug!(timeout_secs = secs, "HttpServerBuilder: with_timeout set");
         self
     }
     /// Remove request timeout.
+    #[must_use]
     pub fn without_timeout(mut self) -> Self {
         self.config.timeout_seconds = None;
         tracing::debug!("HttpServerBuilder: without_timeout called");
         self
     }
     /// Set maximum body size in bytes.
+    #[must_use]
     pub fn with_body_limit(mut self, bytes: usize) -> Self {
         self.config.max_body_size_bytes = Some(bytes);
         tracing::debug!(body_limit = bytes, "HttpServerBuilder: with_body_limit set");
         self
     }
     /// Disable body size limit.
+    #[must_use]
     pub fn without_body_limit(mut self) -> Self {
         self.config.max_body_size_bytes = None;
         tracing::debug!("HttpServerBuilder: without_body_limit called");
         self
     }
     /// Configure permissive CORS.
+    #[must_use]
     pub fn with_cors_permissive(mut self, permissive: bool) -> Self {
         self.config.cors_permissive = permissive;
         tracing::debug!(
@@ -974,6 +1057,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServerBuilder<S> {
         self
     }
     /// Attach an existing metrics registry.
+    #[must_use]
     pub fn with_registry(
         mut self,
         registry: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry>,
@@ -983,6 +1067,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServerBuilder<S> {
         self
     }
     /// Construct and attach a Prometheus registry with base labels.
+    #[must_use]
     pub fn with_manual_registry(mut self, service: &str, component: &str, version: &str) -> Self {
         let reg: std::sync::Arc<dyn crate::util::metrics::MetricsRegistry> = std::sync::Arc::new(
             crate::util::metrics::PrometheusRegistry::new(service, component, version),
@@ -992,6 +1077,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServerBuilder<S> {
         self
     }
     /// Provide a static label set independent of `RoboTorqConfig`.
+    #[must_use]
     pub fn with_static_labels(
         mut self,
         service: &str,
@@ -1016,6 +1102,7 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServerBuilder<S> {
         self
     }
     /// Finalize builder returning an `HttpServer` (not started).
+    #[must_use]
     pub fn build(self) -> HttpServer<S> {
         HttpServer::new(self.service, self.config)
     }

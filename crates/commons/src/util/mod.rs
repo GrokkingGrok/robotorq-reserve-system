@@ -7,6 +7,7 @@ pub mod error;
 pub mod hashing;
 pub mod logging;
 pub mod metrics;
+pub mod persistence;
 pub mod schema;
 pub mod timekeeping;
 pub mod tracing;

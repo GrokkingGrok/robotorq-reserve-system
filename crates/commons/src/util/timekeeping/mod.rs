@@ -37,6 +37,7 @@ impl SystemTimeProvider {
     /// let t2 = tp.now();
     /// assert!(t2 >= t1);
     /// ```
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -47,7 +48,7 @@ impl TimeProvider for SystemTimeProvider {
         SystemTime::now()
     }
     async fn sleep(&self, duration: Duration) {
-        tokio::time::sleep(duration).await
+        tokio::time::sleep(duration).await;
     }
 }
 
@@ -67,6 +68,7 @@ impl TimeProvider for SystemTimeProvider {
 /// let current_time = now();
 /// // Use the current time for timestamping operations
 /// ```
+#[must_use]
 pub fn now() -> SystemTime {
     SystemTime::now()
 }
@@ -282,11 +284,11 @@ pub async fn sleep(
 /// In production builds without simulation support, this function
 /// simply sleeps for the specified duration, ignoring any simulation config.
 pub async fn sleep(
-    _duration: std::time::Duration,
+    duration: std::time::Duration,
     _config: &crate::util::config::simulation::Simulation,
 ) {
     // In production builds, ignore simulation config and just sleep normally
-    tokio::time::sleep(_duration).await;
+    tokio::time::sleep(duration).await;
 }
 
 #[cfg(test)]

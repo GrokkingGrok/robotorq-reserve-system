@@ -1,6 +1,6 @@
 //! Network Port Configuration
 //!
-//! This module defines network port assignments for all RoboTorq Reserve System services.
+//! This module defines network port assignments for all `RoboTorq` Reserve System services.
 //! It provides a centralized configuration for service endpoints including the robot gateway,
 //! metrics collection, and monitoring dashboards.
 //!
@@ -21,7 +21,7 @@
 //! # Configuration Sources
 //!
 //! Port configuration can be loaded from:
-//! - Environment variables (using uppercase names with ROBOT_GATEWAY_PORT, etc.)
+//! - Environment variables (using uppercase names with `ROBOT_GATEWAY_PORT`, etc.)
 //! - TOML configuration files
 //! - Default values (fallback when configuration is missing)
 //!
@@ -35,10 +35,10 @@
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-/// Network port configuration for all RoboTorq services.
+/// Network port configuration for all `RoboTorq` services.
 ///
 /// This struct defines the port assignments for all network services in the
-/// RoboTorq system. Ports can be configured via environment variables or
+/// `RoboTorq` system. Ports can be configured via environment variables or
 /// configuration files, with sensible defaults provided.
 ///
 /// # Environment Variables
@@ -110,8 +110,8 @@ pub fn load_ports_config_from_default() -> PortsConfig {
     let rel = "crates/commons/src/util/config/parameters/ports.toml";
     let p = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let path = p.join(rel);
-    match std::fs::read_to_string(&path) {
-        Ok(s) => match toml::from_str::<PortsConfig>(&s) {
+    if let Ok(s) = std::fs::read_to_string(&path) {
+        match toml::from_str::<PortsConfig>(&s) {
             Ok(cfg) => {
                 info!(component = "commons.config", path = %path.display(), "loaded ports config");
                 cfg
@@ -124,15 +124,14 @@ pub fn load_ports_config_from_default() -> PortsConfig {
                     grafana_port: default_grafana_port(),
                 }
             }
-        },
-        Err(_) => {
-            // Silent fallback with a small info: file missing is acceptable
-            info!(component = "commons.config", path = %path.display(), "ports config not found; using defaults");
-            PortsConfig {
-                robot_gateway_port: default_robot_gateway_port(),
-                metrics_port: default_metrics_port(),
-                grafana_port: default_grafana_port(),
-            }
+        }
+    } else {
+        // Silent fallback with a small info: file missing is acceptable
+        info!(component = "commons.config", path = %path.display(), "ports config not found; using defaults");
+        PortsConfig {
+            robot_gateway_port: default_robot_gateway_port(),
+            metrics_port: default_metrics_port(),
+            grafana_port: default_grafana_port(),
         }
     }
 }

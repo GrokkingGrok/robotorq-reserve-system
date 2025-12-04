@@ -1,4 +1,4 @@
-//! Persistence layer configuration for RoboTorq services.
+//! Persistence layer configuration for `RoboTorq` services.
 //!
 //! This module defines configuration options for database connections,
 //! connection pooling, and storage settings for the unified persistence strategy.
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Persistence layer configuration.
 ///
-/// Configures database connections and storage settings. The RoboTorq system
+/// Configures database connections and storage settings. The `RoboTorq` system
 /// uses a unified persistence strategy across all services to ensure consistency
 /// and simplify operational management.
 ///
@@ -59,7 +59,7 @@ pub struct PersistenceConfig {
     ///
     /// Connection URL or DSN for the database. Format depends on the backend:
     /// - Postgres: "postgresql://user:pass@host:port/database"
-    /// - SQLite: "sqlite://path/to/database.db" or ":memory:" for in-memory
+    /// - `SQLite`: "<sqlite://path/to/database.db>" or ":memory:" for in-memory
     /// - Other: Backend-specific connection string
     #[serde(default = "default_database_url")]
     pub database_url: String,
@@ -156,13 +156,13 @@ impl Default for PersistenceConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum PersistenceBackend {
-    /// PostgreSQL database.
+    /// `PostgreSQL` database.
     ///
     /// Strong consistency, ACID transactions, mature tooling.
     /// Good for production deployments requiring strong consistency.
     Postgres,
 
-    /// SQLite database.
+    /// `SQLite` database.
     ///
     /// Embedded, file-based storage. Simple operations, good for development
     /// and small-scale deployments. Limited concurrency.
@@ -193,7 +193,7 @@ pub struct BackendSpecificConfig {
 
 /// PostgreSQL-specific configuration.
 ///
-/// Contains settings specific to PostgreSQL database connections and behavior.
+/// Contains settings specific to `PostgreSQL` database connections and behavior.
 ///
 /// # Examples
 ///
@@ -216,13 +216,13 @@ pub struct BackendSpecificConfig {
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PostgresConfig {
-    /// SSL mode for PostgreSQL connections.
+    /// SSL mode for `PostgreSQL` connections.
     ///
     /// Controls SSL/TLS requirements for database connections.
     #[serde(default)]
     pub ssl_mode: PostgresSslMode,
 
-    /// Application name sent to PostgreSQL.
+    /// Application name sent to `PostgreSQL`.
     ///
     /// Helps identify connections in database logs and monitoring.
     #[serde(default = "default_postgres_application_name")]
@@ -230,7 +230,7 @@ pub struct PostgresConfig {
 
     /// Schema search path.
     ///
-    /// PostgreSQL schemas to search for tables and other objects.
+    /// `PostgreSQL` schemas to search for tables and other objects.
     #[serde(default = "default_postgres_search_path")]
     pub search_path: String,
 }
@@ -245,9 +245,9 @@ impl Default for PostgresConfig {
     }
 }
 
-/// PostgreSQL SSL modes.
+/// `PostgreSQL` SSL modes.
 ///
-/// Controls SSL/TLS requirements for PostgreSQL database connections.
+/// Controls SSL/TLS requirements for `PostgreSQL` database connections.
 ///
 /// # Examples
 ///
@@ -282,7 +282,7 @@ pub enum PostgresSslMode {
 
 /// SQLite-specific configuration.
 ///
-/// Contains settings specific to SQLite database behavior and performance tuning.
+/// Contains settings specific to `SQLite` database behavior and performance tuning.
 ///
 /// # Examples
 ///
@@ -311,28 +311,28 @@ pub enum PostgresSslMode {
 pub struct SqliteConfig {
     /// Foreign key enforcement.
     ///
-    /// Whether to enforce foreign key constraints in SQLite.
+    /// Whether to enforce foreign key constraints in `SQLite`.
     /// Should generally be enabled for data integrity.
     #[serde(default = "default_sqlite_foreign_keys")]
     pub foreign_keys: bool,
 
     /// Journal mode.
     ///
-    /// Controls how SQLite handles the rollback journal.
+    /// Controls how `SQLite` handles the rollback journal.
     /// WAL mode provides better concurrency.
     #[serde(default)]
     pub journal_mode: SqliteJournalMode,
 
     /// Synchronous mode.
     ///
-    /// Controls how aggressively SQLite syncs to disk.
+    /// Controls how aggressively `SQLite` syncs to disk.
     /// FULL provides strongest durability guarantees.
     #[serde(default)]
     pub synchronous: SqliteSynchronousMode,
 
     /// Cache size in kilobytes.
     ///
-    /// Memory cache size for SQLite. Negative values mean pages,
+    /// Memory cache size for `SQLite`. Negative values mean pages,
     /// positive values mean kilobytes.
     #[serde(default = "default_sqlite_cache_size_kb")]
     pub cache_size_kb: i64,
@@ -356,9 +356,9 @@ impl Default for SqliteConfig {
     }
 }
 
-/// SQLite journal modes.
+/// `SQLite` journal modes.
 ///
-/// Controls how SQLite handles the rollback journal, affecting concurrency and performance.
+/// Controls how `SQLite` handles the rollback journal, affecting concurrency and performance.
 ///
 /// # Examples
 ///
@@ -391,9 +391,9 @@ pub enum SqliteJournalMode {
     Off,
 }
 
-/// SQLite synchronous modes.
+/// `SQLite` synchronous modes.
 ///
-/// Controls how aggressively SQLite syncs data to disk, trading durability for performance.
+/// Controls how aggressively `SQLite` syncs data to disk, trading durability for performance.
 ///
 /// # Examples
 ///
@@ -426,7 +426,7 @@ pub enum SqliteSynchronousMode {
 /// Returns the default database URL.
 ///
 /// Returns `"sqlite://robotorq.db"` as a safe default for development.
-/// This creates a local SQLite database file.
+/// This creates a local `SQLite` database file.
 fn default_database_url() -> String {
     "sqlite://robotorq.db".to_string()
 }
@@ -459,6 +459,7 @@ fn default_connect_timeout_seconds() -> u64 {
 ///
 /// Returns `300` seconds (5 minutes) to close idle connections and
 /// manage connection pool size.
+#[allow(clippy::unnecessary_wraps)]
 fn default_idle_timeout_seconds() -> Option<u64> {
     Some(300)
 } // 5 minutes
@@ -467,6 +468,7 @@ fn default_idle_timeout_seconds() -> Option<u64> {
 ///
 /// Returns `3600` seconds (1 hour) to force connection renewal and
 /// prevent issues with stale connections.
+#[allow(clippy::unnecessary_wraps)]
 fn default_max_lifetime_seconds() -> Option<u64> {
     Some(3600)
 } // 1 hour
@@ -487,7 +489,7 @@ fn default_migration_table() -> String {
     "_robotorq_migrations".to_string()
 }
 
-/// Returns the default PostgreSQL application name.
+/// Returns the default `PostgreSQL` application name.
 ///
 /// Returns `"robotorq"` to identify connections in database logs
 /// and monitoring tools.
@@ -495,15 +497,15 @@ fn default_postgres_application_name() -> String {
     "robotorq".to_string()
 }
 
-/// Returns the default PostgreSQL schema search path.
+/// Returns the default `PostgreSQL` schema search path.
 ///
 /// Returns `"public"` as the default schema search path for
-/// PostgreSQL database objects.
+/// `PostgreSQL` database objects.
 fn default_postgres_search_path() -> String {
     "public".to_string()
 }
 
-/// Returns the default SQLite foreign key enforcement setting.
+/// Returns the default `SQLite` foreign key enforcement setting.
 ///
 /// Returns `true` to enable foreign key constraints for data integrity.
 /// Should generally remain enabled in production.
@@ -511,15 +513,15 @@ fn default_sqlite_foreign_keys() -> bool {
     true
 }
 
-/// Returns the default SQLite cache size.
+/// Returns the default `SQLite` cache size.
 ///
 /// Returns `-2000` (2MB in pages) as a reasonable cache size for
-/// most SQLite workloads. Negative values indicate page count.
+/// most `SQLite` workloads. Negative values indicate page count.
 fn default_sqlite_cache_size_kb() -> i64 {
     -2000
 } // 2MB in pages
 
-/// Returns the default SQLite busy timeout.
+/// Returns the default `SQLite` busy timeout.
 ///
 /// Returns `5000` milliseconds (5 seconds) to wait when the database
 /// is locked by another connection before failing the operation.

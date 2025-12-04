@@ -45,6 +45,7 @@ pub struct LabelSet {
 /// let service = derive_service_label(&cfg);
 /// assert!(!service.is_empty());
 /// ```
+#[must_use]
 pub fn derive_service_label(cfg: &RoboTorqConfig) -> String {
     let name = cfg.observability.service_name.clone();
     if name.is_empty() {
@@ -79,6 +80,7 @@ pub fn derive_service_label(cfg: &RoboTorqConfig) -> String {
 /// };
 /// assert_eq!(derive_component_label(&cfg), "http");
 /// ```
+#[must_use]
 pub fn derive_component_label(_cfg: &RoboTorqConfig) -> String {
     "http".to_string()
 }
@@ -109,6 +111,7 @@ pub fn derive_component_label(_cfg: &RoboTorqConfig) -> String {
 /// let version = derive_version_label(&cfg);
 /// assert!(!version.is_empty());
 /// ```
+#[must_use]
 pub fn derive_version_label(cfg: &RoboTorqConfig) -> String {
     cfg.observability.service_version.clone()
 }
@@ -139,6 +142,7 @@ pub fn derive_version_label(cfg: &RoboTorqConfig) -> String {
 /// let subject = derive_subject_label(&cfg);
 /// assert!(!subject.is_empty());
 /// ```
+#[must_use]
 pub fn derive_subject_label(cfg: &RoboTorqConfig) -> String {
     match cfg.mode {
         crate::util::config::Mode::Simulation => "sim".to_string(),
@@ -170,6 +174,7 @@ pub fn derive_subject_label(cfg: &RoboTorqConfig) -> String {
 /// let labels = build_label_set(&cfg);
 /// assert!(matches!(labels, LabelSet { .. }));
 /// ```
+#[must_use]
 pub fn build_label_set(cfg: &RoboTorqConfig) -> LabelSet {
     LabelSet {
         service: derive_service_label(cfg),

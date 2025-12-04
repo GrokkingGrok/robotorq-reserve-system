@@ -16,6 +16,24 @@ use tracing::Span;
 use opentelemetry::trace::TraceContextExt;
 
 /// Axum layer that wires HTTP metrics into the request pipeline.
+///
+/// Records request totals, in-flight counts, latencies, and error totals
+/// using a provided `MetricsRegistry` implementation.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use std::sync::Arc;
+/// use axum::{Router, routing::get};
+/// use commons::util::metrics::PrometheusRegistry;
+/// use commons::services::robotorq_service::middleware::HttpMetricsLayer;
+///
+/// let registry = Arc::new(PrometheusRegistry::new("svc","component","v1"));
+/// let layer = HttpMetricsLayer::new(registry);
+/// let app = Router::new()
+///     .route("/health", get(|| async { "ok" }))
+///     .layer(layer);
+/// ```
 #[derive(Clone)]
 pub struct HttpMetricsLayer {
     registry: Arc<dyn MetricsRegistry>,
@@ -58,12 +76,21 @@ mod tests {
 
 impl HttpMetricsLayer {
     /// Create a new metrics layer using the provided registry.
+    ///
+    /// # Arguments
+    /// - `registry`: A metrics registry used to create counters, gauges, and histograms.
+    ///
+    /// # Returns
+    /// A new `HttpMetricsLayer` that can be applied to an Axum `Router` or `Service`.
     pub fn new(registry: Arc<dyn MetricsRegistry>) -> Self {
         Self { registry }
     }
 }
 
 /// Lightweight container placed into Request extensions so handlers/loggers can correlate logs with traces.
+///
+/// When the `otlp` feature is enabled, the current span's trace/span ids
+/// are extracted and hex-encoded; otherwise both fields remain `None`.
 #[derive(Clone, Debug)]
 pub struct TraceContext {
     /// Hex-encoded OpenTelemetry trace id when available (32 hex chars).
@@ -72,8 +99,25 @@ pub struct TraceContext {
     pub span_id: Option<String>,
 }
 
-/// Insert a TraceContext into the request's extensions.
-/// This is a small helper so tests can exercise the insertion without building the full service pipeline.
+/// Insert a `TraceContext` into the request's extensions.
+///
+/// This is a small helper so tests can exercise the insertion without
+/// building the full service pipeline.
+///
+/// # Type Parameters
+/// - `B`: Request body type.
+///
+/// # Arguments
+/// - `req`: The request to mutate.
+///
+/// # Examples
+/// ```rust,ignore
+/// use axum::http::Request;
+/// use commons::services::robotorq_service::middleware::insert_trace_context;
+///
+/// let mut req: Request<()> = Request::builder().uri("/x").body(()).unwrap();
+/// insert_trace_context(&mut req);
+/// ```
 pub(crate) fn insert_trace_context<B>(req: &mut Request<B>) {
     // Default empty context. Make mutable only when OTLP feature is enabled
     // so we avoid an unused `mut` when the feature is disabled.
@@ -150,6 +194,13 @@ impl<S> Layer<S> for HttpMetricsLayer {
 }
 
 /// Service wrapper that records request counters, inflight gauge, and durations.
+///
+/// # Fields
+/// - `inner`: Wrapped service handling the request.
+/// - `requests_total`: Counter of total requests by method/status/path.
+/// - `inflight`: Gauge tracking in-flight requests.
+/// - `durations`: Histogram of request durations by method/status/path.
+/// - `errors_total`: Counter of errors (status >= 400) by method/status_class/path.
 #[derive(Clone)]
 pub struct HttpMetricsService<S> {
     inner: S,
@@ -178,11 +229,10 @@ where
 
         let method = req.method().as_str().to_string();
         // MatchedPath is set by axum Router; fallback to raw path if missing
-        let path = req
-            .extensions()
-            .get::<MatchedPath>()
-            .map(|mp| mp.as_str().to_string())
-            .unwrap_or_else(|| req.uri().path().to_string());
+        let path = req.extensions().get::<MatchedPath>().map_or_else(
+            || req.uri().path().to_string(),
+            |mp| mp.as_str().to_string(),
+        );
 
         // Insert trace context into the request extensions so downstream handlers
         // and log emitters can access trace/span ids for correlation.

@@ -76,7 +76,7 @@ where
     // Surface higher-level diagnostic that may use centralized policy
     log_if_waited(
         "service.stop.mutex",
-        Instant::now() - lock_wait,
+        Instant::now().checked_sub(lock_wait).unwrap(),
         std::time::Duration::from_millis(50),
     );
 
@@ -96,7 +96,7 @@ where
     debug!(lock_wait_ms = %lock_wait.as_millis(), "acquired service mutex for shutdown");
     log_if_waited(
         "service.shutdown.mutex",
-        Instant::now() - lock_wait,
+        Instant::now().checked_sub(lock_wait).unwrap(),
         std::time::Duration::from_millis(50),
     );
 

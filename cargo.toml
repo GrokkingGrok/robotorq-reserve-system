@@ -1,7 +1,8 @@
 [workspace]
 members = [
 	"crates/commons",
-	"crates/examples"
+	"crates/examples",
+	"crates/cargo-robotorq-migrate"
 ]
 resolver = "2"
 
@@ -14,7 +15,7 @@ authors = ["RoboTorq Contributors"]
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 blake3 = "1.8.2"
-uuid = { version = "1.18.1", features = ["v4", "serde"] }
+uuid = { version = "1.19.0", features = ["v4", "serde"] }
 thiserror = "2.0.17"
 time = { version = "0.3.44", features = ["macros", "serde"] }
 tokio = { version = "1.48.0", features = ["rt", "rt-multi-thread", "macros"] }

@@ -1,0 +1,36 @@
+name: Persistence migrations check
+
+on:
+  push:
+    branches: [ "main", "release/*", "rewrite-core", "**" ]
+  pull_request:
+    branches: [ "main", "release/*", "rewrite-core" ]
+
+jobs:
+  migrations:
+    name: Run commons tests with persistence
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+
+      - name: Run commons tests (persistence)
+        run: cargo test -p commons --features persistence -- --nocapture

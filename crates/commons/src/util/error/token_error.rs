@@ -1,7 +1,7 @@
 //! Token Validation Error Types
 //!
 //! This module defines error types related to token validation and energy
-//! accounting in the RoboTorq Reserve System. Token errors handle violations
+//! accounting in the `RoboTorq` Reserve System. Token errors handle violations
 //! of energy conservation laws and token specification invariants.
 //!
 //! # Token Economics
@@ -11,9 +11,9 @@
 //! - Energy values must be positive (conservation of energy)
 //! - Token mappings must preserve economic relationships
 //!
-//! # JouleTorqOre Units
+//! # `JouleTorqOre` Units
 //!
-//! The fundamental unit is JouleTorqOre, representing:
+//! The fundamental unit is `JouleTorqOre`, representing:
 //! - 1 joule of electrical energy consumed
 //! - 1 token of robotic work performed
 //! - Atomic work proof in the system
@@ -31,7 +31,7 @@ use thiserror::Error;
 /// Errors that occur during token validation and processing.
 ///
 /// These errors represent violations of token specification invariants
-/// that would compromise the economic integrity of the RoboTorq system.
+/// that would compromise the economic integrity of the `RoboTorq` system.
 #[derive(Debug, Error)]
 pub enum TokenError {
     /// The joule count is zero or negative.

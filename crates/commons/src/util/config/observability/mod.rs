@@ -1,4 +1,4 @@
-//! Observability configuration for RoboTorq services.
+//! Observability configuration for `RoboTorq` services.
 //!
 //! This module defines configuration options for metrics collection,
 //! tracing, logging, and monitoring integration.
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Observability configuration.
 ///
-/// Configures metrics collection, tracing, and monitoring for the RoboTorq system.
+/// Configures metrics collection, tracing, and monitoring for the `RoboTorq` system.
 /// Strong observability is critical for operating distributed systems reliably.
 ///
 /// # Examples
@@ -232,7 +232,7 @@ pub struct TracingConfig {
 
     /// Service name override.
     ///
-    /// If set, overrides the global service_name for tracing.
+    /// If set, overrides the global `service_name` for tracing.
     /// Useful when multiple services run in the same process.
     #[serde(default)]
     pub service_name_override: Option<String>,

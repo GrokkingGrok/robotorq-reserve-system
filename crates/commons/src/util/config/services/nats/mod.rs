@@ -1,14 +1,14 @@
-//! NATS message bus configuration for RoboTorq services.
+//! NATS message bus configuration for `RoboTorq` services.
 //!
 //! This module defines configuration options for NATS connectivity including
-//! server connections, JetStream settings, and subject naming conventions.
+//! server connections, `JetStream` settings, and subject naming conventions.
 
 use serde::{Deserialize, Serialize};
 
 /// NATS message bus configuration.
 ///
 /// Configures connection to the NATS server for inter-service communication.
-/// NATS serves as the primary messaging backbone for the distributed RoboTorq system.
+/// NATS serves as the primary messaging backbone for the distributed `RoboTorq` system.
 ///
 /// # Examples
 ///
@@ -89,9 +89,9 @@ pub struct NatsConfig {
     #[serde(default)]
     pub auth: NatsAuthConfig,
 
-    /// JetStream configuration.
+    /// `JetStream` configuration.
     ///
-    /// Settings for NATS JetStream durable messaging and streams.
+    /// Settings for NATS `JetStream` durable messaging and streams.
     #[serde(default)]
     pub jetstream: JetStreamConfig,
 
@@ -224,9 +224,9 @@ pub enum NatsAuthMethod {
     Token,
 }
 
-/// JetStream configuration for durable messaging.
+/// `JetStream` configuration for durable messaging.
 ///
-/// Configures NATS JetStream for persistent message storage and streaming.
+/// Configures NATS `JetStream` for persistent message storage and streaming.
 ///
 /// # Examples
 ///
@@ -265,21 +265,21 @@ pub enum NatsAuthMethod {
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JetStreamConfig {
-    /// Whether JetStream is enabled.
+    /// Whether `JetStream` is enabled.
     ///
-    /// When enabled, services will create and use JetStream streams for durable messaging.
+    /// When enabled, services will create and use `JetStream` streams for durable messaging.
     #[serde(default = "default_jetstream_enabled")]
     pub enabled: bool,
 
     /// Default stream configuration.
     ///
-    /// Base configuration applied to all JetStream streams created by services.
+    /// Base configuration applied to all `JetStream` streams created by services.
     #[serde(default)]
     pub stream_defaults: StreamDefaultsConfig,
 
     /// Consumer configuration.
     ///
-    /// Default settings for JetStream consumers (subscribers).
+    /// Default settings for `JetStream` consumers (subscribers).
     #[serde(default)]
     pub consumer_defaults: ConsumerDefaultsConfig,
 }
@@ -294,7 +294,7 @@ impl Default for JetStreamConfig {
     }
 }
 
-/// Default configuration for JetStream streams.
+/// Default configuration for `JetStream` streams.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamDefaultsConfig {
     /// Maximum messages per stream.
@@ -329,7 +329,7 @@ impl Default for StreamDefaultsConfig {
     }
 }
 
-/// Default configuration for JetStream consumers.
+/// Default configuration for `JetStream` consumers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsumerDefaultsConfig {
     /// Maximum number of unacknowledged messages.
@@ -363,7 +363,7 @@ impl Default for ConsumerDefaultsConfig {
 
 /// Stream retention policies.
 ///
-/// Controls how messages are retained in JetStream streams.
+/// Controls how messages are retained in `JetStream` streams.
 ///
 /// # Examples
 ///
@@ -393,7 +393,7 @@ pub enum StreamRetentionPolicy {
 
 /// Stream storage types.
 ///
-/// Defines where JetStream streams store their messages.
+/// Defines where `JetStream` streams store their messages.
 ///
 /// # Examples
 ///
@@ -422,7 +422,7 @@ pub enum StreamStorageType {
 /// Follows the pattern: `rtq.<service>.<type>.*`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubjectConfig {
-    /// Base prefix for all RoboTorq subjects.
+    /// Base prefix for all `RoboTorq` subjects.
     ///
     /// All subjects start with this prefix for namespacing.
     #[serde(default = "default_subject_prefix")]
@@ -532,9 +532,9 @@ fn default_nats_reconnect_delay_ms() -> u64 {
     1000
 }
 
-/// Returns the default JetStream enabled state.
+/// Returns the default `JetStream` enabled state.
 ///
-/// Returns `true` to enable JetStream by default for durable messaging
+/// Returns `true` to enable `JetStream` by default for durable messaging
 /// and event streaming capabilities.
 fn default_jetstream_enabled() -> bool {
     true
@@ -582,7 +582,7 @@ fn default_consumer_max_deliver() -> i64 {
 
 /// Returns the default subject prefix.
 ///
-/// Returns `"rtq"` (RoboTorq) as the base prefix for all subjects,
+/// Returns `"rtq"` (`RoboTorq`) as the base prefix for all subjects,
 /// providing namespacing for the distributed system.
 fn default_subject_prefix() -> String {
     "rtq".to_string()

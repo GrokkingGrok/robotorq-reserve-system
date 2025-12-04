@@ -81,5 +81,5 @@ async fn export_metrics_text<S: RoboTorqService>(
     let registry_metrics = maybe_registry
         .map(|Extension(reg)| reg.export_text())
         .unwrap_or_default();
-    Ok(format!("{}{}", service_metrics, registry_metrics))
+    Ok(format!("{service_metrics}{registry_metrics}"))
 }

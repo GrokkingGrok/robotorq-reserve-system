@@ -1,4 +1,7 @@
 [alias]
+# Run commons persistence integration tests with test helpers enabled
+# Usage: `cargo test-dev`
+test-dev = "test -p commons --features dev -- --nocapture"
 # Shortcut to run the canonical example binary in `crates/examples`.
 # Usage: `cargo run-example` from repo root.
 run-example = "run --manifest-path crates/examples/Cargo.toml --bin custom_metrics_registry"

@@ -1,7 +1,7 @@
-//! Unique identifier types for RoboTorq Reserve System entities.
+//! Unique identifier types for `RoboTorq` Reserve System entities.
 //!
 //! This module defines strongly-typed UUID wrappers for all major entities in the
-//! RoboTorq system. Using distinct types prevents mixing up IDs of different
+//! `RoboTorq` system. Using distinct types prevents mixing up IDs of different
 //! entity types, providing compile-time safety for the distributed system.
 //!
 //! All IDs are backed by UUID v4 for global uniqueness and are serializable
@@ -10,9 +10,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Unique identifier for a robot in the RoboTorq network.
+/// Unique identifier for a robot in the `RoboTorq` network.
 ///
-/// Robots are the primary work-performing entities that generate JouleTorqOre
+/// Robots are the primary work-performing entities that generate `JouleTorqOre`
 /// through physical labor. Each robot has a unique identity that persists
 /// across contracts and operational states.
 ///
@@ -27,7 +27,7 @@ pub struct RobotId(pub Uuid);
 
 /// Unique identifier for a token representing work performed.
 ///
-/// Tokens are the atomic units of work proof in the RoboTorq system.
+/// Tokens are the atomic units of work proof in the `RoboTorq` system.
 /// Each token corresponds to a specific amount of robotic labor measured
 /// in joules and is cryptographically linked to its source robot.
 ///
@@ -42,9 +42,9 @@ pub struct TokenId(pub Uuid);
 
 /// Unique identifier for an unmapped ore batch.
 ///
-/// Unmapped ore batches contain raw JouleTorqOre tokens that haven't yet
+/// Unmapped ore batches contain raw `JouleTorqOre` tokens that haven't yet
 /// been aggregated into higher-level structures. These batches are created
-/// by robots and later processed into TokenTorqIngots.
+/// by robots and later processed into `TokenTorqIngots`.
 ///
 /// # Examples
 /// ```
@@ -55,11 +55,11 @@ pub struct TokenId(pub Uuid);
 #[non_exhaustive]
 pub struct UnmappedOreBatchId(pub Uuid);
 
-/// Unique identifier for a TripleTorq account.
+/// Unique identifier for a `TripleTorq` account.
 ///
-/// TripleTorq accounts represent the monetary balance of participants in
-/// the RoboTorq reserve system. Each account maintains separate balances
-/// for JouleTorq, TokenTorq, and RoboTorq units.
+/// `TripleTorq` accounts represent the monetary balance of participants in
+/// the `RoboTorq` reserve system. Each account maintains separate balances
+/// for `JouleTorq`, `TokenTorq`, and `RoboTorq` units.
 ///
 /// # Examples
 /// ```
@@ -85,10 +85,10 @@ pub struct TripleTorqId(pub Uuid);
 #[non_exhaustive]
 pub struct ContractId(pub Uuid);
 
-/// Unique identifier for a party in the RoboTorq network.
+/// Unique identifier for a party in the `RoboTorq` network.
 ///
 /// Parties can be individuals, organizations, or automated systems that
-/// participate in the RoboTorq ecosystem as robot operators, token holders,
+/// participate in the `RoboTorq` ecosystem as robot operators, token holders,
 /// or service providers.
 ///
 /// # Examples
@@ -101,7 +101,7 @@ pub struct ContractId(pub Uuid);
 pub struct PartyId(pub Uuid);
 
 impl RobotId {
-    /// Creates a new unique RobotId using UUID v4.
+    /// Creates a new unique `RobotId` using UUID v4.
     ///
     /// # Examples
     /// ```
@@ -121,7 +121,7 @@ impl Default for RobotId {
 }
 
 impl TokenId {
-    /// Creates a new unique TokenId using UUID v4.
+    /// Creates a new unique `TokenId` using UUID v4.
     ///
     /// # Examples
     /// ```
@@ -141,7 +141,7 @@ impl Default for TokenId {
 }
 
 impl UnmappedOreBatchId {
-    /// Creates a new unique UnmappedOreBatchId using UUID v4.
+    /// Creates a new unique `UnmappedOreBatchId` using UUID v4.
     ///
     /// # Examples
     /// ```
@@ -161,7 +161,7 @@ impl Default for UnmappedOreBatchId {
 }
 
 impl TripleTorqId {
-    /// Creates a new unique TripleTorqId using UUID v4.
+    /// Creates a new unique `TripleTorqId` using UUID v4.
     ///
     /// # Examples
     /// ```
@@ -181,7 +181,7 @@ impl Default for TripleTorqId {
 }
 
 impl ContractId {
-    /// Creates a new unique ContractId using UUID v4.
+    /// Creates a new unique `ContractId` using UUID v4.
     ///
     /// # Examples
     /// ```
@@ -201,7 +201,7 @@ impl Default for ContractId {
 }
 
 impl PartyId {
-    /// Creates a new unique PartyId using UUID v4.
+    /// Creates a new unique `PartyId` using UUID v4.
     ///
     /// # Examples
     /// ```

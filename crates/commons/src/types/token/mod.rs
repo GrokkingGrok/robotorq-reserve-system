@@ -1,6 +1,6 @@
 //! Individual work proof tokens representing robotic labor.
 //!
-//! Tokens carry energetic value in the RoboTorq Reserve System.
+//! Tokens carry energetic value in the `RoboTorq` Reserve System.
 //! Each token represents a specific amount of robotic work measured in joules,
 //! providing cryptographically verifiable proof of labor performed. Tokens
 //! are created by robots during work execution and aggregated into batches
@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 /// An atomic unit of work proof representing robotic labor.
 ///
-/// Tokens are the fundamental building blocks of value in the RoboTorq system.
+/// Tokens are the fundamental building blocks of value in the `RoboTorq` system.
 /// Each token represents a quantifiable amount of robotic work measured in
 /// joules, providing immutable proof that specific labor was performed.
 /// Tokens are cryptographically sealed and uniquely identified, ensuring
@@ -22,13 +22,13 @@ use serde::{Deserialize, Serialize};
 ///
 /// # Economic Role
 /// - Carrier of joules in the work proof chain
-/// - Foundation for aggregation into TokenTorqIngots and RoboTorqCertificates
+/// - Foundation for aggregation into `TokenTorqIngots` and `RoboTorqCertificates`
 /// - Enable precise measurement and verification of robotic labor
-/// - Support the mathematical relationship: 1 TokenTorqIngot = 3,600 JouleTorqOre units
+/// - Support the mathematical relationship: 1 `TokenTorqIngot` = 3,600 `JouleTorqOre` units
 ///
 /// # Work Proof Properties
 /// Tokens maintain cryptographic integrity through hashing and are timestamped
-/// through their inclusion in UnmappedOreBatches. This ensures temporal ordering
+/// through their inclusion in `UnmappedOreBatches`. This ensures temporal ordering
 /// and prevents double-spending or manipulation of work proofs.
 ///
 /// # Fields
@@ -63,7 +63,7 @@ impl Token {
     /// Returns a `Result` containing the new token or a `TokenError` if validation fails.
     ///
     /// # Errors
-    /// Returns `TokenError::ZeroJoules` if joule_count is 0.
+    /// Returns `TokenError::ZeroJoules` if `joule_count` is 0.
     ///
     /// # Examples
     /// ```rust
@@ -88,7 +88,7 @@ impl Token {
     /// Returns a `Result` containing the new token or a `TokenError` if validation fails.
     ///
     /// # Errors
-    /// Returns `TokenError::ZeroJoules` if joule_count is 0.
+    /// Returns `TokenError::ZeroJoules` if `joule_count` is 0.
     ///
     /// # Examples
     /// ```rust

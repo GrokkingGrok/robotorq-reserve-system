@@ -105,22 +105,27 @@ impl ServiceMetricsContext {
     }
 
     /// Access the underlying metrics registry.
+    #[must_use]
     pub fn registry(&self) -> &Arc<dyn MetricsRegistry> {
         &self.registry
     }
     /// The service label applied to emitted metrics.
+    #[must_use]
     pub fn service(&self) -> &str {
         &self.labels.service
     }
     /// The component label applied to emitted metrics.
+    #[must_use]
     pub fn component(&self) -> &str {
         &self.labels.component
     }
     /// The version label applied to emitted metrics.
+    #[must_use]
     pub fn version(&self) -> &str {
         &self.labels.version
     }
     /// The subject label applied to emitted metrics.
+    #[must_use]
     pub fn subject(&self) -> &str {
         &self.labels.subject
     }

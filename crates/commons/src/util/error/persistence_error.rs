@@ -23,6 +23,6 @@ pub enum PersistenceError {
 #[cfg(feature = "persistence")]
 impl From<sqlx::Error> for PersistenceError {
     fn from(e: sqlx::Error) -> Self {
-        PersistenceError::Query(format!("sqlx error: {}", e))
+        PersistenceError::Query(format!("sqlx error: {e}"))
     }
 }

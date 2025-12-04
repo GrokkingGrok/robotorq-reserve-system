@@ -1,6 +1,6 @@
 //! Error Types and Invariants
 //!
-//! This module provides a comprehensive error handling system for the RoboTorq
+//! This module provides a comprehensive error handling system for the `RoboTorq`
 //! Reserve System. It defines specific error types for different subsystems and
 //! exports domain-specific errors and the internal `ServiceError` used by
 //! commons service helpers.
@@ -13,7 +13,7 @@
 //! - `robot_error`: Robot configuration and validation errors
 //! - `robot_gateway_error`: Gateway service operation errors
 //! - `config_error`: Configuration parsing and validation errors
-//! - `triple_torq_error`: TripleTorq balance management errors
+//! - `triple_torq_error`: `TripleTorq` balance management errors
 //! - `logging_error`: Logging system initialization errors
 //! - `prometheus_error`: Metrics collection and exposition errors
 //!
@@ -35,7 +35,7 @@ pub mod config_error;
 /// Example-focused errors used by small integration binaries and examples.
 pub mod example_error;
 pub mod logging_error;
-/// Messaging subsystem errors (NATS, JetStream, publish/subscribe errors).
+/// Messaging subsystem errors (NATS, `JetStream`, publish/subscribe errors).
 pub mod messaging_error;
 /// Persistence errors (DB pool, query, migration related errors).
 pub mod persistence_error;

@@ -1,7 +1,7 @@
-//! Configuration Management for RoboTorq Reserve System
+//! Configuration Management for `RoboTorq` Reserve System
 //!
 //! This module provides a comprehensive configuration system supporting multiple formats
-//! (TOML and JSON) with schema versioning for the RoboTorq Reserve System.
+//! (TOML and JSON) with schema versioning for the `RoboTorq` Reserve System.
 //!
 //! # Configuration Architecture
 //!
@@ -10,7 +10,7 @@
 //! - **Simulation Parameters**: Timing, performance, and robot gateway simulation settings
 //! - **Port Configuration**: Network port assignments for services and monitoring
 //! - **HTTP Configuration**: Web server settings with middleware and security
-//! - **NATS Configuration**: Message bus connection and JetStream settings
+//! - **NATS Configuration**: Message bus connection and `JetStream` settings
 //! - **Persistence Configuration**: Database connection and storage settings
 //! - **Observability Configuration**: Metrics, tracing, and monitoring settings
 //! - **Security Configuration**: TLS, authentication, and authorization settings
@@ -85,10 +85,10 @@ pub use simulation::Simulation;
 use crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION;
 use serde::{Deserialize, Serialize};
 
-/// Main configuration structure for the RoboTorq Reserve System.
+/// Main configuration structure for the `RoboTorq` Reserve System.
 ///
 /// This struct encapsulates all configuration parameters needed to operate
-/// the RoboTorq system, including operational mode, simulation settings,
+/// the `RoboTorq` system, including operational mode, simulation settings,
 /// network configuration, and service-specific settings.
 ///
 /// # Configuration Sections
@@ -98,7 +98,7 @@ use serde::{Deserialize, Serialize};
 /// - `simulation`: Simulation-specific parameters (only used in Simulation mode)
 /// - `ports`: Network port assignments for all services
 /// - `http`: HTTP server configuration (middleware, CORS, timeouts)
-/// - `nats`: NATS message bus configuration (servers, JetStream)
+/// - `nats`: NATS message bus configuration (servers, `JetStream`)
 /// - `persistence`: Database and storage configuration
 /// - `observability`: Metrics, tracing, and monitoring settings
 /// - `security`: TLS, authentication, and authorization settings
@@ -120,7 +120,7 @@ pub struct RoboTorqConfig {
     #[serde(default = "default_robotorq_config_schema_version")]
     pub schema_version: u32,
 
-    /// Operational mode of the RoboTorq system.
+    /// Operational mode of the `RoboTorq` system.
     ///
     /// Determines whether the system runs in production or simulation mode.
     /// Production mode connects to real robots and manages actual economic transactions.
@@ -148,7 +148,7 @@ pub struct RoboTorqConfig {
 
     /// NATS message bus configuration.
     ///
-    /// Defines connection settings for the NATS server, JetStream configuration,
+    /// Defines connection settings for the NATS server, `JetStream` configuration,
     /// and subject naming conventions for inter-service communication.
     #[serde(default)]
     pub nats: NatsConfig,
@@ -247,12 +247,12 @@ impl RoboTorqConfig {
     }
 }
 
-/// Load RoboTorq configuration with fallback logic.
+/// Load `RoboTorq` configuration with fallback logic.
 ///
 /// This function provides a unified way to load configuration across all services.
 /// It tries multiple sources in order:
 /// 1. Command line argument (if provided)
-/// 2. ROBOTORQ_CONFIG environment variable
+/// 2. `ROBOTORQ_CONFIG` environment variable
 /// 3. Default config file paths
 /// 4. Built-in defaults
 ///

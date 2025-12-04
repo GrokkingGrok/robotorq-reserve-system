@@ -1,6 +1,6 @@
-//! Robotic entities that perform work and generate JouleTorqOre.
+//! Robotic entities that perform work and generate `JouleTorqOre`.
 //!
-//! Robots are the primary work-performing agents in the RoboTorq Reserve System.
+//! Robots are the primary work-performing agents in the `RoboTorq` Reserve System.
 //! They execute contracts by performing physical labor, generating tokens that
 //! represent measurable work output. Each robot has defined throughput ratings
 //! and operational status, forming the foundation of the system's work proof
@@ -13,16 +13,16 @@ use crate::util::error::robot_error::RobotError;
 use crate::util::schema::ROBOT_SCHEMA_VERSION;
 use serde::{Deserialize, Serialize};
 
-/// A robotic work-performing entity in the RoboTorq network.
+/// A robotic work-performing entity in the `RoboTorq` network.
 ///
-/// Robots are the fundamental producers of value in the RoboTorq Reserve System.
-/// They execute contracts by performing physical work, generating JouleTorqOre
+/// Robots are the fundamental producers of value in the `RoboTorq` Reserve System.
+/// They execute contracts by performing physical work, generating `JouleTorqOre`
 /// tokens that represent measurable robotic labor. Each robot has defined
 /// performance characteristics and operational constraints that ensure
 /// predictable and verifiable work output.
 ///
 /// # Economic Role
-/// - Primary generators of JouleTorqOre tokens through physical work
+/// - Primary generators of `JouleTorqOre` tokens through physical work
 /// - Execute contracts defining work requirements and compensation
 /// - Provide verifiable work proof through token generation and batching
 /// - Enable distributed work execution across the robotic network
@@ -81,8 +81,8 @@ impl Robot {
     ///
     /// # Errors
     /// - `RobotError::InvalidRobotName` if name is empty or whitespace-only
-    /// - `RobotError::ZeroTokenThroughput` if token_throughput_rating is 0
-    /// - `RobotError::ZeroJouleThroughput` if joule_throughput_rating is 0
+    /// - `RobotError::ZeroTokenThroughput` if `token_throughput_rating` is 0
+    /// - `RobotError::ZeroJouleThroughput` if `joule_throughput_rating` is 0
     ///
     /// # Examples
     /// ```rust

@@ -6,7 +6,7 @@
 /// Increment these when the structure changes in a backward-incompatible way.
 /// Use semantic versioning: major for breaking changes, minor for additions, patch for fixes.
 ///
-/// Current schema version for UnmappedOreBatch.
+/// Current schema version for `UnmappedOreBatch`.
 pub const UNMAPPED_ORE_BATCH_SCHEMA_VERSION: u32 = 1;
 
 /// Current schema version for Token.
@@ -15,32 +15,32 @@ pub const TOKEN_SCHEMA_VERSION: u32 = 1;
 /// Current schema version for Robot.
 pub const ROBOT_SCHEMA_VERSION: u32 = 1;
 
-/// Current schema version for TripleTorq.
+/// Current schema version for `TripleTorq`.
 pub const TRIPLE_TORQ_SCHEMA_VERSION: u32 = 1;
 
-/// Current schema version for MerkleTree.
+/// Current schema version for `MerkleTree`.
 pub const MERKLE_TREE_SCHEMA_VERSION: u32 = 1;
 
-/// Current schema version for RoboTorq runtime configuration.
+/// Current schema version for `RoboTorq` runtime configuration.
 pub const ROBOTORQ_CONFIG_SCHEMA_VERSION: u32 = 1;
 
 // ID newtype schema versions (kept as constants; IDs themselves remain simple UUID wrappers).
-/// Current schema version for RobotId.
+/// Current schema version for `RobotId`.
 pub const ROBOT_ID_SCHEMA_VERSION: u32 = 1;
 
-/// Current schema version for TokenId.
+/// Current schema version for `TokenId`.
 pub const TOKEN_ID_SCHEMA_VERSION: u32 = 1;
 
-/// Current schema version for UnmappedOreBatchId.
+/// Current schema version for `UnmappedOreBatchId`.
 pub const UNMAPPED_ORE_BATCH_ID_SCHEMA_VERSION: u32 = 1;
 
-/// Current schema version for TripleTorqId.
+/// Current schema version for `TripleTorqId`.
 pub const TRIPLE_TORQ_ID_SCHEMA_VERSION: u32 = 1;
 
-/// Current schema version for ContractId.
+/// Current schema version for `ContractId`.
 pub const CONTRACT_ID_SCHEMA_VERSION: u32 = 1;
 
-/// Current schema version for PartyId.
+/// Current schema version for `PartyId`.
 pub const PARTY_ID_SCHEMA_VERSION: u32 = 1;
 
 /// Helper to get the current version for a given type (for future migration logic).
@@ -60,6 +60,7 @@ pub const PARTY_ID_SCHEMA_VERSION: u32 = 1;
 /// let version = current_schema_version("Token");
 /// assert_eq!(version, Some(1));
 /// ```
+#[must_use]
 pub fn current_schema_version(type_name: &str) -> Option<u32> {
     match type_name {
         "UnmappedOreBatch" => Some(UNMAPPED_ORE_BATCH_SCHEMA_VERSION),
@@ -79,7 +80,7 @@ pub fn current_schema_version(type_name: &str) -> Option<u32> {
     }
 }
 
-/// Return all known schema versions as (type_name, version) pairs.
+/// Return all known schema versions as (`type_name`, version) pairs.
 ///
 /// # Returns
 ///
@@ -94,6 +95,7 @@ pub fn current_schema_version(type_name: &str) -> Option<u32> {
 /// // Find a specific version
 /// let token_version = versions.iter().find(|(name, _)| *name == "Token").map(|(_, v)| *v);
 /// ```
+#[must_use]
 pub fn all_schema_versions() -> Vec<(&'static str, u32)> {
     vec![
         ("UnmappedOreBatch", UNMAPPED_ORE_BATCH_SCHEMA_VERSION),

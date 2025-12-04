@@ -1,11 +1,11 @@
-//! Cryptographic hashing utilities for the RoboTorq Reserve System.
+//! Cryptographic hashing utilities for the `RoboTorq` Reserve System.
 //!
 //! This module provides Blake3-based hashing functions used throughout the system
 //! for cryptographic operations, data integrity verification, and Merkle tree construction.
 //!
 //! # Hashing Strategy
 //!
-//! All hashing in RoboTorq uses Blake3, a fast and secure cryptographic hash function.
+//! All hashing in `RoboTorq` uses Blake3, a fast and secure cryptographic hash function.
 //! The system uses 32-byte (256-bit) hash outputs for consistency with cryptographic standards.
 //!
 //! # Usage
@@ -31,7 +31,7 @@ use serde::Serialize;
 /// Hash a serializable struct using Blake3.
 ///
 /// Converts the input value to JSON format and computes a 32-byte Blake3 hash.
-/// This is the standard way to hash structured data in the RoboTorq system.
+/// This is the standard way to hash structured data in the `RoboTorq` system.
 ///
 /// # Arguments
 ///
@@ -94,6 +94,7 @@ pub fn hash_struct<T: Serialize>(value: &T) -> [u8; 32] {
 ///
 /// This function does not panic. It operates directly on byte slices and has no
 /// failure modes under normal operation.
+#[must_use]
 pub fn hash_bytes(bytes: &[u8]) -> [u8; 32] {
     let mut hasher = Hasher::new();
     hasher.update(bytes);

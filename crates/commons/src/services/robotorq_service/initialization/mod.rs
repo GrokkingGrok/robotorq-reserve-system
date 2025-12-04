@@ -7,6 +7,8 @@ use crate::services::robotorq_service::RoboTorqService;
 use crate::util::config::RoboTorqConfig;
 use crate::util::config::load_robotorq_config;
 use crate::util::error::ServiceError;
+use crate::util::persistence::make_driver;
+use std::sync::Arc;
 use tracing::info;
 
 /// Initialize a service with the given configuration.
@@ -56,7 +58,7 @@ pub async fn initialize_service<S: RoboTorqService>(
     // error enum.
     match svc.initialize(cfg).await {
         Ok(()) => Ok(()),
-        Err(e) => Err(ServiceError::Other(format!("initialize failed: {}", e))),
+        Err(e) => Err(ServiceError::Other(format!("initialize failed: {e}"))),
     }
 }
 
@@ -67,7 +69,7 @@ pub async fn load_and_initialize_service<S: RoboTorqService>(
     svc: &mut S,
 ) -> Result<RoboTorqConfig, ServiceError> {
     let cfg = load_robotorq_config(None)
-        .map_err(|e| ServiceError::Other(format!("config load failed: {}", e)))?;
+        .map_err(|e| ServiceError::Other(format!("config load failed: {e}")))?;
     info!(
         schema_version = cfg.schema_version,
         mode = ?cfg.mode,
@@ -75,6 +77,20 @@ pub async fn load_and_initialize_service<S: RoboTorqService>(
         http_port = cfg.http.port,
         "loaded RoboTorq configuration (commons init)"
     );
+    // Attempt to construct a configured persistence driver and inject it into
+    // the service before running its initialize hook. Failure to create a
+    // driver is non-fatal here (service may operate without persistence).
+    match make_driver(&cfg.persistence).await {
+        Ok(boxed) => {
+            let arc: Arc<dyn crate::util::persistence::PersistenceDriver> = Arc::from(boxed);
+            svc.set_persistence_driver(Some(arc));
+        }
+        Err(err) => {
+            tracing::warn!(error = ?err, "failed to create persistence driver; continuing without persistence");
+            svc.set_persistence_driver(None);
+        }
+    }
+
     // Call the internal initializer which returns `ServiceError`.
     initialize_service(svc, &cfg).await?;
     Ok(cfg)
