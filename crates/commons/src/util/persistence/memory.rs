@@ -102,7 +102,9 @@ impl InMemoryDriver {
     /// Delete the entry for `key`, returning `true` if it existed.
     #[must_use]
     pub fn delete(&self, key: &str) -> bool {
-        let Ok(mut g) = self.store.lock() else { return false };
+        let Ok(mut g) = self.store.lock() else {
+            return false;
+        };
         g.remove(key).is_some()
     }
 

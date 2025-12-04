@@ -58,7 +58,7 @@ impl commons::services::robotorq_service::ServiceLifecycle for SandboxService {}
 impl commons::services::robotorq_service::HealthContributor for SandboxService {
     fn health_status(&self) -> String {
         self.health_check()
-            .unwrap_or_else(|e| format!("error: {:?}", e))
+            .unwrap_or_else(|e| format!("error: {e:?}"))
     }
 }
 

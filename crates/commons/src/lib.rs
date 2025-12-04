@@ -10,12 +10,12 @@
 //! keeping business logic decoupled from HTTP and transport layers.
 #![allow(missing_docs)]
 #![allow(
-	clippy::missing_errors_doc,
-	clippy::missing_panics_doc,
-	clippy::too_many_lines,
-	clippy::default_trait_access,
-	clippy::unnecessary_wraps,
-	clippy::implicit_hasher
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::too_many_lines,
+    clippy::default_trait_access,
+    clippy::unnecessary_wraps,
+    clippy::implicit_hasher
 )]
 pub mod services;
 pub mod types;

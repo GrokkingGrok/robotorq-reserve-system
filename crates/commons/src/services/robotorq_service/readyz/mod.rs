@@ -53,6 +53,23 @@ pub fn readyz_handler(flag: Arc<AtomicBool>) -> impl IntoResponse {
 /// If the server readiness flag is false, returns 503. If the flag is true and a
 /// persistence driver is provided, the driver's `health().ready` is consulted and
 /// will cause a 503 if not ready. Otherwise returns 200.
+///
+/// # Arguments
+/// - `flag`: Shared readiness indicator
+/// - `drv`: Optional persistence driver used to determine data-plane readiness
+///
+/// # Returns
+/// - `200 OK` with "Ready" when both service and persistence are ready
+/// - `503 SERVICE_UNAVAILABLE` with a descriptive message otherwise
+///
+/// # Examples
+/// ```rust,ignore
+/// use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+/// use commons::services::http::readyz::readyz_handler_with_driver;
+/// let flag = Arc::new(AtomicBool::new(true));
+/// let resp = readyz_handler_with_driver(flag, None);
+/// // resp is 200 OK when flag is true
+/// ```
 #[allow(clippy::needless_pass_by_value)]
 pub fn readyz_handler_with_driver(
     flag: Arc<AtomicBool>,

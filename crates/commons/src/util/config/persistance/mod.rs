@@ -120,7 +120,8 @@ pub struct PersistenceConfig {
 impl Default for PersistenceConfig {
     fn default() -> Self {
         Self {
-            backend: PersistenceBackend::default(),
+            // Default to SQLite for local development and readiness
+            backend: PersistenceBackend::Sqlite,
             database_url: default_database_url(),
             max_connections: default_max_connections(),
             min_connections: default_min_connections(),

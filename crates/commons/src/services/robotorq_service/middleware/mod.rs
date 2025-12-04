@@ -145,12 +145,12 @@ pub(crate) fn insert_trace_context<B>(req: &mut Request<B>) {
         let trace_bytes = span_ctx.trace_id().to_bytes();
         if trace_bytes.iter().any(|&b| b != 0) {
             let tid_num = u128::from_be_bytes(trace_bytes);
-            tc.trace_id = Some(format!("{:032x}", tid_num));
+            tc.trace_id = Some(format!("{tid_num:032x}"));
         }
         let span_bytes = span_ctx.span_id().to_bytes();
         if span_bytes.iter().any(|&b| b != 0) {
             let sid_num = u64::from_be_bytes(span_bytes);
-            tc.span_id = Some(format!("{:016x}", sid_num));
+            tc.span_id = Some(format!("{sid_num:016x}"));
         }
     }
 
@@ -200,7 +200,7 @@ impl<S> Layer<S> for HttpMetricsLayer {
 /// - `requests_total`: Counter of total requests by method/status/path.
 /// - `inflight`: Gauge tracking in-flight requests.
 /// - `durations`: Histogram of request durations by method/status/path.
-/// - `errors_total`: Counter of errors (status >= 400) by method/status_class/path.
+/// - `errors_total`: Counter of errors (status >= 400) by `method/status_class/path`.
 #[derive(Clone)]
 pub struct HttpMetricsService<S> {
     inner: S,

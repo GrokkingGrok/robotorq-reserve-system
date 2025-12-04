@@ -31,8 +31,8 @@ async fn main() -> Result<(), ExampleError> {
         .unwrap_or(DEFAULT_PORT);
 
     // Load config to derive labels for metrics
-    let config = load_robotorq_config(None)
-        .map_err(|e| ExampleError::Other(format!("config load: {}", e)))?;
+    let config =
+        load_robotorq_config(None).map_err(|e| ExampleError::Other(format!("config load: {e}")))?;
     let labels = build_label_set(&config);
 
     // Construct shared registry with config-derived labels for unified metrics.
@@ -58,7 +58,7 @@ async fn main() -> Result<(), ExampleError> {
         )
         .build_and_start_autoload()
         .await
-        .map_err(|e| ExampleError::Other(format!("service failed: {}", e)))
+        .map_err(|e| ExampleError::Other(format!("service failed: {e}")))
 }
 
 #[cfg(test)]

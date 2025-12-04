@@ -23,6 +23,25 @@ pub struct DbAttributes {
     pub statement: Option<String>,
 }
 
+/// Obfuscate a raw SQL statement into a stable identifier suitable for logs.
+///
+/// Returns a `stmt:<hex-digest>` string derived from a BLAKE3 hash of the
+/// input. This avoids leaking sensitive literals or schema details while
+/// allowing correlation across identical statements.
+///
+/// # Examples
+/// ```
+/// use commons::util::persistence::obfuscate_statement;
+/// let id = obfuscate_statement("SELECT * FROM kv WHERE key = $1");
+/// assert!(id.starts_with("stmt:"));
+/// assert_eq!(id.len(), 5 + 64); // "stmt:" (5) + 64 hex chars
+/// ```
+#[must_use]
+pub fn obfuscate_statement(raw: &str) -> String {
+    let digest = blake3::hash(raw.as_bytes()).to_hex().to_string();
+    format!("stmt:{digest}")
+}
+
 /// Wrap an async persistence operation with a standardized DB span and
 /// respect the optional monotonic deadline in `ctx`.
 ///
@@ -55,6 +74,11 @@ where
     // If a deadline exists, apply a tokio timeout to the operation and map
     // a timeout error to `PersistenceError::DeadlineExceeded`.
     if let Some(remaining) = ctx.time_remaining() {
+        // If no time remains, fail fast without executing the operation.
+        if remaining.is_zero() {
+            return Err(PersistenceError::DeadlineExceeded);
+        }
+
         let dur: Duration = remaining;
         match tokio::time::timeout(dur, fut.instrument(span)).await {
             Ok(res) => res,

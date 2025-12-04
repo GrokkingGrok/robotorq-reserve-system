@@ -1,11 +1,13 @@
-//! Lightweight `SQLite` persistence driver (`PoC`)
+//! `SQLite` persistence driver with context-aware, traced operations.
 //!
-//! This file provides a small proof-of-concept `SqliteDriver` that implements
-//! basic CRUD operations for a simple `kv` table and implements the
-//! `PersistenceDriver` trait for health/shutdown. It's feature-gated behind
-//! the `persistence` feature and intentionally minimal — it's intended for
-//! functional verification and quick integration tests, not as a production
-//! Postgres-ready implementation.
+//! Provides a lightweight `SqliteDriver` implementing basic CRUD operations
+//! against a `kv` table, health checks, and migration support. Operations can
+//! be executed with a request-scoped `Context` and are wrapped with
+//! `with_db_span` using canonical `DbAttributes` to ensure consistent tracing.
+//!
+//! Feature-gated behind the `persistence` cargo feature; intended for
+//! development, CI smoke tests, and small deployments. Postgres is recommended
+//! for production workloads.
 
 use sqlx::Row;
 use sqlx::sqlite::SqlitePool;
@@ -15,6 +17,12 @@ use super::error::PersistenceError;
 use super::traits::{PersistenceDriver, PersistenceHealth};
 use tracing::instrument;
 
+use super::Context;
+use super::span::{DbAttributes, with_db_span};
+use crate::util::config::persistance::{
+    PersistenceConfig, SqliteConfig, SqliteJournalMode, SqliteSynchronousMode,
+};
+
 /// SQLite-backed driver. Connection pool is managed by `sqlx::SqlitePool`.
 pub struct SqliteDriver {
     pool: SqlitePool,
@@ -22,32 +30,149 @@ pub struct SqliteDriver {
 
 impl SqliteDriver {
     /// Create a new driver and ensure schema is present.
+    ///
+    /// This constructor runs directory-based migrations using a default
+    /// tracking table `"_robotorq_migrations"`. For production, prefer
+    /// `from_config` to control migration execution and table naming.
+    ///
+    /// # Errors
+    /// Returns an error if a connection cannot be established or migrations
+    /// fail to apply.
     pub async fn new(conn_str: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let pool = SqlitePool::connect(conn_str).await?;
 
         // By default run migrations when using this simple constructor.
         // Callers that want to control migration execution should use
         // `SqliteDriver::from_config` with a `PersistenceConfig`.
-        run_migrations(&pool).await?;
+        // Use a conservative default tracking table for PoC constructor.
+        run_migrations(&pool, "_robotorq_migrations").await?;
 
         Ok(Self { pool })
     }
 
     /// Create a new driver from a `PersistenceConfig`.
     ///
-    /// This respects `PersistenceConfig::run_migrations` so callers can
-    /// opt-out of running migrations at startup by setting that flag to
-    /// `false` (recommended for production where migrations run separately).
-    pub async fn from_config(
-        cfg: &crate::util::config::persistance::PersistenceConfig,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    /// Applies backend-specific PRAGMAs and runs migrations when
+    /// `run_migrations = true`, recording progress in `migration_table`.
+    /// Use this in services to align driver behavior with config.
+    ///
+    /// # Errors
+    /// Returns an error if connection setup, PRAGMA application, or migrations
+    /// fail.
+    pub async fn from_config(cfg: &PersistenceConfig) -> Result<Self, Box<dyn std::error::Error>> {
         let pool = SqlitePool::connect(&cfg.database_url).await?;
 
+        // Apply SQLite backend-specific PRAGMAs from config.
+        apply_sqlite_config(&pool, &cfg.backend_config.sqlite).await?;
+
         if cfg.run_migrations {
-            run_migrations(&pool).await?;
+            run_migrations(&pool, &cfg.migration_table).await?;
         }
 
         Ok(Self { pool })
+    }
+
+    /// Insert or update a value using a traced, context-aware operation.
+    ///
+    /// Wraps the query in `with_db_span`, honoring `ctx` deadlines and
+    /// attaching canonical `DbAttributes`.
+    ///
+    /// # Arguments
+    /// - `ctx`: operation context containing trace headers and optional deadline
+    /// - `key`: primary key for the entry
+    /// - `value`: value to store
+    ///
+    /// # Returns
+    /// - `Ok(())` on success
+    /// - `Err(PersistenceError)` on failure or deadline exceeded
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # use commons::util::persistence::{Context};
+    /// # use commons::util::persistence::sqlite::SqliteDriver;
+    /// # async fn demo() -> Result<(), Box<dyn std::error::Error>> {
+    /// let drv = SqliteDriver::new("sqlite::memory:").await?;
+    /// let ctx = Context::with_deadline_from_now(std::time::Duration::from_millis(100));
+    /// drv.put_ctx(&ctx, "k", "v").await.unwrap();
+    /// # Ok(()) }
+    /// ```
+    pub async fn put_ctx(
+        &self,
+        ctx: &Context,
+        key: &str,
+        value: &str,
+    ) -> Result<(), PersistenceError> {
+        let attrs = DbAttributes {
+            driver: Some("sqlite".to_string()),
+            op: Some("upsert".to_string()),
+            entity: Some("kv".to_string()),
+            statement: Some(super::span::obfuscate_statement(
+                "INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value;",
+            )),
+        };
+
+        with_db_span(ctx, &attrs, async {
+            sqlx::query("INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value;")
+                .bind(key)
+                .bind(value)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| PersistenceError::Internal(e.to_string()))?;
+            Ok(())
+        }).await
+    }
+
+    /// Fetch a value using a traced, context-aware operation.
+    ///
+    /// Returns `Ok(Some(String))` when the key exists, `Ok(None)` otherwise.
+    /// Applies `with_db_span` with deadline enforcement.
+    pub async fn get_ctx(
+        &self,
+        ctx: &Context,
+        key: &str,
+    ) -> Result<Option<String>, PersistenceError> {
+        let attrs = DbAttributes {
+            driver: Some("sqlite".to_string()),
+            op: Some("read".to_string()),
+            entity: Some("kv".to_string()),
+            statement: Some(super::span::obfuscate_statement(
+                "SELECT value FROM kv WHERE key = ?;",
+            )),
+        };
+
+        with_db_span(ctx, &attrs, async {
+            let row = sqlx::query("SELECT value FROM kv WHERE key = ?;")
+                .bind(key)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| PersistenceError::Internal(e.to_string()))?;
+            Ok(row.map(|r| r.get::<String, _>(0)))
+        })
+        .await
+    }
+
+    /// Delete a key using a traced, context-aware operation.
+    ///
+    /// Returns `Ok(())` on success. Missing keys are not treated as errors.
+    pub async fn delete_ctx(&self, ctx: &Context, key: &str) -> Result<(), PersistenceError> {
+        let attrs = DbAttributes {
+            driver: Some("sqlite".to_string()),
+            op: Some("delete".to_string()),
+            entity: Some("kv".to_string()),
+            statement: Some(super::span::obfuscate_statement(
+                "DELETE FROM kv WHERE key = ?;",
+            )),
+        };
+
+        with_db_span(ctx, &attrs, async {
+            sqlx::query("DELETE FROM kv WHERE key = ?;")
+                .bind(key)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| PersistenceError::Internal(e.to_string()))?;
+            Ok(())
+        })
+        .await
     }
     /// Put a value into the kv table.
     pub async fn put(&self, key: &str, value: &str) -> Result<(), PersistenceError> {
@@ -108,10 +233,13 @@ impl SqliteDriver {
         Ok(())
     }
 
-    /// Run a closure inside a SQL transaction. The closure receives a mutable
-    /// reference to the `sqlx::Transaction` to run queries. If the closure
-    /// returns `Ok`, the transaction is committed; if it returns `Err`, the
-    /// transaction is rolled back and the error is propagated.
+    /// Run a closure inside a SQL transaction.
+    ///
+    /// The closure receives a mutable connection to run queries. If the
+    /// closure returns `Ok`, the transaction is committed; if it returns `Err`,
+    /// the transaction is rolled back and the error is propagated.
+    ///
+    /// Note: This `PoC` uses manual BEGIN/COMMIT/ROLLBACK for simplicity.
     pub async fn run_transaction<F, Fut, T>(&self, f: F) -> Result<T, PersistenceError>
     where
         for<'c> F: FnOnce(&'c mut sqlx::SqliteConnection) -> Fut,
@@ -161,8 +289,13 @@ impl SqliteDriver {
     }
 }
 
+/// Run migrations found in `crates/commons/sql/migrations` into the given pool,
+/// recording progress in the provided `table_name`.
 #[allow(clippy::cast_possible_wrap)]
-async fn run_migrations(pool: &SqlitePool) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_migrations(
+    pool: &SqlitePool,
+    table_name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     use blake3;
     use std::fs;
     use std::path::PathBuf;
@@ -187,7 +320,10 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), Box<dyn std::error::Err
     entries.sort_by_key(std::fs::DirEntry::path);
 
     // Ensure migrations tracking table exists
-    sqlx::query("CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at INTEGER NOT NULL);")
+    let create_stmt = format!(
+        "CREATE TABLE IF NOT EXISTS {table_name} (filename TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at INTEGER NOT NULL);"
+    );
+    sqlx::query(&create_stmt)
         .execute(pool)
         .await
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
@@ -204,12 +340,12 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), Box<dyn std::error::Err
         let checksum = blake3::hash(sql.as_bytes()).to_hex().to_string();
 
         // Check if this migration was already applied
-        let existing: Option<(String,)> =
-            sqlx::query_as("SELECT checksum FROM schema_migrations WHERE filename = ?")
-                .bind(&filename)
-                .fetch_optional(pool)
-                .await
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+        let existing_query = format!("SELECT checksum FROM {table_name} WHERE filename = ?");
+        let existing: Option<(String,)> = sqlx::query_as(&existing_query)
+            .bind(&filename)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
         if let Some((existing_checksum,)) = existing {
             if existing_checksum == checksum {
@@ -242,14 +378,14 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), Box<dyn std::error::Err
 
         // Record applied migration
         let applied_at = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
-        if let Err(e) = sqlx::query(
-            "INSERT INTO schema_migrations(filename, checksum, applied_at) VALUES (?, ?, ?);",
-        )
-        .bind(&filename)
-        .bind(&checksum)
-        .bind(applied_at)
-        .execute(&mut *conn)
-        .await
+        let insert_stmt =
+            format!("INSERT INTO {table_name}(filename, checksum, applied_at) VALUES (?, ?, ?);");
+        if let Err(e) = sqlx::query(&insert_stmt)
+            .bind(&filename)
+            .bind(&checksum)
+            .bind(applied_at)
+            .execute(&mut *conn)
+            .await
         {
             let _ = sqlx::query("ROLLBACK;").execute(&mut *conn).await;
             return Err(Box::new(e) as Box<dyn std::error::Error>);
@@ -265,14 +401,67 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 
-/// Public wrapper to run migrations against a `SQLite` connection string.
+/// Public wrapper to run migrations against a `SQLite` connection string, with a custom table.
 ///
 /// This is provided for lightweight tooling that wants to invoke the
 /// migration runner without constructing a full `SqliteDriver`.
 pub async fn run_migrations_with_conn_str(
     conn_str: &str,
+    table_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let pool = SqlitePool::connect(conn_str).await?;
-    run_migrations(&pool).await?;
+    run_migrations(&pool, table_name).await?;
+    Ok(())
+}
+
+/// Apply `SQLite` PRAGMAs according to the provided `SqliteConfig`.
+async fn apply_sqlite_config(
+    pool: &SqlitePool,
+    cfg: &SqliteConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use sqlx::Executor;
+    let mut conn = pool.acquire().await?;
+
+    // Foreign keys
+    let fk_val = i32::from(cfg.foreign_keys);
+    conn.execute(sqlx::query(&format!("PRAGMA foreign_keys = {fk_val};")))
+        .await?;
+
+    // Journal mode
+    let journal_mode = match cfg.journal_mode {
+        SqliteJournalMode::Wal => "WAL",
+        SqliteJournalMode::Delete => "DELETE",
+        SqliteJournalMode::Memory => "MEMORY",
+        SqliteJournalMode::Off => "OFF",
+    };
+    // journal_mode returns a row; using execute is fine for side-effect
+    conn.execute(sqlx::query(&format!(
+        "PRAGMA journal_mode = {journal_mode};"
+    )))
+    .await?;
+
+    // Synchronous
+    let synchronous = match cfg.synchronous {
+        SqliteSynchronousMode::Full => "FULL",
+        SqliteSynchronousMode::Normal => "NORMAL",
+        SqliteSynchronousMode::Off => "OFF",
+    };
+    conn.execute(sqlx::query(&format!("PRAGMA synchronous = {synchronous};")))
+        .await?;
+
+    // Cache size (negative indicates pages)
+    conn.execute(sqlx::query(&format!(
+        "PRAGMA cache_size = {};",
+        cfg.cache_size_kb
+    )))
+    .await?;
+
+    // Busy timeout
+    conn.execute(sqlx::query(&format!(
+        "PRAGMA busy_timeout = {};",
+        cfg.busy_timeout_ms
+    )))
+    .await?;
+
     Ok(())
 }

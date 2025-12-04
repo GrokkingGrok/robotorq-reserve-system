@@ -45,7 +45,7 @@ pub use backends::postgres::PostgresDriver;
 pub use context::Context;
 pub use error::PersistenceError;
 pub use memory::InMemoryDriver;
-pub use span::{DbAttributes, with_db_span};
+pub use span::{DbAttributes, obfuscate_statement, with_db_span};
 #[cfg(feature = "persistence")]
 pub use sqlite::SqliteDriver;
 pub use test_helpers::memory_driver_with_seed;

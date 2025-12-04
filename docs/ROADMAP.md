@@ -289,7 +289,64 @@ Notes:
 - **Driver Factory & Injection Suggestion:** provide a small `DriverFactory` in `commons` responsible for creating typed backend instances from configuration. This centralizes connection setup, pooling, and instrumentation wiring.
 - **Operational Risk — Migrations & Rollbacks:** migrations can cause downtime if long-running; provide a recommended strategy (online-friendly migrations, feature-flags for schema changes, per-migration timeouts) and ensure migrations are observable and cancellable.
 
+#### Phase 2.1 — Remaining Tasks
 
+- Postgres config applied: `ssl_mode`, `application_name`, and `search_path` wired; defaults and opt-ins documented.
+- CRUD ops (Postgres): add traced, context-aware CRUD methods mirroring SQLite (`with_db_span`, obfuscation, timeouts).
+- Schema validation: formalize version check at startup (compare `current_db_version` vs `expected_version`) and reflect result in readiness.
+- Migration runner consistency: finalize fail-fast behavior, structured results, and per-DB caveats; ensure idempotence across both backends.
+- Tests coverage: add targeted Postgres CRUD + timeout tests; extend obfuscation doctests; verify readiness flips correctly with schema mismatches.
+
+---
+
+#### Remaining Tasks
+
+---
+
+### Phase 2.2
+
+- Postgres config verification: add tests for `ssl_mode`, `application_name`, and `search_path` handling in pool/session setup.
+- Error taxonomy polish: map `sqlx::Error` into canonical `PersistenceError` variants (Timeout, PoolExhausted, ConstraintViolation).
+- Per-op timeouts: enforce via `Context` and annotate spans; document defaults.
+- Tests: integration coverage for config handling and timeouts.
+
+---
+
+### Phase 2.3
+
+- Repository trait scaffolding: narrow, context-aware methods; keep domain types decoupled from drivers.
+- Memory backend helper: fast test driver with `persistence::test::memory_driver()`.
+- DriverFactory: single injection point from `PersistenceConfig`.
+- Tests: trait contracts, memory backend semantics, span attributes.
+
+---
+
+### Phase 2.4
+
+- Migration runner semantics: unified directory-based application, idempotence, structured results.
+- Schema versioning: `schema_version` recording + startup validation; readiness reflects mismatch.
+- Health output: minimal `PersistenceHealth` fields (version, migration status).
+- Tests: idempotent re-run, dirty-state detection, mismatch readiness behavior.
+
+---
+
+### Phase 2.5
+
+- Readiness wiring: `/readyz` depends on driver health + schema version.
+- Pool health: minimal Postgres pool stats surfaced (size/available) — avoid over-engineering.
+- CI strategy: default CI runs memory+SQLite; branch-local runs Postgres Testcontainers.
+- Tests: readiness toggling under degradation; pool exhaustion path.
+
+---
+
+### Phase 2.6
+
+- Obfuscation policy: finalize defaults (truncate/strip/normalize), dev-only full SQL behind flag.
+- Span naming: standardize `persistence.<operation>` and `DbAttributes` helper.
+- Docs: concise persistence config reference (SQLite default, Postgres toggle), migration usage.
+- Clippy/coverage tidy-up.
+
+---
 
 ### Phase 3 — NATS & JetStream
 - Client abstraction over `async-nats`: connect, publish, subscribe, request/reply.

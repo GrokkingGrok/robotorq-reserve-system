@@ -16,7 +16,7 @@ async fn main() -> Result<(), ExampleError> {
     let conn = tokio_tungstenite::connect_async(&ws_url).await;
     let (ws_stream, resp) = match conn {
         Ok(v) => v,
-        Err(e) => return Err(ExampleError::Other(format!("connect error: {}", e))),
+        Err(e) => return Err(ExampleError::Other(format!("connect error: {e}"))),
     };
     println!("Connected to {} (HTTP {})", ws_url, resp.status());
 
@@ -25,7 +25,7 @@ async fn main() -> Result<(), ExampleError> {
     loop {
         match read.next().await {
             Some(Ok(m)) => match m {
-                Message::Text(t) => println!("TEXT: {}", t),
+                Message::Text(t) => println!("TEXT: {t}"),
                 Message::Binary(b) => println!("BINARY ({} bytes)", b.len()),
                 Message::Ping(p) => println!("PING: {} bytes", p.len()),
                 Message::Pong(p) => println!("PONG: {} bytes", p.len()),
@@ -37,9 +37,9 @@ async fn main() -> Result<(), ExampleError> {
                     println!("CLOSE");
                     break;
                 }
-                other => println!("OTHER MESSAGE: {:?}", other),
+                other => println!("OTHER MESSAGE: {other:?}"),
             },
-            Some(Err(e)) => return Err(ExampleError::Other(format!("read error: {}", e))),
+            Some(Err(e)) => return Err(ExampleError::Other(format!("read error: {e}"))),
             None => break,
         }
     }

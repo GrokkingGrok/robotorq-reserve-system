@@ -8,3 +8,5 @@ edition = "2024"
 commons = { path = "../commons", features = ["persistence"] }
 # Async runtime
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "postgres"] }
+blake3 = "1"

@@ -41,3 +41,20 @@ ingot_size = 3600
 
 [mint]
 certificate_ingots = 1000
+# Persistence backend selection:
+# - "sqlite" (default): uses local file DB, e.g. sqlite://robotorq.db
+# - "postgres": uses a Postgres server via DATABASE_URL
+# Switch by setting `persistence.backend = "postgres"` and `DATABASE_URL`.
+
+[persistence]
+# Backend: "sqlite" or "postgres"
+backend = "sqlite"
+# SQLite file path used when backend = "sqlite"
+sqlite_url = "sqlite://robotorq.db"
+# Optional migration tracking table
+migration_table = "_robotorq_migrations"
+
+# When backend = "postgres", set DATABASE_URL env var, e.g.:
+#   postgres://user:pass@host:5432/dbname
+# You can also set here if preferred:
+# postgres_url = "postgres://postgres:postgres@127.0.0.1:5432/postgres"

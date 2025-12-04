@@ -52,7 +52,10 @@ struct IntegrationService {
 }
 
 impl IntegrationService {
-    fn new(http_registry: Arc<dyn commons::util::metrics::MetricsRegistry>, version: &str) -> Self {
+    fn new(
+        http_registry: &Arc<dyn commons::util::metrics::MetricsRegistry>,
+        version: &str,
+    ) -> Self {
         // Worker registry uses component="worker" distinct from HTTP component.
         let worker_registry: Arc<dyn commons::util::metrics::MetricsRegistry> =
             Arc::new(commons::util::metrics::PrometheusRegistry::new(
@@ -98,7 +101,7 @@ impl commons::services::robotorq_service::ServiceLifecycle for IntegrationServic
 impl commons::services::robotorq_service::HealthContributor for IntegrationService {
     fn health_status(&self) -> String {
         self.health_check()
-            .unwrap_or_else(|e| format!("error: {:?}", e))
+            .unwrap_or_else(|e| format!("error: {e:?}"))
     }
 }
 
@@ -145,7 +148,10 @@ impl RoboTorqService for IntegrationService {
             impl SimpleRng {
                 fn next(&mut self) -> u64 {
                     // xorshift-ish deterministic step (sufficient for example purposes)
-                    self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1);
+                    self.0 = self
+                        .0
+                        .wrapping_mul(6_364_136_223_846_793_005)
+                        .wrapping_add(1);
                     self.0
                 }
                 fn gen_range(&mut self, range: std::ops::Range<u64>) -> u64 {
@@ -155,7 +161,8 @@ impl RoboTorqService for IntegrationService {
             }
             let seed = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos() as u64)
+                .ok()
+                .and_then(|d| u64::try_from(d.as_nanos()).ok())
                 .unwrap_or(0);
             let mut rng = SimpleRng(seed);
             loop {
@@ -198,7 +205,7 @@ async fn main() -> Result<(), ExampleError> {
         commons::util::metrics::PrometheusRegistry::new("integration_service", "http", "0.0.1-int"),
     );
     let service = Arc::new(Mutex::new(IntegrationService::new(
-        Arc::clone(&http_registry),
+        &http_registry,
         "0.0.1-int",
     )));
     HttpServerBuilder::new(service)
@@ -207,7 +214,7 @@ async fn main() -> Result<(), ExampleError> {
         // Static labels unnecessary; using manual registry labels directly.
         .build_and_start_autoload()
         .await
-        .map_err(|e| ExampleError::Other(format!("service failed: {}", e)))
+        .map_err(|e| ExampleError::Other(format!("service failed: {e}")))
 }
 
 #[cfg(test)]
@@ -222,7 +229,7 @@ mod tests {
                 "http",
                 "0.0.1-int",
             ));
-        let svc = IntegrationService::new(Arc::clone(&http_reg), "0.0.1-int");
+        let svc = IntegrationService::new(&http_reg, "0.0.1-int");
         // Simulate a health check.
         let _ = svc.health_check();
         // Touch worker metrics so they are guaranteed to be emitted.
@@ -248,10 +255,7 @@ mod tests {
                 "0.0.1-test",
             ));
 
-        let svc = Arc::new(Mutex::new(IntegrationService::new(
-            Arc::clone(&http_reg),
-            "0.0.1-test",
-        )));
+        let svc = Arc::new(Mutex::new(IntegrationService::new(&http_reg, "0.0.1-test")));
 
         // Reserve an available ephemeral port by binding and releasing a std TcpListener.
         let std_listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("bind ephemeral");
