@@ -3,8 +3,10 @@ use commons::util::persistence::{ctx_with_timeout_ms, make_driver};
 
 #[tokio::test]
 async fn driver_factory_memory_smoke() {
-    let mut cfg = PersistenceConfig::default();
-    cfg.backend = commons::util::config::persistance::PersistenceBackend::Memory;
+    let cfg = PersistenceConfig {
+        backend: commons::util::config::persistance::PersistenceBackend::Memory,
+        ..Default::default()
+    };
 
     let drv = make_driver(&cfg).await.expect("make driver");
 

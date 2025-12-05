@@ -5,10 +5,12 @@ use commons::util::persistence::{ctx_with_timeout_ms, make_driver};
 
 #[tokio::test]
 async fn driver_factory_sqlite_smoke() {
-    let mut cfg = PersistenceConfig::default();
-    cfg.backend = commons::util::config::persistance::PersistenceBackend::Sqlite;
-    cfg.database_url = "sqlite://:memory:".to_string();
-    cfg.run_migrations = false; // keep it fast for tests
+    let cfg = PersistenceConfig {
+        backend: commons::util::config::persistance::PersistenceBackend::Sqlite,
+        database_url: "sqlite://:memory:".to_string(),
+        run_migrations: false, // keep it fast for tests
+        ..Default::default()
+    };
 
     let drv = make_driver(&cfg).await.expect("make sqlite driver");
 

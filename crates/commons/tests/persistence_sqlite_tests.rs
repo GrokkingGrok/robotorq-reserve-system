@@ -25,8 +25,8 @@ async fn sqlite_basic_kv_roundtrip() {
 #[tokio::test]
 async fn sqlite_migration_table_and_pragmas_applied() {
     use commons::util::config::persistance::{
-        PersistenceBackend, PersistenceConfig, SqliteConfig, SqliteJournalMode,
-        SqliteSynchronousMode,
+        BackendSpecificConfig, PersistenceBackend, PersistenceConfig, SqliteConfig,
+        SqliteJournalMode, SqliteSynchronousMode,
     };
     use sqlx::Row;
 
@@ -34,17 +34,22 @@ async fn sqlite_migration_table_and_pragmas_applied() {
     let db_url = "sqlite::memory:";
 
     // Build config with custom migration table and PRAGMAs.
-    let mut cfg = PersistenceConfig::default();
-    cfg.backend = PersistenceBackend::Sqlite;
-    cfg.database_url = db_url.to_string();
-    cfg.run_migrations = true;
-    cfg.migration_table = "_rtq_migrations_test".to_string();
-    cfg.backend_config.sqlite = SqliteConfig {
-        foreign_keys: true,
-        journal_mode: SqliteJournalMode::Wal,
-        synchronous: SqliteSynchronousMode::Normal,
-        cache_size_kb: -1024,
-        busy_timeout_ms: 7000,
+    let cfg = PersistenceConfig {
+        backend: PersistenceBackend::Sqlite,
+        database_url: db_url.to_string(),
+        run_migrations: true,
+        migration_table: "_rtq_migrations_test".to_string(),
+        backend_config: BackendSpecificConfig {
+            sqlite: SqliteConfig {
+                foreign_keys: true,
+                journal_mode: SqliteJournalMode::Wal,
+                synchronous: SqliteSynchronousMode::Normal,
+                cache_size_kb: -1024,
+                busy_timeout_ms: 7000,
+            },
+            ..Default::default()
+        },
+        ..Default::default()
     };
 
     let drv = SqliteDriver::from_config(&cfg)

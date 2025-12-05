@@ -68,6 +68,26 @@ mod tests {
     use commons::util::config::load_robotorq_config;
     use commons::util::metrics::PrometheusRegistry;
 
+    // Bring trait into scope for method resolution in tests
+    use commons::services::robotorq_service::RoboTorqService;
+
+    // Helper: extract a metric value from a Prometheus text-format payload.
+    // Placed at module scope to satisfy pedantic clippy (`items_after_statements`).
+    fn extract_metric_value(metrics: &str, name: &str) -> Option<f64> {
+        metrics.lines().find_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                return None;
+            }
+            let mut parts = trimmed.split_whitespace();
+            let metric = parts.next()?;
+            if !metric.starts_with(name) {
+                return None;
+            }
+            parts.next()?.parse().ok()
+        })
+    }
+
     #[test]
     fn health_counter_increments() {
         // Create test labels
@@ -84,26 +104,7 @@ mod tests {
                 &test_labels.version,
             ));
         let service = SandboxService::new(&test_labels, Arc::clone(&registry));
-        fn extract_metric_value(metrics: &str, name: &str) -> Option<f64> {
-            metrics
-                .lines()
-                .filter_map(|line| {
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() || trimmed.starts_with('#') {
-                        return None;
-                    }
-                    let mut parts = trimmed.split_whitespace();
-                    let metric = parts.next()?;
-                    if !metric.starts_with(name) {
-                        return None;
-                    }
-                    parts.next()?.parse().ok()
-                })
-                .next()
-        }
 
-        // Bring trait into scope for method resolution
-        use commons::services::robotorq_service::RoboTorqService;
         service.health_check().unwrap();
         let first = extract_metric_value(&service.export_metrics(), "sandbox_health_checks_total");
         assert_eq!(first, Some(1.0));

@@ -74,10 +74,12 @@ async fn readyz_reports_503_when_flag_false() -> Result<(), Box<dyn std::error::
     let port = container.get_host_port_ipv4(5432).await?;
     let url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
 
-    let mut cfg = PersistenceConfig::default();
-    cfg.backend = PersistenceBackend::Postgres;
-    cfg.database_url = url;
-    cfg.run_migrations = true;
+    let cfg = PersistenceConfig {
+        backend: PersistenceBackend::Postgres,
+        database_url: url,
+        run_migrations: true,
+        ..Default::default()
+    };
 
     let drv = PostgresDriver::from_config(&cfg).await?;
 

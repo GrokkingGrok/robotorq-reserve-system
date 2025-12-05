@@ -85,7 +85,8 @@ async fn http_server_readyz_integration_variant() {
         .expect("server task join");
 
     // After shutdown the socket should no longer accept connections (connection refused)
-    if let Ok(_) = tokio::net::TcpStream::connect(&addr).await {
-        panic!("server still accepting connections after shutdown")
-    }
+    assert!(
+        (tokio::net::TcpStream::connect(&addr).await).is_err(),
+        "server still accepting connections after shutdown",
+    );
 }

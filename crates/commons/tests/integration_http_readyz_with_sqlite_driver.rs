@@ -7,58 +7,61 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use commons::util::persistence::ctx_with_timeout_ms;
 
+use commons::services::robotorq_service::{
+    HealthContributor, HttpServerBuilder, MetricsContributor, RoboTorqService, ServiceLifecycle,
+};
+use commons::util::config::RoboTorqConfig;
+
+// Example service that stores the injected driver and calls ping during initialize.
+// Placed at module scope to satisfy clippy `items_after_statements` pedantic lint.
+struct ExampleSvc {
+    drv: Option<std::sync::Arc<dyn commons::util::persistence::PersistenceDriver>>,
+}
+impl ExampleSvc {
+    fn new() -> Self {
+        Self { drv: None }
+    }
+}
+impl ServiceLifecycle for ExampleSvc {}
+impl HealthContributor for ExampleSvc {
+    fn health_status(&self) -> String {
+        "ok".to_string()
+    }
+}
+impl MetricsContributor for ExampleSvc {}
+impl RoboTorqService for ExampleSvc {
+    fn set_persistence_driver(
+        &mut self,
+        drv: Option<std::sync::Arc<dyn commons::util::persistence::PersistenceDriver>>,
+    ) {
+        self.drv = drv;
+    }
+
+    async fn initialize(
+        &mut self,
+        _cfg: &RoboTorqConfig,
+    ) -> Result<(), commons::util::error::ServiceError> {
+        if let Some(d) = &self.drv {
+            let ctx = ctx_with_timeout_ms(1000);
+            d.ping(&ctx).await.map_err(|e| {
+                commons::util::error::ServiceError::Other(format!("ping failed: {e:?}"))
+            })?;
+        }
+        Ok(())
+    }
+}
+
 /// Integration test: start an `HttpServer` using `start_autoload` so that commons
 /// constructs and attaches the concrete `SQLite` driver, then query `/readyz`.
 #[tokio::test]
 async fn http_readyz_with_sqlite_driver_integration() {
-    use commons::services::robotorq_service::{
-        HealthContributor, HttpServerBuilder, MetricsContributor, RoboTorqService, ServiceLifecycle,
-    };
-    use commons::util::config::RoboTorqConfig;
-
     // Create a PersistenceConfig programmatically for an in-memory SQLite and no migrations
-    let mut p_cfg = commons::util::config::persistance::PersistenceConfig::default();
-    p_cfg.backend = commons::util::config::persistance::PersistenceBackend::Sqlite;
-    p_cfg.database_url = "sqlite::memory:".to_string();
-    p_cfg.run_migrations = false;
-
-    // Example service that stores the injected driver and calls ping during initialize
-    struct ExampleSvc {
-        drv: Option<std::sync::Arc<dyn commons::util::persistence::PersistenceDriver>>,
-    }
-    impl ExampleSvc {
-        fn new() -> Self {
-            Self { drv: None }
-        }
-    }
-    impl ServiceLifecycle for ExampleSvc {}
-    impl HealthContributor for ExampleSvc {
-        fn health_status(&self) -> String {
-            "ok".to_string()
-        }
-    }
-    impl MetricsContributor for ExampleSvc {}
-    impl RoboTorqService for ExampleSvc {
-        fn set_persistence_driver(
-            &mut self,
-            drv: Option<std::sync::Arc<dyn commons::util::persistence::PersistenceDriver>>,
-        ) {
-            self.drv = drv;
-        }
-
-        async fn initialize(
-            &mut self,
-            _cfg: &RoboTorqConfig,
-        ) -> Result<(), commons::util::error::ServiceError> {
-            if let Some(d) = &self.drv {
-                let ctx = ctx_with_timeout_ms(1000);
-                d.ping(&ctx).await.map_err(|e| {
-                    commons::util::error::ServiceError::Other(format!("ping failed: {e:?}"))
-                })?;
-            }
-            Ok(())
-        }
-    }
+    let p_cfg = commons::util::config::persistance::PersistenceConfig {
+        backend: commons::util::config::persistance::PersistenceBackend::Sqlite,
+        database_url: "sqlite::memory:".to_string(),
+        run_migrations: false,
+        ..Default::default()
+    };
 
     // Choose a free port to bind so we can connect reliably
     let port = {

@@ -27,15 +27,17 @@ async fn readyz_reports_503_on_schema_version_mismatch() -> Result<(), Box<dyn s
     let port = container.get_host_port_ipv4(5432).await?;
     let url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
 
-    let mut cfg = PersistenceConfig::default();
-    cfg.backend = PersistenceBackend::Postgres;
-    cfg.database_url = url;
-    cfg.run_migrations = false; // avoid creating migration table; driver should report not validated
+    let cfg = PersistenceConfig {
+        backend: PersistenceBackend::Postgres,
+        database_url: url,
+        run_migrations: false, // avoid creating migration table; driver should report not validated
+        ..Default::default()
+    };
 
     let drv = PostgresDriver::from_config(&cfg).await?;
 
     // Ensure we have an expected version for a type
-    let expected = current_schema_version("Token").expect("known schema type");
+    let _expected = current_schema_version("Token").expect("known schema type");
 
     // Simulate mismatch: drop or avoid recording version marker table/row.
     // For now, we simply call validate_schema on a wrong table name to force failure.

@@ -136,7 +136,9 @@ async fn run_postgres_migrations(
             return Err(Box::new(e));
         }
 
-        let applied_at = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
+        // Record applied migration (safe conversion from u64 -> i64)
+        let applied_at = i64::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())
+            .unwrap_or(i64::MAX);
         let insert_stmt = format!(
             "INSERT INTO {table_name}(filename, checksum, applied_at) VALUES ($1, $2, $3);"
         );

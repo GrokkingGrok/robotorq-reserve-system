@@ -22,13 +22,15 @@ async fn postgres_driver_runs_migrations_integration() {
     let host_port = container.get_host_port_ipv4(5432).await.expect("host port");
     let url = format!("postgres://postgres:postgres@127.0.0.1:{host_port}/postgres");
 
-    let mut cfg = PersistenceConfig::default();
-    cfg.backend = PersistenceBackend::Postgres;
-    cfg.database_url = url.clone();
-    cfg.max_connections = 2;
-    cfg.min_connections = 1;
-    cfg.connect_timeout_seconds = 10;
-    cfg.run_migrations = true;
+    let cfg = PersistenceConfig {
+        backend: PersistenceBackend::Postgres,
+        database_url: url.clone(),
+        max_connections: 2,
+        min_connections: 1,
+        connect_timeout_seconds: 10,
+        run_migrations: true,
+        ..Default::default()
+    };
     // Use default migration table name
     let mig_table = cfg.migration_table.clone();
 

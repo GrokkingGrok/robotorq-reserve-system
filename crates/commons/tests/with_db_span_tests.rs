@@ -34,7 +34,7 @@ async fn with_db_span_emits_fields_to_subscriber() {
     use tracing_subscriber::fmt;
 
     // Create a buffer writer for the subscriber to capture formatted output.
-    let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
+    use tracing_subscriber::fmt::format::FmtSpan;
 
     struct MutexWriter(Arc<Mutex<Vec<u8>>>);
     impl std::io::Write for MutexWriter {
@@ -48,12 +48,12 @@ async fn with_db_span_emits_fields_to_subscriber() {
         }
     }
 
+    let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
     let make_writer = {
         let b = buf.clone();
         move || MutexWriter(b.clone())
     };
 
-    use tracing_subscriber::fmt::format::FmtSpan;
     let subscriber = fmt::fmt()
         .with_span_events(FmtSpan::FULL)
         .with_writer(make_writer)

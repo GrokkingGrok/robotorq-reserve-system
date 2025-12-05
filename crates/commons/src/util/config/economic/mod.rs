@@ -571,7 +571,10 @@ mod tests {
         assert_eq!(deserialized.joule_per_ingot, 3600);
         assert_eq!(deserialized.ingots_per_certificate, 1000);
         match deserialized.demurrage_model {
-            DemurrageModel::Continuous { annual_rate } => assert_eq!(annual_rate, 0.02),
+            DemurrageModel::Continuous { annual_rate } => {
+                let diff = (annual_rate - 0.02).abs();
+                assert!(diff < f64::EPSILON, "annual_rate differs by {diff}");
+            }
             _ => panic!("Expected continuous demurrage"),
         }
     }

@@ -6,6 +6,8 @@
 use commons::util::config::persistance::{PersistenceBackend, PersistenceConfig};
 use commons::util::persistence::backends::postgres::PostgresDriver;
 use std::collections::HashSet;
+use testcontainers_modules::postgres;
+use testcontainers_modules::testcontainers::runners::AsyncRunner;
 
 /// Postgres idempotence test: run migrations twice and assert the second run
 /// does not re-apply already-applied migrations. Guarded by `RTQ_ENABLE_TESTCONTAINERS`.
@@ -17,9 +19,6 @@ async fn postgres_migrations_idempotence() -> Result<(), Box<dyn std::error::Err
         return Ok(());
     }
 
-    use testcontainers_modules::postgres;
-    use testcontainers_modules::testcontainers::runners::AsyncRunner;
-
     // Start Postgres container
     let container = postgres::Postgres::default().start().await?;
     let port = container.get_host_port_ipv4(5432).await?;
@@ -28,11 +27,13 @@ async fn postgres_migrations_idempotence() -> Result<(), Box<dyn std::error::Err
     // Unique migration table for this test
     let migration_table = "_robotorq_migrations_postgres_idempotence";
 
-    let mut cfg = PersistenceConfig::default();
-    cfg.backend = PersistenceBackend::Postgres;
-    cfg.database_url = url.clone();
-    cfg.run_migrations = true;
-    cfg.migration_table = migration_table.to_string();
+    let cfg = PersistenceConfig {
+        backend: PersistenceBackend::Postgres,
+        database_url: url.clone(),
+        run_migrations: true,
+        migration_table: migration_table.to_string(),
+        ..Default::default()
+    };
 
     // First construction should run migrations and populate the migration table
     let _drv1 = PostgresDriver::from_config(&cfg).await?;

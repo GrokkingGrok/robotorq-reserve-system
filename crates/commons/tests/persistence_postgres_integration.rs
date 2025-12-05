@@ -28,13 +28,15 @@ async fn postgres_driver_ping_integration() {
     let url = format!("postgres://postgres:postgres@127.0.0.1:{host_port}/postgres");
 
     // Build a PersistenceConfig that points to the container
-    let mut cfg = PersistenceConfig::default();
-    cfg.backend = commons::util::config::persistance::PersistenceBackend::Postgres;
-    cfg.database_url = url;
-    cfg.max_connections = 2;
-    cfg.min_connections = 1;
-    cfg.connect_timeout_seconds = 10;
-    cfg.run_migrations = false; // keep this test focused on connectivity
+    let cfg = PersistenceConfig {
+        backend: commons::util::config::persistance::PersistenceBackend::Postgres,
+        database_url: url,
+        max_connections: 2,
+        min_connections: 1,
+        connect_timeout_seconds: 10,
+        run_migrations: false, // keep this test focused on connectivity
+        ..Default::default()
+    };
 
     // Attempt to create a driver via the factory. The factory will construct
     // a PostgresDriver and attempt to connect using sqlx.

@@ -463,8 +463,9 @@ pub async fn run_migrations_structured(
             return Err(Box::new(e) as Box<dyn std::error::Error>);
         }
 
-        // Record applied migration
-        let applied_at = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
+        // Record applied migration (safe conversion from u64 -> i64)
+        let applied_at = i64::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())
+            .unwrap_or(i64::MAX);
         let insert_stmt =
             format!("INSERT INTO {table_name}(filename, checksum, applied_at) VALUES (?, ?, ?);");
         if let Err(e) = sqlx::query(&insert_stmt)

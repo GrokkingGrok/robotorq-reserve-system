@@ -31,10 +31,12 @@ async fn flag_true_persistence_not_ready_then_flip_flag_false()
     let url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
 
     // Start driver with migrations disabled so schema_validated stays false.
-    let mut cfg = PersistenceConfig::default();
-    cfg.backend = PersistenceBackend::Postgres;
-    cfg.database_url = url;
-    cfg.run_migrations = false;
+    let cfg = PersistenceConfig {
+        backend: PersistenceBackend::Postgres,
+        database_url: url,
+        run_migrations: false,
+        ..Default::default()
+    };
 
     let drv = PostgresDriver::from_config(&cfg).await?;
 
