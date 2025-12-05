@@ -1,13 +1,45 @@
 //! `SQLite` persistence driver with context-aware, traced operations.
 //!
-//! Provides a lightweight `SqliteDriver` implementing basic CRUD operations
-//! against a `kv` table, health checks, and migration support. Operations can
-//! be executed with a request-scoped `Context` and are wrapped with
-//! `with_db_span` using canonical `DbAttributes` to ensure consistent tracing.
+//! Overview
+//! - Basic CRUD against a `kv` table with traced, context-aware methods.
+//! - Startup bootstrap guarantees `kv(key TEXT PRIMARY KEY, value TEXT NOT NULL)` exists.
+//! - Optional schema version validation via a `schema_version(version INTEGER)` table.
+//! - Directory-based migrations with checksums and fail-fast semantics.
 //!
-//! Feature-gated behind the `persistence` cargo feature; intended for
-//! development, CI smoke tests, and small deployments. Postgres is recommended
-//! for production workloads.
+//! Readiness & Schema Versioning
+//! - On initialization (`from_config`), the driver creates `kv` if missing and
+//!   performs a lightweight probe.
+//! - If a `schema_version(version INTEGER)` table exists, the driver compares its
+//!   single row to the expected version constant
+//!   (`commons::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION`). A mismatch returns
+//!   an error from `from_config`, causing readiness to be not-ready in services.
+//! - To repair a mismatch, update the row to the expected version:
+//!   `UPDATE schema_version SET version = 1;` (or the current constant) and restart.
+//!
+//! Migrations
+//! - `SQLite` migrations are applied from `crates/commons/sql/migrations` and tracked
+//!   in the configured table (default `_robotorq_migrations`). A helper migration also
+//!   exists under `sql/sqlite_migrations/0001_create_schema_version.sql` to create and set
+//!   the schema version.
+//!
+//! Feature-gated behind the `persistence` cargo feature; intended for development,
+//! CI smoke tests, and small deployments. Postgres is recommended for production workloads.
+//!
+//! # Examples
+//!
+//! Create a driver and perform CRUD with a deadline-aware `Context`:
+//! ```no_run
+//! use commons::util::persistence::sqlite::SqliteDriver;
+//! use commons::util::persistence::Context;
+//! # async fn demo() -> Result<(), Box<dyn std::error::Error>> {
+//! let drv = SqliteDriver::new("sqlite::memory:").await?;
+//! let ctx = Context::with_deadline_from_now(std::time::Duration::from_millis(100));
+//! drv.put_ctx(&ctx, "k", "v").await?;
+//! let v = drv.get_ctx(&ctx, "k").await?.unwrap();
+//! assert_eq!(v, "v");
+//! drv.delete_ctx(&ctx, "k").await?;
+//! # Ok(()) }
+//! ```
 
 use sqlx::Row;
 use sqlx::sqlite::SqlitePool;
@@ -67,6 +99,41 @@ impl SqliteDriver {
 
         if cfg.run_migrations {
             run_migrations(&pool, &cfg.migration_table).await?;
+        }
+
+        // Ensure core kv table exists for CRUD tests/integration.
+        sqlx::query("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);")
+            .execute(&pool)
+            .await?;
+
+        // Perform lightweight schema validation: ensure kv and optional schema_version match.
+        // Cache-less prototype: health() remains simple; callers can explicitly validate.
+        // Check kv
+        let _ = sqlx::query("SELECT 1 FROM kv LIMIT 1;")
+            .fetch_optional(&pool)
+            .await?;
+        // Optional schema_version table check — if present, version must match expected.
+        use crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION;
+        let exists: Option<(i32,)> = sqlx::query_as(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version' LIMIT 1;",
+        )
+        .fetch_optional(&pool)
+        .await?;
+        if exists.is_some() {
+            let row: Option<(i32,)> = sqlx::query_as("SELECT version FROM schema_version LIMIT 1;")
+                .fetch_optional(&pool)
+                .await?;
+            if let Some((v,)) = row {
+                match u32::try_from(v) {
+                    Ok(v_u) if v_u == ROBOTORQ_CONFIG_SCHEMA_VERSION => {}
+                    _ => {
+                        return Err(format!(
+                            "sqlite schema version mismatch: db={v} expected={ROBOTORQ_CONFIG_SCHEMA_VERSION}"
+                        )
+                        .into());
+                    }
+                }
+            }
         }
 
         Ok(Self { pool })
@@ -296,6 +363,23 @@ async fn run_migrations(
     pool: &SqlitePool,
     table_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let _ = run_migrations_structured(pool, table_name).await?;
+    Ok(())
+}
+
+/// Structured migration outcome for observability and tests.
+#[derive(Debug, Default, Clone)]
+pub struct MigrationOutcome {
+    pub applied: Vec<String>,
+    pub skipped: Vec<String>,
+    pub dirty: Option<String>,
+}
+
+/// Structured migration runner (idempotent, fail-fast) for `SQLite`.
+pub async fn run_migrations_structured(
+    pool: &SqlitePool,
+    table_name: &str,
+) -> Result<MigrationOutcome, Box<dyn std::error::Error>> {
     use blake3;
     use std::fs;
     use std::path::PathBuf;
@@ -308,7 +392,7 @@ async fn run_migrations(
 
     if !migrations_dir.exists() {
         // Nothing to run
-        return Ok(());
+        return Ok(MigrationOutcome::default());
     }
 
     let mut entries: Vec<_> = fs::read_dir(&migrations_dir)?
@@ -328,6 +412,7 @@ async fn run_migrations(
         .await
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
+    let mut outcome = MigrationOutcome::default();
     for ent in entries {
         let path = ent.path();
         let filename = path
@@ -350,13 +435,14 @@ async fn run_migrations(
         if let Some((existing_checksum,)) = existing {
             if existing_checksum == checksum {
                 // already applied and checksum matches -> skip
+                outcome.skipped.push(filename.clone());
                 continue;
             }
             // checksum mismatch: migration file changed after being applied
-            return Err(format!(
+            outcome.dirty = Some(format!(
                 "migration '{filename}' checksum mismatch (applied={existing_checksum} file={checksum})"
-            )
-            .into());
+            ));
+            return Err(outcome.dirty.clone().unwrap().into());
         }
 
         // Not applied yet: run in a dedicated connection/transaction
@@ -373,6 +459,7 @@ async fn run_migrations(
         // Execute migration SQL; on error attempt rollback and return error
         if let Err(e) = sqlx::query(&sql).execute(&mut *conn).await {
             let _ = sqlx::query("ROLLBACK;").execute(&mut *conn).await;
+            outcome.dirty = Some(format!("apply failed for {filename}: {e}"));
             return Err(Box::new(e) as Box<dyn std::error::Error>);
         }
 
@@ -388,6 +475,7 @@ async fn run_migrations(
             .await
         {
             let _ = sqlx::query("ROLLBACK;").execute(&mut *conn).await;
+            outcome.dirty = Some(format!("record failed for {filename}: {e}"));
             return Err(Box::new(e) as Box<dyn std::error::Error>);
         }
 
@@ -396,9 +484,10 @@ async fn run_migrations(
             .execute(&mut *conn)
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
-    }
 
-    Ok(())
+        outcome.applied.push(filename);
+    }
+    Ok(outcome)
 }
 
 /// Public wrapper to run migrations against a `SQLite` connection string, with a custom table.

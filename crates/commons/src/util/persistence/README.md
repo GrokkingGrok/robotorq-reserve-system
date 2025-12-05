@@ -34,6 +34,10 @@ Backend selection, readiness, and schema validation
      - `persistence.backend = "sqlite"`
      - `persistence.sqlite_url = "sqlite://robotorq.db"`
    - Migrations are tracked in `persistence.migration_table` (default `_robotorq_migrations`).
+    - SQLite bootstrap: the driver ensures a core `kv(key TEXT PRIMARY KEY, value TEXT)` table exists at init.
+    - Schema version: if a `schema_version(version INTEGER)` table exists, its single row must match the expected version.
+      - The helper migration `sql/sqlite_migrations/0001_create_schema_version.sql` creates and sets the version to `1`.
+      - To repair mismatches, update the row: `UPDATE schema_version SET version = 1;` and re-run the service.
  - Toggle to Postgres
    - Set `persistence.backend = "postgres"` and provide `DATABASE_URL` (or `postgres_url` in config).
    - Example: `postgres://user:pass@127.0.0.1:5432/dbname`.
@@ -48,6 +52,7 @@ Backend selection, readiness, and schema validation
 
 Readiness & schema validation
  - SQLite: checks presence of core tables and migrations tracking table.
+  - SQLite version check: when `schema_version` is present, the driver will error on startup if the version mismatches. This flips readiness to not ready.
  - Postgres: uses `information_schema.tables` scoped to the current schema to ensure core tables and the migrations table exist.
  - The Postgres driver caches validation at startup and exposes `health()` for readiness wiring.
 
@@ -56,11 +61,36 @@ Notes & next steps
  - Obfuscation policy: use `commons::util::persistence::obfuscate_statement` to generate stable identifiers for SQL statements in spans and logs (avoids leaking literals).
  - Migrations: both SQLite and Postgres drivers support directory-based migrations under `crates/commons/sql/migrations`, tracking progress in `PersistenceConfig::migration_table`.
  - Readiness & schema validation: `PostgresDriver::from_config` performs a lightweight `validate_schema` using the configured migration table; the result is cached and surfaced via `health()` for wiring into readiness handlers.
+ - Migration runner results: both drivers expose structured outcomes via `MigrationOutcome` (fields: `applied`, `skipped`, `dirty`). Use these in operator tooling and migration reports to assert idempotence and detect dirty states caused by checksum mismatches.
+  - Idempotence: running the migration runner multiple times is idempotent — migrations already recorded with matching checksums are reported in `skipped` and not re-applied. If a migration file's checksum changes after being recorded, the runner marks a `dirty` state and fails fast.
  - Integration tests:
    - Postgres ping: `cargo test -p commons --features "persistence-postgres persistence-testcontainers" --test persistence_postgres_integration -- --nocapture`
    - Postgres migrations: `cargo test -p commons --features "persistence-postgres persistence-testcontainers" --test persistence_postgres_migrate_integration -- --nocapture`
    - Readyz + Postgres: `cargo test -p commons --features "persistence-postgres persistence-testcontainers" --test readyz_postgres_integration -- --nocapture`
+    - Testcontainers env guard: set `RTQ_ENABLE_TESTCONTAINERS=1` to run container-based tests; otherwise they skip fast.
+      - Example:
+        - Skip: `$env:RTQ_ENABLE_TESTCONTAINERS="0"; cargo test -p commons --features "persistence-postgres persistence-testcontainers" --test persistence_postgres_config_verification`
+        - Run: `$env:RTQ_ENABLE_TESTCONTAINERS="1"; cargo test -p commons --features "persistence-postgres persistence-testcontainers" --test persistence_postgres_config_verification`
  - Example: wiring readiness with persistence
+
+See also
+- `docs/PERSISTENCE_SQLITE.md` — SQLite defaults, readiness semantics, and schema version repair.
+
+## Readiness Semantics
+
+- Flag-first: `/readyz` returns 503 when the service readiness flag is false, regardless of dependencies.
+- Driver health: When the flag is true and a `PersistenceDriver` is provided, `/readyz` consults `driver.health()`. If `ready=false`, it returns 503 with the driver’s message.
+- Schema validation: `PostgresDriver::from_config` may run a lightweight `validate_schema(...)` at startup. If migrations are disabled or validation fails, `driver.health()` reports `ready=false` with a message like "schema not validated".
+- Recommended: enable migrations only in controlled environments; for production, validate schema version at startup and gate readiness accordingly.
+
+### Quick Test Commands
+
+```powershell
+cargo test -p commons --features "persistence-postgres persistence-testcontainers" --test readyz_postgres_integration
+cargo test -p commons --features "persistence-postgres persistence-testcontainers" --test readyz_schema_mismatch_integration
+cargo test -p commons --features "persistence-postgres persistence-testcontainers" --test readyz_schema_version_mismatch
+cargo test -p commons --features "persistence-postgres persistence-testcontainers" --test readyz_toggle_flag_integration
+```
 
 ```rust
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};

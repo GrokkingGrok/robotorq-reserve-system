@@ -285,8 +285,8 @@ mod tests {
 
         // Perform simple HTTP checks against /healthz and /metrics to exercise handlers.
         let client = reqwest::Client::new();
-        let health_url = format!("http://127.0.0.1:{}/healthz", port);
-        let metrics_url = format!("http://127.0.0.1:{}/metrics", port);
+        let health_url = format!("http://127.0.0.1:{port}/healthz");
+        let metrics_url = format!("http://127.0.0.1:{port}/metrics");
         let hres = client
             .get(&health_url)
             .send()
@@ -305,8 +305,7 @@ mod tests {
         let result = handle.await.expect("server task panicked");
         assert!(
             result.is_ok(),
-            "server did not shut down cleanly: {:?}",
-            result
+            "server did not shut down cleanly: {result:?}"
         );
     }
 }

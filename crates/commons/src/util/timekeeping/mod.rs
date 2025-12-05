@@ -97,6 +97,7 @@ impl DeterministicTime {
     /// # Panics
     ///
     /// Panics if speedup is negative or zero.
+    #[must_use]
     pub fn new(speedup: f64) -> Self {
         assert!(speedup > 0.0, "Speedup factor must be positive");
         Self {
@@ -108,6 +109,7 @@ impl DeterministicTime {
     }
 
     /// Get the current simulated time.
+    #[must_use]
     pub fn now(&self) -> SystemTime {
         if self.paused {
             self.pause_time.unwrap_or(self.start_time)
@@ -152,7 +154,9 @@ impl DeterministicTime {
     /// Panics if speedup is negative or zero.
     pub fn set_speedup(&mut self, speedup: f64) {
         assert!(speedup > 0.0, "Speedup factor must be positive");
-        if !self.paused {
+        if self.paused {
+            self.speedup = speedup;
+        } else {
             // Adjust start_time to maintain continuity
             let current_sim = self.now();
             self.speedup = speedup;
@@ -161,8 +165,6 @@ impl DeterministicTime {
                     .duration_since(self.start_time)
                     .unwrap_or_default())
                 .div_f64(speedup);
-        } else {
-            self.speedup = speedup;
         }
     }
 
@@ -202,6 +204,7 @@ impl SimulatedTimeProvider {
     /// use commons::util::timekeeping::SimulatedTimeProvider;
     /// let provider = SimulatedTimeProvider::new(2.0); // 2x speed
     /// ```
+    #[must_use]
     pub fn new(speedup: f64) -> Self {
         Self {
             inner: DeterministicTime::new(speedup),
@@ -214,6 +217,7 @@ impl SimulatedTimeProvider {
     /// deterministic clock may use this accessor. Prefer using the
     /// `TimeProvider` trait methods (`now`, `sleep`) for most code paths to
     /// preserve abstraction boundaries.
+    #[must_use]
     pub fn inner(&self) -> &DeterministicTime {
         &self.inner
     }
@@ -225,13 +229,14 @@ impl TimeProvider for SimulatedTimeProvider {
         self.inner.now()
     }
     async fn sleep(&self, duration: Duration) {
-        self.inner.sim_sleep(duration).await
+        self.inner.sim_sleep(duration).await;
     }
 }
 
 #[cfg(feature = "sim")]
 impl SimulatedTimeProvider {
     /// Construct from simulation config convenience.
+    #[must_use]
     pub fn from_config(cfg: &crate::util::config::simulation::Simulation) -> Self {
         let speedup = cfg.speedup.unwrap_or(1.0);
         Self::new(speedup.max(0.0001))

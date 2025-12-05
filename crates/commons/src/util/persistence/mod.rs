@@ -10,6 +10,8 @@
 //! This is design scaffolding for Phase 2.1 Sprint 1. Implementations
 //! (memory/sqlite/postgres/migrations) land in later sprints.
 //!
+//! See also: `docs/PERSISTENCE_SQLITE.md` for `SQLite` defaults, readiness, and schema versioning.
+//!
 //! Doctest (shape only):
 //! ```
 //! use commons::util::persistence::{Context, DbAttributes, PersistenceError, with_db_span};

@@ -1,5 +1,6 @@
 use commons::util::logging::init_test_logging;
 use commons::util::persistence::{Context, DbAttributes, with_db_span};
+use std::collections::HashMap;
 use std::time::Duration;
 
 #[tokio::test]
@@ -8,7 +9,7 @@ async fn with_db_span_records_timeout_and_runs_future() {
     let _ = init_test_logging("info");
 
     let ctx = Context {
-        trace_headers: Default::default(),
+        trace_headers: HashMap::default(),
         deadline: Some(tokio::time::Instant::now() + Duration::from_millis(50)),
         metadata: None,
     };
@@ -59,7 +60,7 @@ async fn with_db_span_emits_fields_to_subscriber() {
         .finish();
 
     let ctx = Context {
-        trace_headers: Default::default(),
+        trace_headers: HashMap::default(),
         deadline: Some(tokio::time::Instant::now() + std::time::Duration::from_millis(500)),
         metadata: None,
     };
@@ -90,17 +91,15 @@ async fn with_db_span_emits_fields_to_subscriber() {
     };
 
     // Print captured output for easier debugging on CI/local runs
-    println!("CAPTURED OUTPUT:\n{}", out);
+    println!("CAPTURED OUTPUT:\n{out}");
 
     assert!(
         out.contains("db.driver"),
-        "output did not include db.driver: {}",
-        out
+        "output did not include db.driver: {out}"
     );
     assert!(
         out.contains("memory"),
-        "output did not include driver value: {}",
-        out
+        "output did not include driver value: {out}"
     );
     assert!(out.contains("db.operation"), "output missing db.operation");
     assert!(out.contains("read"), "output missing operation value");

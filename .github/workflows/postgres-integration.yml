@@ -1,0 +1,40 @@
+name: Postgres Integration (Branch-Local)
+
+on:
+  push:
+    branches-ignore:
+      - release/v0
+  pull_request:
+    branches-ignore:
+      - release/v0
+
+jobs:
+  postgres-integration-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install libssl dev (if required)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev
+
+      - name: Run Postgres integration tests
+        run: |
+          cargo test -p commons --features "persistence-postgres persistence-testcontainers"

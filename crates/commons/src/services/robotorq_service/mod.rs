@@ -493,18 +493,30 @@ impl<S: RoboTorqService + Send + Sync + 'static> HttpServer<S> {
         let _server_enter = server_span.enter();
 
         // Build the application with routes
-        let ready_flag = Arc::clone(&self.ready);
-        // Capture the optional persistence driver for the readyz handler; clone the Option and inner Arc.
-        let persistence_for_route = self.persistence.clone();
+        // Prepare separate clones so closures can capture independently.
+        let ready_flag_a = Arc::clone(&self.ready);
+        let persistence_for_route_a = self.persistence.clone();
+        let ready_flag_b = Arc::clone(&self.ready);
+        let persistence_for_route_b = self.persistence.clone();
         let mut app = Router::new()
             .route("/healthz", get(health_handler))
             .route(
                 "/readyz",
                 get(move || async move {
                     readyz::readyz_handler_with_driver(
-                        Arc::clone(&ready_flag),
-                        persistence_for_route.clone(),
+                        Arc::clone(&ready_flag_a),
+                        persistence_for_route_a.clone(),
                     )
+                }),
+            )
+            .route(
+                "/readyz-strict",
+                get(move || async move {
+                    readyz::readyz_handler_with_driver_validate(
+                        Arc::clone(&ready_flag_b),
+                        persistence_for_route_b.clone(),
+                    )
+                    .await
                 }),
             )
             .route(self.config.metrics.0.as_str(), get(metrics_handler::<S>))

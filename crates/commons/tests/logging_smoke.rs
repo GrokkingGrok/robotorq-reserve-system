@@ -12,7 +12,9 @@ fn init_test_logging_idempotent() {
 #[test]
 fn log_if_waited_exercises_both_branches() {
     // Exceed threshold to hit warn path
-    let earlier = Instant::now() - Duration::from_millis(10);
+    let earlier = Instant::now()
+        .checked_sub(Duration::from_millis(10))
+        .unwrap();
     log_if_waited("a", earlier, Duration::from_millis(1));
 
     // Stay below threshold to hit debug path

@@ -21,14 +21,13 @@ use commons::services::robotorq_service::readyz::readyz_handler_with_driver;
 use commons::util::config::persistance::{PersistenceBackend, PersistenceConfig};
 use commons::util::persistence::PersistenceDriver;
 use commons::util::persistence::backends::postgres::PostgresDriver;
+use testcontainers_modules::postgres;
+use testcontainers_modules::testcontainers::runners::AsyncRunner;
 
 /// Start a Postgres container, construct a driver with migrations enabled,
 /// and verify the readyz handler returns 200 OK once schema is validated.
 #[tokio::test]
 async fn readyz_reports_ok_with_valid_schema() -> Result<(), Box<dyn std::error::Error>> {
-    use testcontainers_modules::postgres;
-    use testcontainers_modules::testcontainers::runners::AsyncRunner;
-
     // Start a Postgres container (defaults are fine for sqlx)
     let container = postgres::Postgres::default().start().await?;
 
@@ -40,10 +39,12 @@ async fn readyz_reports_ok_with_valid_schema() -> Result<(), Box<dyn std::error:
     let url = format!("postgres://{user}:{pass}@127.0.0.1:{port}/{db}");
 
     // Configure persistence to use Postgres with migrations enabled
-    let mut cfg = PersistenceConfig::default();
-    cfg.backend = PersistenceBackend::Postgres;
-    cfg.database_url = url;
-    cfg.run_migrations = true;
+    let cfg = PersistenceConfig {
+        backend: PersistenceBackend::Postgres,
+        database_url: url.clone(),
+        run_migrations: true,
+        ..Default::default()
+    };
 
     // Construct driver (runs migrations + schema validation)
     let drv = PostgresDriver::from_config(&cfg).await?;

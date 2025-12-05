@@ -599,6 +599,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_reserve_config_validation() {
         let reserve = ReserveConfig {
             min_ratio: 1.0,
@@ -633,7 +634,7 @@ mod tests {
 
         // Verify derived calculations
         let joule_per_certificate =
-            config.joule_per_ingot as u64 * config.ingots_per_certificate as u64;
+            u64::from(config.joule_per_ingot) * u64::from(config.ingots_per_certificate);
         assert_eq!(joule_per_certificate, 3_600_000);
     }
 }

@@ -1,4 +1,4 @@
-//! Verify Postgres config application: ssl_mode, application_name, search_path.
+//! Verify Postgres config application: `ssl_mode`, `application_name`, `search_path`.
 //!
 //! Feature gates required:
 //! - `persistence-postgres`
@@ -17,10 +17,20 @@ use sqlx::Row;
 
 #[tokio::test]
 async fn session_application_name_is_applied() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::var("RTQ_ENABLE_TESTCONTAINERS").as_deref() != Ok("1") {
+        eprintln!("skipping: RTQ_ENABLE_TESTCONTAINERS != 1");
+        return Ok(());
+    }
     use testcontainers_modules::postgres;
     use testcontainers_modules::testcontainers::runners::AsyncRunner;
 
-    let container = postgres::Postgres::default().start().await?;
+    let container_res = tokio::time::timeout(
+        std::time::Duration::from_secs(90),
+        postgres::Postgres::default().start(),
+    )
+    .await
+    .map_err(|_| "postgres container start timed out")?;
+    let container = container_res?;
     let port = container.get_host_port_ipv4(5432).await?;
     let url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
 
@@ -38,9 +48,13 @@ async fn session_application_name_is_applied() -> Result<(), Box<dyn std::error:
 
     // Use the inner pool to query current settings
     let pool = drv.pool();
-    let row = sqlx::query("SELECT current_setting('application_name')")
-        .fetch_one(pool)
-        .await?;
+    let row_res = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        sqlx::query("SELECT current_setting('application_name')").fetch_one(pool),
+    )
+    .await
+    .map_err(|_| "application_name query timed out")?;
+    let row = row_res?;
     let app_name: String = row.get(0);
     assert_eq!(app_name, "rtq-test-app");
 
@@ -49,10 +63,20 @@ async fn session_application_name_is_applied() -> Result<(), Box<dyn std::error:
 
 #[tokio::test]
 async fn session_search_path_is_applied() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::var("RTQ_ENABLE_TESTCONTAINERS").as_deref() != Ok("1") {
+        eprintln!("skipping: RTQ_ENABLE_TESTCONTAINERS != 1");
+        return Ok(());
+    }
     use testcontainers_modules::postgres;
     use testcontainers_modules::testcontainers::runners::AsyncRunner;
 
-    let container = postgres::Postgres::default().start().await?;
+    let container_res = tokio::time::timeout(
+        std::time::Duration::from_secs(90),
+        postgres::Postgres::default().start(),
+    )
+    .await
+    .map_err(|_| "postgres container start timed out")?;
+    let container = container_res?;
     let port = container.get_host_port_ipv4(5432).await?;
     let url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
 
@@ -70,7 +94,13 @@ async fn session_search_path_is_applied() -> Result<(), Box<dyn std::error::Erro
     let pool = drv.pool();
 
     // SHOW search_path returns string like '"$user", public' or 'public'
-    let row = sqlx::query("SHOW search_path").fetch_one(pool).await?;
+    let row_res = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        sqlx::query("SHOW search_path").fetch_one(pool),
+    )
+    .await
+    .map_err(|_| "search_path query timed out")?;
+    let row = row_res?;
     let search_path: String = row.get(0);
     assert!(search_path.to_lowercase().contains("public"));
 
@@ -80,10 +110,20 @@ async fn session_search_path_is_applied() -> Result<(), Box<dyn std::error::Erro
 #[tokio::test]
 async fn ssl_mode_disable_results_in_non_ssl_connection() -> Result<(), Box<dyn std::error::Error>>
 {
+    if std::env::var("RTQ_ENABLE_TESTCONTAINERS").as_deref() != Ok("1") {
+        eprintln!("skipping: RTQ_ENABLE_TESTCONTAINERS != 1");
+        return Ok(());
+    }
     use testcontainers_modules::postgres;
     use testcontainers_modules::testcontainers::runners::AsyncRunner;
 
-    let container = postgres::Postgres::default().start().await?;
+    let container_res = tokio::time::timeout(
+        std::time::Duration::from_secs(90),
+        postgres::Postgres::default().start(),
+    )
+    .await
+    .map_err(|_| "postgres container start timed out")?;
+    let container = container_res?;
     let port = container.get_host_port_ipv4(5432).await?;
     let url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
 
@@ -103,7 +143,13 @@ async fn ssl_mode_disable_results_in_non_ssl_connection() -> Result<(), Box<dyn 
     // There's no direct SQL to assert TLS status. Instead, we rely on the driver
     // not erroring and perform a simple query. In environments where TLS is enforced,
     // this would fail; here it should pass.
-    let row = sqlx::query("SELECT 1").fetch_one(pool).await?;
+    let row_res = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        sqlx::query("SELECT 1").fetch_one(pool),
+    )
+    .await
+    .map_err(|_| "ssl-mode check query timed out")?;
+    let row = row_res?;
     let one: i32 = row.get(0);
     assert_eq!(one, 1);
 

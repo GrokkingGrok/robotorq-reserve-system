@@ -5,15 +5,17 @@ use axum::response::IntoResponse;
 use commons::util::config::persistance::PersistenceConfig;
 use commons::util::persistence::{ctx_with_timeout_ms, make_driver};
 
-/// End-to-end test for the DriverFactory producing a concrete SQLite driver
+/// End-to-end test for the `DriverFactory` producing a concrete `SQLite` driver
 /// and integrating with the readiness handler.
 #[tokio::test]
 async fn driver_factory_e2e_sqlite_readyz_integration() {
     // Build a PersistenceConfig for an in-memory SQLite database
-    let mut cfg = PersistenceConfig::default();
-    cfg.backend = commons::util::config::persistance::PersistenceBackend::Sqlite;
-    cfg.database_url = "sqlite://:memory:".to_string();
-    cfg.run_migrations = false; // keep it fast and isolated for CI
+    let cfg = PersistenceConfig {
+        backend: commons::util::config::persistance::PersistenceBackend::Sqlite,
+        database_url: "sqlite://:memory:".to_string(),
+        run_migrations: false, // keep it fast and isolated for CI
+        ..Default::default()
+    };
 
     // Create a concrete driver via the factory
     let boxed = make_driver(&cfg).await.expect("make sqlite driver");

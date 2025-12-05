@@ -23,6 +23,6 @@ pub enum MessagingError {
 #[cfg(feature = "messaging")]
 impl From<async_nats::Error> for MessagingError {
     fn from(e: async_nats::Error) -> Self {
-        MessagingError::Nats(format!("async-nats error: {}", e))
+        MessagingError::Nats(format!("async-nats error: {e}"))
     }
 }

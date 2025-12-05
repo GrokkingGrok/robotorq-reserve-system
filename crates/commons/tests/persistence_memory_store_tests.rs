@@ -17,7 +17,7 @@ async fn concurrent_puts_and_reads() {
     for i in 0..20 {
         let d = drv.clone();
         handles.push(tokio::spawn(async move {
-            let key = format!("k{}", i);
+            let key = format!("k{i}");
             d.put(&key, "x").unwrap();
         }));
     }
@@ -27,7 +27,7 @@ async fn concurrent_puts_and_reads() {
     }
 
     for i in 0..20 {
-        let key = format!("k{}", i);
+        let key = format!("k{i}");
         assert_eq!(drv.get(&key), Some("x".to_string()));
     }
 }

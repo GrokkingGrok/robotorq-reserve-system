@@ -8,7 +8,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use commons::util::persistence::ctx_with_timeout_ms;
 
 /// Integration test: start an `HttpServer` using `start_autoload` so that commons
-/// constructs and attaches the concrete SQLite driver, then query `/readyz`.
+/// constructs and attaches the concrete `SQLite` driver, then query `/readyz`.
 #[tokio::test]
 async fn http_readyz_with_sqlite_driver_integration() {
     use commons::services::robotorq_service::{
@@ -53,7 +53,7 @@ async fn http_readyz_with_sqlite_driver_integration() {
             if let Some(d) = &self.drv {
                 let ctx = ctx_with_timeout_ms(1000);
                 d.ping(&ctx).await.map_err(|e| {
-                    commons::util::error::ServiceError::Other(format!("ping failed: {:?}", e))
+                    commons::util::error::ServiceError::Other(format!("ping failed: {e:?}"))
                 })?;
             }
             Ok(())
@@ -100,7 +100,7 @@ async fn http_readyz_with_sqlite_driver_integration() {
         };
         let _ = server.start_with_shutdown(shutdown_future).await;
     });
-    let addr = format!("127.0.0.1:{}", port);
+    let addr = format!("127.0.0.1:{port}");
 
     // Wait for server to accept connections
     let mut connected = false;
@@ -113,7 +113,7 @@ async fn http_readyz_with_sqlite_driver_integration() {
             Err(_) => tokio::time::sleep(std::time::Duration::from_millis(50)).await,
         }
     }
-    assert!(connected, "server did not start listening on {}", addr);
+    assert!(connected, "server did not start listening on {addr}");
 
     // Query /readyz and expect 200 (driver attached and ready)
     {
@@ -127,8 +127,7 @@ async fn http_readyz_with_sqlite_driver_integration() {
         let resp = String::from_utf8_lossy(&buf);
         assert!(
             resp.starts_with("HTTP/1.1 200") || resp.contains(" 200 "),
-            "unexpected response: {}",
-            resp
+            "unexpected response: {resp}",
         );
     }
 

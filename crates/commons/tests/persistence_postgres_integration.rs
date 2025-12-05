@@ -25,10 +25,7 @@ async fn postgres_driver_ping_integration() {
 
     // Get the host port for forwarded 5432 and build the connection URL.
     let host_port = container.get_host_port_ipv4(5432).await.expect("host port");
-    let url = format!(
-        "postgres://postgres:postgres@127.0.0.1:{}/postgres",
-        host_port
-    );
+    let url = format!("postgres://postgres:postgres@127.0.0.1:{host_port}/postgres");
 
     // Build a PersistenceConfig that points to the container
     let mut cfg = PersistenceConfig::default();
@@ -46,7 +43,7 @@ async fn postgres_driver_ping_integration() {
     // Use a 5s deadline to ensure ping doesn't hang on failure
     let ctx = commons::util::persistence::ctx_with_timeout_ms(5000);
     let res = drv.ping(&ctx).await;
-    assert!(res.is_ok(), "Postgres ping failed: {:?}", res);
+    assert!(res.is_ok(), "Postgres ping failed: {res:?}");
 
     // Shutdown/cleanup if driver supports it
     drv.shutdown();

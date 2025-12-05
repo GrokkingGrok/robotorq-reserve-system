@@ -47,7 +47,7 @@ async fn http_server_readyz_integration_variant() {
         let _ = server.start_with_shutdown(shutdown_future).await;
     });
 
-    let addr = format!("127.0.0.1:{}", port);
+    let addr = format!("127.0.0.1:{port}");
 
     // Wait for the server to start accepting connections (bounded retry)
     let mut connected = false;
@@ -60,7 +60,7 @@ async fn http_server_readyz_integration_variant() {
             Err(_) => tokio::time::sleep(std::time::Duration::from_millis(50)).await,
         }
     }
-    assert!(connected, "server did not start listening on {}", addr);
+    assert!(connected, "server did not start listening on {addr}");
 
     // Query /readyz over a raw TCP connection and assert we get HTTP 200
     {
@@ -74,8 +74,7 @@ async fn http_server_readyz_integration_variant() {
         let resp = String::from_utf8_lossy(&buf);
         assert!(
             resp.starts_with("HTTP/1.1 200") || resp.contains(" 200 "),
-            "unexpected response: {}",
-            resp
+            "unexpected response: {resp}"
         );
     }
 
@@ -86,8 +85,7 @@ async fn http_server_readyz_integration_variant() {
         .expect("server task join");
 
     // After shutdown the socket should no longer accept connections (connection refused)
-    match tokio::net::TcpStream::connect(&addr).await {
-        Ok(_) => panic!("server still accepting connections after shutdown"),
-        Err(_) => (),
+    if let Ok(_) = tokio::net::TcpStream::connect(&addr).await {
+        panic!("server still accepting connections after shutdown")
     }
 }

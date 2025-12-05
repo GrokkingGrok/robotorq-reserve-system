@@ -13,6 +13,8 @@
     clippy::missing_errors_doc,
     clippy::missing_panics_doc,
     clippy::too_many_lines,
+    clippy::doc_markdown,
+    clippy::items_after_statements,
     clippy::default_trait_access,
     clippy::unnecessary_wraps,
     clippy::implicit_hasher

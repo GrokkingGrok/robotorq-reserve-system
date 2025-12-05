@@ -1,6 +1,6 @@
 use std::env;
 
-/// Simple migration CLI for RoboTorq persistence backends.
+/// Simple migration CLI for `RoboTorq` persistence backends.
 ///
 /// Usage:
 /// - `cargo run -p cargo-robotorq-migrate -- sqlite <DATABASE_URL> [TABLE_NAME]`
@@ -79,8 +79,7 @@ async fn run_postgres_migrations(
 
     // Ensure migrations tracking table exists
     let create_stmt = format!(
-        "CREATE TABLE IF NOT EXISTS {} (filename TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL);",
-        table_name
+        "CREATE TABLE IF NOT EXISTS {table_name} (filename TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL);"
     );
     sqlx::query(&create_stmt).execute(&pool).await?;
 
@@ -114,7 +113,7 @@ async fn run_postgres_migrations(
         let checksum = blake3::hash(sql.as_bytes()).to_hex().to_string();
 
         // Check existing
-        let existing_query = format!("SELECT checksum FROM {} WHERE filename = $1", table_name);
+        let existing_query = format!("SELECT checksum FROM {table_name} WHERE filename = $1");
         let existing: Option<(String,)> = sqlx::query_as(&existing_query)
             .bind(&filename)
             .fetch_optional(&pool)
@@ -124,8 +123,7 @@ async fn run_postgres_migrations(
                 continue;
             }
             return Err(format!(
-                "migration '{}' checksum mismatch (applied={} file={})",
-                filename, existing_checksum, checksum
+                "migration '{filename}' checksum mismatch (applied={existing_checksum} file={checksum})"
             )
             .into());
         }
@@ -140,8 +138,7 @@ async fn run_postgres_migrations(
 
         let applied_at = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
         let insert_stmt = format!(
-            "INSERT INTO {}(filename, checksum, applied_at) VALUES ($1, $2, $3);",
-            table_name
+            "INSERT INTO {table_name}(filename, checksum, applied_at) VALUES ($1, $2, $3);"
         );
         if let Err(e) = sqlx::query(&insert_stmt)
             .bind(&filename)

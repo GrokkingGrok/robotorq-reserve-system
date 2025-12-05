@@ -19,6 +19,11 @@ pub trait PersistenceDriver: Send + Sync + 'static {
     /// Returns current health; should be cheap and non-blocking.
     fn health(&self) -> PersistenceHealth;
 
+    /// Optional per-request health validation. Defaults to cached `health()`.
+    async fn health_now(&self) -> PersistenceHealth {
+        self.health()
+    }
+
     /// Optional shutdown for drivers that hold resources.
     fn shutdown(&self) {}
 

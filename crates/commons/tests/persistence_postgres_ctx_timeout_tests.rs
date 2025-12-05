@@ -14,27 +14,33 @@ use std::time::Duration;
 use commons::util::config::persistance::{PersistenceBackend, PersistenceConfig};
 use commons::util::persistence::backends::postgres::PostgresDriver;
 use commons::util::persistence::{Context, PersistenceError};
+use testcontainers_modules::postgres;
+use testcontainers_modules::testcontainers::runners::AsyncRunner;
 
 /// When the Context deadline has already expired, CRUD ops should return Timeout.
 #[tokio::test]
 async fn put_ctx_returns_timeout_on_expired_deadline() -> Result<(), Box<dyn std::error::Error>> {
-    use testcontainers_modules::postgres;
-    use testcontainers_modules::testcontainers::runners::AsyncRunner;
-
+    // Skip when Testcontainers isn't enabled (e.g., Windows dev without Docker)
+    if std::env::var("RTQ_ENABLE_TESTCONTAINERS").unwrap_or_else(|_| "0".to_string()) != "1" {
+        eprintln!("RTQ_ENABLE_TESTCONTAINERS != 1; skipping Postgres CRUD timeout test");
+        return Ok(());
+    }
     let container = postgres::Postgres::default().start().await?;
     let port = container.get_host_port_ipv4(5432).await?;
     let url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
 
-    let mut cfg = PersistenceConfig::default();
-    cfg.backend = PersistenceBackend::Postgres;
-    cfg.database_url = url;
-    cfg.run_migrations = true;
+    let cfg = PersistenceConfig {
+        backend: PersistenceBackend::Postgres,
+        database_url: url.clone(),
+        run_migrations: true,
+        ..Default::default()
+    };
 
     let drv = PostgresDriver::from_config(&cfg).await?;
 
     // Create a Context with a deadline already expired
     let ctx_timeout = Context {
-        trace_headers: Default::default(),
+        trace_headers: std::collections::HashMap::default(),
         deadline: Some(tokio::time::Instant::now() + Duration::from_millis(1)),
         metadata: None,
     };
@@ -44,7 +50,7 @@ async fn put_ctx_returns_timeout_on_expired_deadline() -> Result<(), Box<dyn std
     let res = drv.put_ctx(&ctx_timeout, "k_timeout", "v").await;
     match res {
         Err(PersistenceError::DeadlineExceeded) => {}
-        other => panic!("expected DeadlineExceeded, got: {:?}", other),
+        other => panic!("expected DeadlineExceeded, got: {other:?}"),
     }
 
     Ok(())
@@ -54,22 +60,26 @@ async fn put_ctx_returns_timeout_on_expired_deadline() -> Result<(), Box<dyn std
 #[tokio::test]
 async fn put_get_delete_ctx_succeeds_with_reasonable_deadline()
 -> Result<(), Box<dyn std::error::Error>> {
-    use testcontainers_modules::postgres;
-    use testcontainers_modules::testcontainers::runners::AsyncRunner;
-
+    // Skip when Testcontainers isn't enabled (e.g., Windows dev without Docker)
+    if std::env::var("RTQ_ENABLE_TESTCONTAINERS").unwrap_or_else(|_| "0".to_string()) != "1" {
+        eprintln!("RTQ_ENABLE_TESTCONTAINERS != 1; skipping Postgres CRUD timeout test");
+        return Ok(());
+    }
     let container = postgres::Postgres::default().start().await?;
     let port = container.get_host_port_ipv4(5432).await?;
     let url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
 
-    let mut cfg = PersistenceConfig::default();
-    cfg.backend = PersistenceBackend::Postgres;
-    cfg.database_url = url;
-    cfg.run_migrations = true;
+    let cfg = PersistenceConfig {
+        backend: PersistenceBackend::Postgres,
+        database_url: url.clone(),
+        run_migrations: true,
+        ..Default::default()
+    };
 
     let drv = PostgresDriver::from_config(&cfg).await?;
 
     let ctx_ok = Context {
-        trace_headers: Default::default(),
+        trace_headers: std::collections::HashMap::default(),
         deadline: Some(tokio::time::Instant::now() + Duration::from_secs(2)),
         metadata: None,
     };

@@ -99,7 +99,7 @@ impl PostgresDriver {
         // Build URL with sslmode and application_name parameters.
         let url_with_params = build_pg_url_with_params(
             &url,
-            cfg.backend_config.postgres.ssl_mode.clone(),
+            &cfg.backend_config.postgres.ssl_mode,
             &cfg.backend_config.postgres.application_name,
         );
 
@@ -189,6 +189,22 @@ impl PersistenceDriver for PostgresDriver {
         })
         .await
     }
+
+    async fn health_now(&self) -> PersistenceHealth {
+        // On-demand validation with a short timeout, using default migration table.
+        let ctx = crate::util::persistence::ctx_with_timeout_ms(1000);
+        let default_table = "_robotorq_migrations";
+        match self.validate_schema(&ctx, default_table).await {
+            Ok(()) => PersistenceHealth {
+                ready: true,
+                message: None,
+            },
+            Err(e) => PersistenceHealth {
+                ready: false,
+                message: Some(format!("schema validation failed: {e}")),
+            },
+        }
+    }
 }
 
 #[cfg(feature = "persistence-postgres")]
@@ -228,7 +244,7 @@ fn map_sqlx_error(e: sqlx::Error) -> Result<(), PersistenceError> {
 /// - `app_name`: optional application name applied both via URL and session
 ///
 /// Returns a new URL string safe to pass to `sqlx::PgPool::connect`.
-fn build_pg_url_with_params(base: &str, ssl: PostgresSslMode, app_name: &str) -> String {
+fn build_pg_url_with_params(base: &str, ssl: &PostgresSslMode, app_name: &str) -> String {
     fn encode_component(s: &str) -> String {
         // Minimal encoding to keep dependencies light; adequate for common names
         s.replace('%', "%25")
@@ -239,22 +255,23 @@ fn build_pg_url_with_params(base: &str, ssl: PostgresSslMode, app_name: &str) ->
     }
 
     let mut url = base.to_string();
+    use std::fmt::Write;
 
     let sep = if url.contains('?') { '&' } else { '?' };
-    let ssl_str = match ssl {
+    let ssl_str = match *ssl {
         PostgresSslMode::Require => "require",
         PostgresSslMode::Prefer => "prefer",
         PostgresSslMode::Allow => "allow",
         PostgresSslMode::Disable => "disable",
     };
     url.push(sep);
-    url.push_str(&format!("sslmode={}", ssl_str));
+    let _ = write!(url, "sslmode={ssl_str}");
 
     // application_name parameter is supported by libpq.
     if !app_name.is_empty() {
         let sep2 = if url.contains('?') { '&' } else { '?' };
         url.push(sep2);
-        url.push_str(&format!("application_name={}", encode_component(app_name)));
+        let _ = write!(url, "application_name={}", encode_component(app_name));
     }
 
     url
@@ -298,6 +315,21 @@ async fn apply_postgres_session_cfg(
 /// recording progress in the given `table_name`.
 #[cfg(feature = "persistence-postgres")]
 async fn run_migrations(pool: &PgPool, table_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let _ = run_migrations_structured(pool, table_name).await?;
+    Ok(())
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct MigrationOutcome {
+    pub applied: Vec<String>,
+    pub skipped: Vec<String>,
+    pub dirty: Option<String>,
+}
+
+async fn run_migrations_structured(
+    pool: &PgPool,
+    table_name: &str,
+) -> Result<MigrationOutcome, Box<dyn std::error::Error>> {
     use blake3;
     use std::fs;
     use std::path::PathBuf;
@@ -310,7 +342,7 @@ async fn run_migrations(pool: &PgPool, table_name: &str) -> Result<(), Box<dyn s
 
     if !migrations_dir.exists() {
         // Nothing to run
-        return Ok(());
+        return Ok(MigrationOutcome::default());
     }
 
     let mut entries: Vec<_> = fs::read_dir(&migrations_dir)?
@@ -323,11 +355,11 @@ async fn run_migrations(pool: &PgPool, table_name: &str) -> Result<(), Box<dyn s
 
     // Ensure migrations tracking table exists (Postgres syntax)
     let create_stmt = format!(
-        "CREATE TABLE IF NOT EXISTS {} (filename TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL);",
-        table_name
+        "CREATE TABLE IF NOT EXISTS {table_name} (filename TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL)"
     );
     sqlx::query(&create_stmt).execute(pool).await?;
 
+    let mut outcome = MigrationOutcome::default();
     for ent in entries {
         let path = ent.path();
         let filename = path
@@ -340,7 +372,7 @@ async fn run_migrations(pool: &PgPool, table_name: &str) -> Result<(), Box<dyn s
         let checksum = blake3::hash(sql.as_bytes()).to_hex().to_string();
 
         // Check if this migration was already applied
-        let existing_query = format!("SELECT checksum FROM {} WHERE filename = $1", table_name);
+        let existing_query = format!("SELECT checksum FROM {table_name} WHERE filename = $1");
         let existing: Option<(String,)> = sqlx::query_as(&existing_query)
             .bind(&filename)
             .fetch_optional(pool)
@@ -349,33 +381,44 @@ async fn run_migrations(pool: &PgPool, table_name: &str) -> Result<(), Box<dyn s
         if let Some((existing_checksum,)) = existing {
             if existing_checksum == checksum {
                 // already applied and checksum matches -> skip
+                outcome.skipped.push(filename.clone());
                 continue;
             }
             // checksum mismatch: migration file changed after being applied
-            return Err(format!(
-                "migration '{}' checksum mismatch (applied={} file={})",
-                filename, existing_checksum, checksum
-            )
-            .into());
+            outcome.dirty = Some(format!(
+                "migration '{filename}' checksum mismatch (applied={existing_checksum} file={checksum})"
+            ));
+            return Err(outcome.dirty.clone().unwrap().into());
         }
 
         // Not applied yet: run in a dedicated connection/transaction
         let mut conn = pool.acquire().await?;
-        // Begin
-        sqlx::query("BEGIN;").execute(&mut *conn).await?;
+        // Begin (no semicolon; prepared statements can't contain multiple commands)
+        sqlx::query("BEGIN").execute(&mut *conn).await?;
 
-        // Execute migration SQL; on error attempt rollback and return error
-        if let Err(e) = sqlx::query(&sql).execute(&mut *conn).await {
-            let _ = sqlx::query("ROLLBACK;").execute(&mut *conn).await;
-            return Err(Box::new(e) as Box<dyn std::error::Error>);
+        // Execute migration SQL by splitting into individual statements and running
+        // them sequentially. This avoids sending multiple commands in a single
+        // prepared statement which Postgres rejects when using the extended
+        // protocol.
+        let statements = sql
+            .split(';')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>();
+
+        for stmt in statements {
+            if let Err(e) = sqlx::query(stmt).execute(&mut *conn).await {
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                outcome.dirty = Some(format!("apply failed for {filename}: {e}"));
+                return Err(Box::new(e) as Box<dyn std::error::Error>);
+            }
         }
 
-        // Record applied migration
-        let applied_at = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
-        let insert_stmt = format!(
-            "INSERT INTO {}(filename, checksum, applied_at) VALUES ($1, $2, $3);",
-            table_name
-        );
+        // Record applied migration (safe conversion from u64 -> i64)
+        let applied_at = i64::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())
+            .unwrap_or(i64::MAX);
+        let insert_stmt =
+            format!("INSERT INTO {table_name}(filename, checksum, applied_at) VALUES ($1, $2, $3)");
         if let Err(e) = sqlx::query(&insert_stmt)
             .bind(&filename)
             .bind(&checksum)
@@ -383,15 +426,16 @@ async fn run_migrations(pool: &PgPool, table_name: &str) -> Result<(), Box<dyn s
             .execute(&mut *conn)
             .await
         {
-            let _ = sqlx::query("ROLLBACK;").execute(&mut *conn).await;
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            outcome.dirty = Some(format!("record failed for {filename}: {e}"));
             return Err(Box::new(e) as Box<dyn std::error::Error>);
         }
 
-        // Commit
-        sqlx::query("COMMIT;").execute(&mut *conn).await?;
+        // Commit (no semicolon)
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
+        outcome.applied.push(filename);
     }
-
-    Ok(())
+    Ok(outcome)
 }
 
 #[cfg(feature = "persistence-postgres")]
@@ -463,12 +507,55 @@ impl PostgresDriver {
                 return Err(PersistenceError::Internal("migration table missing".to_string()));
             }
             Ok(())
+        }).await?;
+
+        // Compare expected schema version against a simple `schema_version` table if present.
+        // This uses a minimal convention: table `schema_version(version INT)` with a single row.
+        // If the table exists and the version mismatches, report not ready.
+        let ver_attrs = DbAttributes {
+            driver: Some("postgres".to_string()),
+            op: Some("schema_check".to_string()),
+            entity: Some("schema_version".to_string()),
+            statement: Some(obfuscate_statement(
+                "SELECT version FROM schema_version LIMIT 1",
+            )),
+        };
+        use crate::util::schema::ROBOTORQ_CONFIG_SCHEMA_VERSION;
+        with_db_span(ctx, &ver_attrs, async {
+            // Check if schema_version table exists; if not, skip strict version check.
+            let exists: Option<(i32,)> = sqlx::query_as(
+                "SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'schema_version' LIMIT 1",
+            )
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| map_sqlx_error(e).err().unwrap_or(PersistenceError::Internal("unknown".to_string())))?;
+
+            if let Some((_ ,)) = exists {
+                let row: Option<(i32,)> = sqlx::query_as(
+                    "SELECT version FROM schema_version LIMIT 1",
+                )
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| map_sqlx_error(e).err().unwrap_or(PersistenceError::Internal("unknown".to_string())))?;
+                if let Some((v,)) = row {
+                    match u32::try_from(v) {
+                        Ok(v_u) if v_u == ROBOTORQ_CONFIG_SCHEMA_VERSION => {}
+                        _ => {
+                            return Err(PersistenceError::Internal(format!(
+                                "schema version mismatch: db={v} expected={ROBOTORQ_CONFIG_SCHEMA_VERSION}"
+                            )));
+                        }
+                    }
+                }
+            }
+            Ok(())
         }).await
     }
 }
 
 #[cfg(feature = "persistence-postgres")]
 impl PostgresDriver {
+    #[must_use]
     pub fn pool(&self) -> &sqlx::PgPool {
         &self.pool
     }
@@ -500,7 +587,7 @@ impl PostgresDriver {
         };
 
         with_db_span(ctx, &attrs, async {
-            sqlx::query("INSERT INTO kv(key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value;")
+            sqlx::query("INSERT INTO kv(key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value")
                 .bind(key)
                 .bind(value)
                 .execute(&self.pool)
@@ -526,7 +613,7 @@ impl PostgresDriver {
         };
 
         with_db_span(ctx, &attrs, async {
-            let row = sqlx::query("SELECT value FROM kv WHERE key = $1;")
+            let row = sqlx::query("SELECT value FROM kv WHERE key = $1")
                 .bind(key)
                 .fetch_optional(&self.pool)
                 .await
@@ -550,7 +637,7 @@ impl PostgresDriver {
         };
 
         with_db_span(ctx, &attrs, async {
-            sqlx::query("DELETE FROM kv WHERE key = $1;")
+            sqlx::query("DELETE FROM kv WHERE key = $1")
                 .bind(key)
                 .execute(&self.pool)
                 .await
@@ -566,7 +653,7 @@ impl PostgresDriver {
 
     /// Non-context upsert convenience.
     pub async fn put(&self, key: &str, value: &str) -> Result<(), PersistenceError> {
-        sqlx::query("INSERT INTO kv(key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value;")
+        sqlx::query("INSERT INTO kv(key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value")
             .bind(key)
             .bind(value)
             .execute(&self.pool)
@@ -577,7 +664,7 @@ impl PostgresDriver {
 
     /// Non-context read convenience.
     pub async fn get(&self, key: &str) -> Result<Option<String>, PersistenceError> {
-        let row = sqlx::query("SELECT value FROM kv WHERE key = $1;")
+        let row = sqlx::query("SELECT value FROM kv WHERE key = $1")
             .bind(key)
             .fetch_optional(&self.pool)
             .await
@@ -591,7 +678,7 @@ impl PostgresDriver {
 
     /// Non-context delete convenience.
     pub async fn delete(&self, key: &str) -> Result<(), PersistenceError> {
-        sqlx::query("DELETE FROM kv WHERE key = $1;")
+        sqlx::query("DELETE FROM kv WHERE key = $1")
             .bind(key)
             .execute(&self.pool)
             .await
@@ -626,7 +713,7 @@ mod tests {
 
     #[test]
     fn map_io_and_tls_to_unavailable() {
-        let io_err = io::Error::new(io::ErrorKind::Other, "io");
+        let io_err = io::Error::other("io");
         let e = sqlx::Error::Io(io_err);
         let r = map_sqlx_error(e);
         assert!(matches!(r, Err(PersistenceError::Unavailable(_))));

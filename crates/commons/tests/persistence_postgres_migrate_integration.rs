@@ -20,10 +20,7 @@ async fn postgres_driver_runs_migrations_integration() {
         .expect("start postgres");
 
     let host_port = container.get_host_port_ipv4(5432).await.expect("host port");
-    let url = format!(
-        "postgres://postgres:postgres@127.0.0.1:{}/postgres",
-        host_port
-    );
+    let url = format!("postgres://postgres:postgres@127.0.0.1:{host_port}/postgres");
 
     let mut cfg = PersistenceConfig::default();
     cfg.backend = PersistenceBackend::Postgres;
@@ -46,8 +43,7 @@ async fn postgres_driver_runs_migrations_integration() {
 
     // Verify a migration row exists for 0001_create_kv.sql
     let row: Option<(i64,)> = sqlx::query_as(&format!(
-        "SELECT applied_at FROM {} WHERE filename = $1",
-        mig_table
+        "SELECT applied_at FROM {mig_table} WHERE filename = $1"
     ))
     .bind("0001_create_kv.sql")
     .fetch_optional(&pool)

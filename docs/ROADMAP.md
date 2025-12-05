@@ -144,6 +144,9 @@ OTLP prototype (status):
 Notes:
 - All changes were implemented to be minimal, feature-gated, and backwards-compatible. Tests in `crates/commons` pass and clippy was run and fixed.
 
+See also:
+- `docs/PERSISTENCE_SQLITE.md` — SQLite defaults, readiness behavior, and schema version repair steps.
+
 
 ### Phase 2.1 — Persistence Strategy (Unified)
 Scope: unify Postgres/SQLite/Memory backends behind a common abstraction, with health, timeouts, and standardized errors
@@ -291,8 +294,8 @@ Notes:
 
 #### Phase 2.1 — Remaining Tasks
 
-- Postgres config applied: `ssl_mode`, `application_name`, and `search_path` wired; defaults and opt-ins documented.
-- CRUD ops (Postgres): add traced, context-aware CRUD methods mirroring SQLite (`with_db_span`, obfuscation, timeouts).
+- Postgres config applied: `ssl_mode`, `application_name`, and `search_path` wired; defaults and opt-ins documented. — Completed
+- CRUD ops (Postgres): traced, context-aware CRUD methods mirroring SQLite (`with_db_span`, obfuscation, timeouts). — Completed
 - Schema validation: formalize version check at startup (compare `current_db_version` vs `expected_version`) and reflect result in readiness.
 - Migration runner consistency: finalize fail-fast behavior, structured results, and per-DB caveats; ensure idempotence across both backends.
 - Tests coverage: add targeted Postgres CRUD + timeout tests; extend obfuscation doctests; verify readiness flips correctly with schema mismatches.

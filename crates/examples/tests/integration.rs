@@ -1,6 +1,6 @@
 //! Integration tests for the HTTP service template.
 //!
-//! These tests verify the full end-to-end functionality of the HttpServer
+//! These tests verify the full end-to-end functionality of the `HttpServer`
 //! with a test service, including metrics, health checks, and config loading.
 
 use std::sync::Arc;
@@ -136,11 +136,11 @@ mod tests {
 
         // Create HTTP client
         let client = Client::new();
-        let base_url = format!("http://127.0.0.1:{}", TEST_PORT);
+        let base_url = format!("http://127.0.0.1:{TEST_PORT}");
 
         // Test /healthz
         let resp = client
-            .get(format!("{}/healthz", base_url))
+            .get(format!("{base_url}/healthz"))
             .send()
             .await
             .expect("healthz request failed");
@@ -150,7 +150,7 @@ mod tests {
 
         // Test /metrics
         let resp = client
-            .get(format!("{}/metrics", base_url))
+            .get(format!("{base_url}/metrics"))
             .send()
             .await
             .expect("metrics request failed");
@@ -172,7 +172,7 @@ mod tests {
 
         // Test CORS headers
         let resp = client
-            .get(format!("{}/healthz", base_url))
+            .get(format!("{base_url}/healthz"))
             .header("Origin", "http://example.com")
             .send()
             .await

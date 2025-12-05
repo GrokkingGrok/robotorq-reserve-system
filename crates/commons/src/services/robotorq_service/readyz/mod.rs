@@ -92,6 +92,32 @@ pub fn readyz_handler_with_driver(
     (StatusCode::OK, "Ready".to_string())
 }
 
+/// Async readiness handler that optionally performs per-request driver validation.
+///
+/// When the flag is true and a driver is provided, calls `driver.health_now().await`.
+/// Falls back to `driver.health()` if not overridden by the backend.
+#[allow(clippy::needless_pass_by_value)]
+pub async fn readyz_handler_with_driver_validate(
+    flag: Arc<AtomicBool>,
+    drv: Option<std::sync::Arc<dyn PersistenceDriver>>,
+) -> impl IntoResponse {
+    if !flag.load(Ordering::Relaxed) {
+        return (StatusCode::SERVICE_UNAVAILABLE, "Not Ready".to_string());
+    }
+
+    if let Some(d) = drv {
+        let h = d.health_now().await;
+        if !h.ready {
+            let msg = h
+                .message
+                .unwrap_or_else(|| "persistence not ready".to_string());
+            return (StatusCode::SERVICE_UNAVAILABLE, msg);
+        }
+    }
+
+    (StatusCode::OK, "Ready".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

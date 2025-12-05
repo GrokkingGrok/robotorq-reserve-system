@@ -211,7 +211,7 @@ mod tests {
             nats: Default::default(),
             persistence: Default::default(),
             observability: crate::util::config::ObservabilityConfig {
-                service_name: "".to_string(), // Empty to test fallback
+                service_name: String::new(), // Empty to test fallback
                 service_instance: Default::default(),
                 service_version: Default::default(),
                 metrics: Default::default(),

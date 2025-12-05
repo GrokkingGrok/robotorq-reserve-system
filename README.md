@@ -40,6 +40,7 @@ Long-term financing is achieved with collateralized, vaulted savings tied to UBD
 - [Philosophy](#philosophy)
 - [Why No Blockchain?](#why-no-blockchain)
 - [Unit Hierarchy](#unit-hierarchy)
+- [Persistence](#persistence)
 - [Contact](#contact)
 
 ---
@@ -124,6 +125,20 @@ Other parts of the repository — including many architecture deep-dive docs, an
 `1 JouleTorq = 1 joule x 1 token / 1 second`
 `1 TokenTorq = 3600 JouleTorq`
 `1 RoboTorq = 1000 Tokentorq = 3.6 million JouleTorq`
+
+## Persistence
+
+SQLite is the default backend for development and readiness.
+
+- Quick guide: see `docs/PERSISTENCE_SQLITE.md` (defaults, `kv` bootstrap, schema version repair).
+- Commons persistence README: `crates/commons/src/util/persistence/README.md`.
+- To run SQLite tests:
+
+```powershell
+cargo test -p commons --features "persistence"
+```
+
+Postgres and Testcontainers integrations are feature-gated and can be enabled later.
 
 ## Developer: OTLP (local smoke test)
 
