@@ -56,6 +56,9 @@ use crate::util::config::persistance::{
 };
 
 /// SQLite-backed driver. Connection pool is managed by `sqlx::SqlitePool`.
+///
+/// # Fields
+/// - `pool`: connection pool used for queries and transactions
 pub struct SqliteDriver {
     pool: SqlitePool,
 }
@@ -67,9 +70,20 @@ impl SqliteDriver {
     /// tracking table `"_robotorq_migrations"`. For production, prefer
     /// `from_config` to control migration execution and table naming.
     ///
-    /// # Errors
-    /// Returns an error if a connection cannot be established or migrations
-    /// fail to apply.
+    /// # Returns
+    /// - `Ok(SqliteDriver)` when the pool is created and migrations applied
+    /// - `Err` if the connection fails or migrations cannot be applied
+    ///
+    /// # Panics
+    /// - This function does not panic.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # use commons::util::persistence::sqlite::SqliteDriver;
+    /// # async fn demo() -> Result<(), Box<dyn std::error::Error>> {
+    /// let drv = SqliteDriver::new("sqlite::memory:").await?;
+    /// # Ok(()) }
+    /// ```
     pub async fn new(conn_str: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let pool = SqlitePool::connect(conn_str).await?;
 
@@ -88,9 +102,22 @@ impl SqliteDriver {
     /// `run_migrations = true`, recording progress in `migration_table`.
     /// Use this in services to align driver behavior with config.
     ///
-    /// # Errors
-    /// Returns an error if connection setup, PRAGMA application, or migrations
-    /// fail.
+    /// # Returns
+    /// - `Ok(SqliteDriver)` when the pool is created and optional migrations applied
+    /// - `Err` if connection setup, PRAGMA application, or migrations fail
+    ///
+    /// # Panics
+    /// - This function does not panic.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use commons::util::config::persistance::{PersistenceConfig, PersistenceBackend};
+    /// use commons::util::persistence::sqlite::SqliteDriver;
+    /// # async fn demo() -> Result<(), Box<dyn std::error::Error>> {
+    /// let cfg = PersistenceConfig { backend: PersistenceBackend::Sqlite, database_url: "sqlite::memory:".to_string(), run_migrations: true, ..Default::default() };
+    /// let drv = SqliteDriver::from_config(&cfg).await?;
+    /// # Ok(()) }
+    /// ```
     pub async fn from_config(cfg: &PersistenceConfig) -> Result<Self, Box<dyn std::error::Error>> {
         let pool = SqlitePool::connect(&cfg.database_url).await?;
 
@@ -139,7 +166,7 @@ impl SqliteDriver {
         Ok(Self { pool })
     }
 
-    /// Insert or update a value using a traced, context-aware operation.
+    /// Insert or update a value using a traced, context‑aware operation.
     ///
     /// Wraps the query in `with_db_span`, honoring `ctx` deadlines and
     /// attaching canonical `DbAttributes`.
@@ -152,6 +179,9 @@ impl SqliteDriver {
     /// # Returns
     /// - `Ok(())` on success
     /// - `Err(PersistenceError)` on failure or deadline exceeded
+    ///
+    /// # Panics
+    /// - This function does not panic.
     ///
     /// # Examples
     /// ```no_run
@@ -189,10 +219,19 @@ impl SqliteDriver {
         }).await
     }
 
-    /// Fetch a value using a traced, context-aware operation.
+    /// Fetch a value using a traced, context‑aware operation.
     ///
-    /// Returns `Ok(Some(String))` when the key exists, `Ok(None)` otherwise.
-    /// Applies `with_db_span` with deadline enforcement.
+    /// # Arguments
+    /// - `ctx`: operation context
+    /// - `key`: primary key for the entry
+    ///
+    /// # Returns
+    /// - `Ok(Some(String))` when the key exists
+    /// - `Ok(None)` if no row exists
+    /// - `Err(PersistenceError)` on error or deadline exceeded
+    ///
+    /// # Panics
+    /// - This function does not panic.
     pub async fn get_ctx(
         &self,
         ctx: &Context,
@@ -218,9 +257,18 @@ impl SqliteDriver {
         .await
     }
 
-    /// Delete a key using a traced, context-aware operation.
+    /// Delete a key using a traced, context‑aware operation.
     ///
-    /// Returns `Ok(())` on success. Missing keys are not treated as errors.
+    /// # Arguments
+    /// - `ctx`: operation context
+    /// - `key`: primary key for the entry
+    ///
+    /// # Returns
+    /// - `Ok(())` on success
+    /// - `Err(PersistenceError)` on error or deadline exceeded
+    ///
+    /// # Panics
+    /// - This function does not panic.
     pub async fn delete_ctx(&self, ctx: &Context, key: &str) -> Result<(), PersistenceError> {
         let attrs = DbAttributes {
             driver: Some("sqlite".to_string()),
@@ -241,7 +289,23 @@ impl SqliteDriver {
         })
         .await
     }
-    /// Put a value into the kv table.
+    /// Put a value into the `kv` table.
+    ///
+    /// # Arguments
+    /// - `key`: primary key
+    /// - `value`: value to store
+    ///
+    /// # Returns
+    /// - `Ok(())` on success; `Err(PersistenceError)` on failure
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # use commons::util::persistence::sqlite::SqliteDriver;
+    /// # async fn demo() -> Result<(), Box<dyn std::error::Error>> {
+    /// let drv = SqliteDriver::new("sqlite::memory:").await?;
+    /// drv.put("k","v").await.unwrap();
+    /// # Ok(()) }
+    /// ```
     pub async fn put(&self, key: &str, value: &str) -> Result<(), PersistenceError> {
         sqlx::query("INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value;")
             .bind(key)
@@ -252,7 +316,24 @@ impl SqliteDriver {
         Ok(())
     }
 
-    /// Get a value from the kv table.
+    /// Get a value from the `kv` table.
+    ///
+    /// # Arguments
+    /// - `key`: primary key
+    ///
+    /// # Returns
+    /// - `Ok(Some(String))` when present; `Ok(None)` when missing; `Err` on failure
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # use commons::util::persistence::sqlite::SqliteDriver;
+    /// # async fn demo() -> Result<(), Box<dyn std::error::Error>> {
+    /// let drv = SqliteDriver::new("sqlite::memory:").await?;
+    /// drv.put("k","v").await.unwrap();
+    /// let v = drv.get("k").await.unwrap();
+    /// assert_eq!(v, Some("v".to_string()));
+    /// # Ok(()) }
+    /// ```
     pub async fn get(&self, key: &str) -> Result<Option<String>, PersistenceError> {
         let row = sqlx::query("SELECT value FROM kv WHERE key = ?;")
             .bind(key)
@@ -263,7 +344,23 @@ impl SqliteDriver {
         Ok(row.map(|r| r.get::<String, _>(0)))
     }
 
-    /// Delete a key from the kv table.
+    /// Delete a key from the `kv` table.
+    ///
+    /// # Arguments
+    /// - `key`: primary key
+    ///
+    /// # Returns
+    /// - `Ok(())` on success; `Err(PersistenceError)` on failure
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # use commons::util::persistence::sqlite::SqliteDriver;
+    /// # async fn demo() -> Result<(), Box<dyn std::error::Error>> {
+    /// let drv = SqliteDriver::new("sqlite::memory:").await?;
+    /// drv.put("k","v").await.unwrap();
+    /// drv.delete("k").await.unwrap();
+    /// # Ok(()) }
+    /// ```
     pub async fn delete(&self, key: &str) -> Result<(), PersistenceError> {
         sqlx::query("DELETE FROM kv WHERE key = ?;")
             .bind(key)
@@ -291,6 +388,13 @@ impl PersistenceDriver for SqliteDriver {
 
 impl SqliteDriver {
     /// Lightweight ping: run a `SELECT 1` to verify DB responsiveness.
+    ///
+    /// # Returns
+    /// - `Ok(())` if the database responds
+    /// - `Err(PersistenceError::Unavailable)` if the query fails
+    ///
+    /// # Panics
+    /// - This function does not panic.
     #[instrument(level = "debug", skip(self))]
     pub async fn ping(&self) -> Result<(), PersistenceError> {
         let _ = sqlx::query("SELECT 1;")

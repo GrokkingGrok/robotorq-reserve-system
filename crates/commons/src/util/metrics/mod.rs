@@ -4,6 +4,29 @@
 //! so domain code depends only on our trait while the implementation uses
 //! the `prometheus` crate underneath. Text exposition is consumed by the
 //! HTTP `/metrics` handler elsewhere.
+//!
+//! # Overview
+//! - Traits: `MetricCounter`, `MetricGauge`, `MetricHistogram`, `Labeled*`
+//! - Registry: `MetricsRegistry` interface with a Prometheus adapter
+//! - Export: text format via `/metrics` endpoint
+//!
+//! # Quick Start
+//! ```rust
+//! use commons::util::metrics::MetricsHandler;
+//! // Build a handler with a Prometheus registry
+//! let handler = MetricsHandler::new();
+//! // Register a counter and increment
+//! let c = handler.register_counter("requests_total", "Total HTTP requests");
+//! c.inc();
+//! // Export text for HTTP response
+//! let text = handler.export_text();
+//! assert!(text.contains("requests_total"));
+//! ```
+//!
+//! # Notes
+//! - All metric operations are non-panicking; registration returns `Result`.
+//! - Prefer attaching stable labels (service, instance, version) from config.
+//! - Use histograms for latencies; avoid unbounded label cardinality.
 
 use std::sync::Arc;
 use std::time::Duration;

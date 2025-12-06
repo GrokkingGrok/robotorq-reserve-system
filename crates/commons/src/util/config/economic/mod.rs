@@ -4,6 +4,35 @@
 //! of the `RoboTorq` Reserve System. It defines the economic invariants, reserve ratios,
 //! token economics, and circulation parameters that govern the system's behavior.
 //!
+//! # Overview
+//! - Invariants: fixed relationships between `JouleTorqOre`, `TokenTorqIngot`, and certificates
+//! - Policy: demurrage, redistribution (UBD), stake, reserve ratios
+//! - Supply: ceilings and issuance limits to curb inflation
+//! - Distribution: activation rules and marketplace (`BidNet`) parameters
+//!
+//! # Invariants (Must Hold)
+//! - 1 ingot = 3,600 ore units
+//! - 1 certificate = 1,000 ingots = 3,600,000 ore units
+//!
+//! Changing these values in production violates economic guarantees and must be avoided.
+//!
+//! # Notes
+//! - Configuration is data-only; constructing these types does not perform I/O.
+//! - None of the constructors or defaults panic; validations are expected downstream.
+//! - Floats represent rates/ratios; use domain validation to ensure meaningful bounds.
+//!
+//! # Quick Start
+//! ```rust
+//! use commons::util::config::economic::{EconomicConfig, DemurrageModel};
+//!
+//! let cfg = EconomicConfig {
+//!     demurrage_model: DemurrageModel::Continuous { annual_rate: 0.02 },
+//!     ..Default::default()
+//! };
+//! assert_eq!(cfg.joule_per_ingot, 3600);
+//! assert_eq!(cfg.ingots_per_certificate, 1000);
+//! ```
+//!
 //! # Economic Invariants
 //!
 //! The system maintains strict economic invariants:
@@ -44,6 +73,19 @@ use serde::{Deserialize, Serialize};
 ///
 /// Defines the economic parameters, monetary policy, and reserve management
 /// settings that govern the behavior of the token economy.
+///
+/// # Fields
+/// - `joule_per_ingot`: invariant mapping ore units per ingot (3,600)
+/// - `ingots_per_certificate`: invariant ingots per certificate (1,000)
+/// - `demurrage_model`: decay policy (None/Continuous/Stepped)
+/// - `ubd`: redistribution policy configuration
+/// - `stake`: stake requirements for labor contracts
+/// - `reserve`: reserve ratios and audit cadence
+/// - `supply`: issuance ceilings and daily limits
+/// - `distribution`: circulation incentives and activation rules
+///
+/// # Panics
+/// - This type does not panic during construction or defaulting.
 ///
 /// # Examples
 ///
@@ -129,6 +171,8 @@ impl Default for EconomicConfig {
 }
 
 /// Demurrage model configurations.
+/// # Panics
+/// - This enum is data-only and does not panic.
 ///
 /// Defines how token value decays over time to encourage economic circulation.
 /// Demurrage prevents hoarding by continuously reducing token value unless actively used.
@@ -165,6 +209,14 @@ impl Default for DemurrageModel {
 }
 
 /// Universal Basic Dividend (UBD) configuration.
+/// # Fields
+/// - `enabled`: toggle redistribution
+/// - `interval_hours`: cadence of redistributions
+/// - `min_spend_threshold`: minimum activity percent for eligibility
+/// - `eligibility_period_hours`: lookback window to compute eligibility
+///
+/// # Panics
+/// - This type does not panic during construction or defaulting.
 ///
 /// UBD provides periodic redistribution of demurrage-collected funds
 /// to active participants who meet minimum circulation requirements.
@@ -204,6 +256,14 @@ impl Default for UbdConfig {
 }
 
 /// Stake requirements for labor contracts.
+/// # Fields
+/// - `min_percentage`: minimum stake percent of value
+/// - `max_percentage`: maximum stake percent of value
+/// - `lockup_hours`: stake lockup duration
+/// - `penalty_rate`: early-unlock penalty percent
+///
+/// # Panics
+/// - This type does not panic during construction or defaulting.
 ///
 /// Defines the minimum stake required to initiate robotic labor contracts,
 /// ensuring economic accountability and preventing uncontrolled issuance.
@@ -238,6 +298,14 @@ impl Default for StakeConfig {
 }
 
 /// Reserve management configuration.
+/// # Fields
+/// - `min_ratio`: minimum backing ratio (≥ 1.0 recommended)
+/// - `target_ratio`: target backing ratio (e.g., 1.2)
+/// - `audit_interval_hours`: audit cadence in hours
+/// - `emergency_threshold`: trigger threshold for remediation
+///
+/// # Panics
+/// - This type does not panic during construction or defaulting.
 ///
 /// Defines reserve ratios, vault management, and backing requirements
 /// to ensure the monetary system remains solvent and backed.
@@ -277,6 +345,14 @@ impl Default for ReserveConfig {
 }
 
 /// Token supply controls.
+/// # Fields
+/// - `max_joule`: optional global cap on ore units
+/// - `max_ingot`: optional global cap on ingots
+/// - `max_certificate`: optional cap on certificates
+/// - `daily_certificate_limit`: optional daily issuance cap
+///
+/// # Panics
+/// - This type does not panic during construction or defaulting.
 ///
 /// Defines maximum supply limits and issuance controls for different token types
 /// to prevent inflation and ensure controlled monetary expansion.
@@ -311,6 +387,13 @@ impl Default for SupplyConfig {
 }
 
 /// Distribution and circulation parameters.
+/// # Fields
+/// - `min_spend_percent`: minimum activity percent to qualify for UBD
+/// - `activation`: activation rules configuration
+/// - `bidnet`: marketplace bidding configuration
+///
+/// # Panics
+/// - This type does not panic during construction or defaulting.
 ///
 /// Defines parameters for token distribution, minimum spend thresholds,
 /// and circulation incentives to ensure active economic participation.
@@ -342,6 +425,12 @@ impl Default for DistributionConfig {
 }
 
 /// Distribution activation configuration.
+/// # Fields
+/// - `min_internal_spend`: minimum internal spend percent before activation
+/// - `grace_period_hours`: grace window for initial activation
+///
+/// # Panics
+/// - This type does not panic during construction or defaulting.
 ///
 /// Defines requirements for activating distribution eligibility,
 /// particularly for physical bearer bonds.
@@ -371,6 +460,14 @@ impl Default for ActivationConfig {
 }
 
 /// `BidNet` marketplace configuration.
+/// # Fields
+/// - `enabled`: enable/disable marketplace
+/// - `max_bid_percent`: cap bid size relative to balance
+/// - `expiry_hours`: bid expiry horizon
+/// - `min_bid`: minimum absolute bid amount
+///
+/// # Panics
+/// - This type does not panic during construction or defaulting.
 ///
 /// Defines parameters for the decentralized labor exchange and marketplace
 /// where `RoboTorq` can be converted to goods and services.

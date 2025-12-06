@@ -1,7 +1,9 @@
 //! Database span helpers and attributes.
 //!
-//! Provides a standard attribute bag and `with_db_span` wrapper to
-//! consistently annotate persistence operations.
+//! This module helps every database operation create a clear, consistent
+//! tracing span with a few standard fields (driver, operation, entity,
+//! statement id, timeout). The goal is to make it easy to understand
+//! "what DB thing just happened" when looking at logs or traces.
 
 use std::future::Future;
 use std::time::Duration;
@@ -11,6 +13,12 @@ use super::context::Context;
 use super::error::PersistenceError;
 
 /// Canonical attributes for DB spans.
+///
+/// # Fields
+/// - `driver`: which backend is used (e.g., `memory`, `sqlite`, `postgres`)
+/// - `op`: operation name (e.g., `read`, `write`, `upsert`)
+/// - `entity`: target entity or table (e.g., `kv`)
+/// - `statement`: obfuscated query identifier (see `obfuscate_statement`)
 #[derive(Clone, Debug, Default)]
 pub struct DbAttributes {
     /// Driver name (e.g., memory, sqlite, postgres).
@@ -29,6 +37,12 @@ pub struct DbAttributes {
 /// input. This avoids leaking sensitive literals or schema details while
 /// allowing correlation across identical statements.
 ///
+/// # Arguments
+/// - `raw`: the original SQL text to obfuscate
+///
+/// # Returns
+/// - A stable identifier string of the form `stmt:<hex>` (length 69)
+///
 /// # Examples
 /// ```
 /// use commons::util::persistence::obfuscate_statement;
@@ -42,11 +56,33 @@ pub fn obfuscate_statement(raw: &str) -> String {
     format!("stmt:{digest}")
 }
 
-/// Wrap an async persistence operation with a standardized DB span and
-/// respect the optional monotonic deadline in `ctx`.
+/// Wrap an async persistence operation with a standardized DB span.
 ///
-/// The provided future must return `Result<T, PersistenceError>` so timeouts
-/// can be mapped to `PersistenceError::DeadlineExceeded`.
+/// This helper starts a `db.op` span with fields from `attrs`, applies
+/// a timeout if `ctx` has a deadline, and maps timeout errors to
+/// `PersistenceError::DeadlineExceeded`.
+///
+/// # Arguments
+/// - `ctx`: operation context with optional monotonic deadline
+/// - `attrs`: canonical DB attributes to attach to the span
+/// - `fut`: future that runs the actual DB operation
+///
+/// # Returns
+/// - `Ok(T)` when the operation succeeds
+/// - `Err(PersistenceError::DeadlineExceeded)` if the deadline expires
+/// - `Err(PersistenceError)` when the operation fails
+///
+/// # Examples
+/// ```no_run
+/// use commons::util::persistence::{Context, PersistenceError};
+/// use commons::util::persistence::{DbAttributes, with_db_span};
+/// # async fn demo() -> Result<(), PersistenceError> {
+/// let ctx = Context::with_deadline_from_now(std::time::Duration::from_millis(50));
+/// let attrs = DbAttributes { driver: Some("sqlite".into()), op: Some("read".into()), entity: Some("kv".into()), statement: None };
+/// let val: Result<i32, PersistenceError> = with_db_span(&ctx, &attrs, async { Ok(42) }).await;
+/// assert_eq!(val.unwrap(), 42);
+/// # Ok(()) }
+/// ```
 pub async fn with_db_span<Fut, T>(
     ctx: &Context,
     attrs: &DbAttributes,

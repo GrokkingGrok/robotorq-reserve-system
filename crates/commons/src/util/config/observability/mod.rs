@@ -2,6 +2,39 @@
 //!
 //! This module defines configuration options for metrics collection,
 //! tracing, logging, and monitoring integration.
+//!
+//! # Overview
+//! - Metrics: Prometheus-compatible counters, gauges, and histograms
+//! - Tracing: Distributed request tracing with pluggable backends
+//! - Logging: Structured logs with level and format controls
+//! - Health: Background health checks and readiness probes
+//!
+//! # Defaults
+//! Sensible defaults are provided for development: metrics and tracing are enabled,
+//! pretty logging is used, and health checks run with moderate intervals.
+//!
+//! # Notes
+//! - Configuration is data-only; constructing these types does not perform I/O.
+//! - None of the constructors or defaults panic; invalid values should be validated
+//!   by higher-level service initialization.
+//!
+//! # Quick Start
+//! ```rust
+//! use commons::util::config::observability::{ObservabilityConfig, LogLevel, LogFormat};
+//!
+//! let cfg = ObservabilityConfig {
+//!     service_name: "robot-gateway".into(),
+//!     service_instance: "local-dev".into(),
+//!     service_version: "dev".into(),
+//!     logging: commons::util::config::observability::LoggingConfig {
+//!         level: LogLevel::Info,
+//!         format: LogFormat::Pretty,
+//!         ..Default::default()
+//!     },
+//!     ..Default::default()
+//! };
+//! assert_eq!(cfg.metrics.enabled, true);
+//! ```
 
 use serde::{Deserialize, Serialize};
 
@@ -9,6 +42,18 @@ use serde::{Deserialize, Serialize};
 ///
 /// Configures metrics collection, tracing, and monitoring for the `RoboTorq` system.
 /// Strong observability is critical for operating distributed systems reliably.
+///
+/// # Fields
+/// - `service_name`: label used across metrics and traces
+/// - `service_instance`: instance identifier (e.g., hostname or replica ID)
+/// - `service_version`: version label (defaults to crate version)
+/// - `metrics`: metrics subsystem configuration
+/// - `tracing`: tracing subsystem configuration
+/// - `logging`: structured logging configuration
+/// - `health`: health/readiness probe configuration
+///
+/// # Panics
+/// - This type does not panic during construction or defaulting.
 ///
 /// # Examples
 ///
@@ -88,6 +133,16 @@ impl Default for ObservabilityConfig {
 ///
 /// Configures Prometheus metrics collection and export.
 ///
+/// # Fields
+/// - `enabled`: toggle metrics collection on/off
+/// - `registry`: registry implementation (Prometheus)
+/// - `common_labels`: static labels applied to all metrics
+/// - `path`: HTTP endpoint for text metrics export
+/// - `collection_interval_seconds`: cadence for periodic gauges
+///
+/// # Panics
+/// - This type does not panic during construction or defaulting.
+///
 /// # Examples
 ///
 /// ```rust
@@ -166,6 +221,9 @@ impl Default for MetricsConfig {
 ///
 /// Determines how metrics are stored and exposed.
 ///
+/// # Panics
+/// - This enum is data-only and does not panic.
+///
 /// # Examples
 ///
 /// ```rust
@@ -187,6 +245,15 @@ pub enum MetricsRegistryType {
 /// Tracing configuration.
 ///
 /// Configures distributed tracing for request tracking across services.
+///
+/// # Fields
+/// - `enabled`: toggle tracing on/off
+/// - `backend`: tracing backend (OTLP/Jaeger/Console)
+/// - `sampling_rate`: fraction of requests to trace (0.0–1.0)
+/// - `service_name_override`: optional override for multi-service processes
+///
+/// # Panics
+/// - This type does not panic during construction or defaulting.
 ///
 /// # Examples
 ///
@@ -253,6 +320,9 @@ impl Default for TracingConfig {
 ///
 /// Determines where traces are sent and how they're formatted.
 ///
+/// # Panics
+/// - This enum is data-only and does not panic.
+///
 /// # Examples
 ///
 /// ```rust
@@ -290,6 +360,16 @@ pub enum TracingBackend {
 /// Logging configuration.
 ///
 /// Configures structured logging for services.
+///
+/// # Fields
+/// - `level`: minimum log level to emit
+/// - `format`: output format (pretty/json/compact)
+/// - `timestamps`: include timestamps in logs
+/// - `source_location`: include file:line for logs
+/// - `fields`: static fields to attach to all logs
+///
+/// # Panics
+/// - This type does not panic during construction or defaulting.
 ///
 /// # Examples
 ///
@@ -361,6 +441,9 @@ impl Default for LoggingConfig {
 ///
 /// Minimum log level to output. Messages below this level are filtered.
 ///
+/// # Panics
+/// - This enum is data-only and does not panic.
+///
 /// # Examples
 ///
 /// ```rust
@@ -401,6 +484,9 @@ pub enum LogLevel {
 ///
 /// How log messages are formatted for output.
 ///
+/// # Panics
+/// - This enum is data-only and does not panic.
+///
 /// # Examples
 ///
 /// ```rust
@@ -430,6 +516,15 @@ pub enum LogFormat {
 /// Health monitoring configuration.
 ///
 /// Configures health checks and readiness probes.
+///
+/// # Fields
+/// - `check_interval_seconds`: cadence for health checks
+/// - `check_timeout_seconds`: per-check timeout
+/// - `failure_threshold`: consecutive failures before unhealthy
+/// - `initial_healthy`: start healthy or unhealthy at boot
+///
+/// # Panics
+/// - This type does not panic during construction or defaulting.
 ///
 /// # Examples
 ///

@@ -1,21 +1,16 @@
-//! Commons persistence module (Sprint 1 scaffolding)
+//! Persistence primitives and drivers.
 //!
-//! Provides minimal, transport-agnostic building blocks for persistence:
-//! - `Context`: lightweight trace carrier + optional monotonic deadline
-//! - `PersistenceError`: canonical error taxonomy
-//! - `DbAttributes`: structured attributes for DB spans
-//! - `with_db_span`: helper to wrap an async op with standardized tracing
-//! - `PersistenceDriver`: tiny trait for health readiness integration
+//! Provides transport-agnostic building blocks for DB access:
+//! - `Context`: trace headers + optional monotonic deadline
+//! - `PersistenceError`: canonical error taxonomy (Unavailable/Timeout/etc.)
+//! - `DbAttributes`: standardized span attributes for DB operations
+//! - `with_db_span`: wrapper to run an async op with tracing + timeout enforcement
+//! - `PersistenceDriver`: trait for health/readiness integration (cached and strict)
+//! - Drivers: `InMemoryDriver`, `SqliteDriver`, `PostgresDriver` (feature-gated)
 //!
-//! This is design scaffolding for Phase 2.1 Sprint 1. Implementations
-//! (memory/sqlite/postgres/migrations) land in later sprints.
-//!
-//! See also: `docs/PERSISTENCE_SQLITE.md` for `SQLite` defaults, readiness, and schema versioning.
-//!
-//! Doctest (shape only):
-//! ```
+//! # Quick Start
+//! ```rust
 //! use commons::util::persistence::{Context, DbAttributes, PersistenceError, with_db_span};
-//!
 //! # async fn example(ctx: &Context) -> Result<(), PersistenceError> {
 //! let attrs = DbAttributes {
 //!     driver: Some("sqlite".to_string()),
@@ -23,11 +18,18 @@
 //!     entity: Some("system".to_string()),
 //!     statement: Some("select 1".to_string()),
 //! };
-//!
-//! let _res: Result<(), PersistenceError> = with_db_span(ctx, &attrs, async { Ok::<_, PersistenceError>(()) }).await;
+//! let res: Result<(), PersistenceError> = with_db_span(ctx, &attrs, async { Ok::<_, PersistenceError>(()) }).await;
+//! assert!(res.is_ok());
 //! Ok(())
 //! # }
 //! ```
+//!
+//! # Notes
+//! - Use `Context::with_deadline_from_now` to enforce per-op timeouts.
+//! - Obfuscate statements via `obfuscate_statement` to avoid leaking PII.
+//! - Prefer `health_now()` for strict readiness; `health()` is cached.
+//!
+//! See also: `docs/PERSISTENCE_SQLITE.md` for `SQLite` defaults, readiness, and schema versioning.
 
 mod context;
 mod error;
@@ -58,10 +60,48 @@ pub use traits::{PersistenceDriver, PersistenceHealth};
 
 use crate::util::config::persistance::{PersistenceBackend, PersistenceConfig};
 
-/// Create a configured persistence driver instance.
+/// Create a persistence driver from `PersistenceConfig`.
 ///
-/// Returns a boxed `PersistenceDriver` that matches the provided config.
-/// For `SQLite` this will construct a `SqliteDriver` (feature-gated).
+/// Picks the concrete backend based on `cfg.backend`, initializes it using
+/// the provided settings (URL/DSN, pool sizes, timeouts, etc.), and returns a
+/// boxed [`PersistenceDriver`].
+///
+/// Supported backends:
+/// - `Memory` (always available): in‑process, ephemeral store for tests/dev.
+/// - `SQLite` (requires `persistence` feature): file or `:memory:` via `SqliteDriver`.
+/// - `Postgres` (requires `persistence-postgres` feature): DSN‑based via `PostgresDriver`.
+///
+/// Returns
+/// - `Ok(Box<dyn PersistenceDriver>)` when the requested backend is available and
+///   successfully initialized.
+/// - `Err(_)` if the backend is not compiled into this build or initialization fails
+///   (e.g., invalid URL, connection refused, misconfiguration).
+///
+/// Panics
+/// - This function does not panic.
+///
+/// Examples
+/// Create an in‑memory driver for tests or local experiments:
+/// ```no_run
+/// use commons::util::persistence::{make_driver, PersistenceDriver, PersistenceHealth};
+/// use commons::util::config::persistance::{PersistenceConfig, PersistenceBackend};
+///
+/// // Start from defaults and switch to an in‑memory backend
+/// let mut cfg = PersistenceConfig::default();
+/// cfg.backend = PersistenceBackend::Memory;
+///
+/// // Create the driver on a Tokio runtime
+/// let rt = tokio::runtime::Runtime::new().unwrap();
+/// let driver = rt.block_on(make_driver(&cfg)).expect("driver created");
+///
+/// // Strict (per‑request) health check
+/// let h = rt.block_on(driver.health_now());
+/// assert!(h.ready);
+/// ```
+///
+/// Notes
+/// - For `SQLite`/`Postgres`, set `database_url` and pool limits in `PersistenceConfig`.
+/// - In production, consider running migrations out‑of‑band (`run_migrations = false`).
 pub async fn make_driver(
     cfg: &PersistenceConfig,
 ) -> Result<Box<dyn PersistenceDriver>, Box<dyn std::error::Error>> {

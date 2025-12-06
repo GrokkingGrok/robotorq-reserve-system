@@ -1,8 +1,37 @@
-//! Initialization helper wrapping `robotorq_service::initialize`.
+//! Initialization helpers for `robotorq_service` implementations.
 //!
-//! Intended for use in service lifecycle orchestration where a concrete
-//! `robotorq_service` must be initialized with a `RoboTorqConfig` before
-//! becoming ready.
+//! Overview
+//! - `initialize_service`: Calls a service's `initialize` hook and surfaces `ServiceError`.
+//! - `load_and_initialize_service`: Loads `RoboTorqConfig`, wires persistence, then initializes.
+//!
+//! Use these helpers in your service's startup sequence to centralize common
+//! bootstrapping steps (config load, optional persistence driver creation,
+//! and service initialization), keeping binaries thin and consistent.
+//!
+//! Quick Start
+//! ```no_run
+//! use commons::services::robotorq_service::{initialize_service, load_and_initialize_service, RoboTorqService};
+//! use commons::util::error::ServiceError;
+//!
+//! struct MySvc;
+//! impl commons::services::robotorq_service::ServiceLifecycle for MySvc {}
+//! impl commons::services::robotorq_service::HealthContributor for MySvc { fn health_status(&self) -> String { "OK".into() } }
+//! impl commons::services::robotorq_service::MetricsContributor for MySvc {}
+//! impl commons::services::robotorq_service::RoboTorqService for MySvc {
+//!     fn export_metrics(&self) -> String { String::new() }
+//!     fn health_check(&self) -> Result<String, ServiceError> { Ok("OK".into()) }
+//!     async fn initialize(&mut self, _cfg: &commons::util::config::RoboTorqConfig) -> Result<(), ServiceError> { Ok(()) }
+//!     async fn start(&self) -> Result<(), ServiceError> { Ok(()) }
+//!     async fn stop(&self) -> Result<(), ServiceError> { Ok(()) }
+//!     async fn shutdown(&self) -> Result<(), ServiceError> { Ok(()) }
+//! }
+//! # async fn demo() -> Result<(), ServiceError> {
+//! let mut svc = MySvc;
+//! // Load config, wire persistence (best effort), then initialize
+//! let _cfg = load_and_initialize_service(&mut svc).await?;
+//! // Or, if you already have a config: initialize_service(&mut svc, &cfg).await?;
+//! # Ok(()) }
+//! ```
 use crate::services::robotorq_service::RoboTorqService;
 use crate::util::config::RoboTorqConfig;
 use crate::util::config::load_robotorq_config;
@@ -17,17 +46,15 @@ use tracing::info;
 /// service implementation.
 ///
 /// # Arguments
-/// - `svc`: Mutable reference to the service implementing `robotorq_service`.
-/// - `cfg`: Immutable reference to `RoboTorqConfig` used during init.
+/// - `svc`: Mutable service implementing `RoboTorqService`.
+/// - `cfg`: Immutable `RoboTorqConfig` applied during initialization.
 ///
 /// # Returns
-/// - `Ok(())` when initialization completes successfully.
-/// - `Err(ServiceError)` if the service reports a failure.
+/// - `Ok(())` when the service initializes successfully.
+/// - `Err(ServiceError)` when the service reports an initialization failure.
 ///
 /// # Errors
-///
-/// Returns `ServiceError` if the underlying service's `initialize` method fails.
-/// The specific error depends on the service implementation.
+/// - Returns `ServiceError` from the service’s `initialize` implementation.
 ///
 /// # Panics
 /// - Not expected to panic.
@@ -62,9 +89,48 @@ pub async fn initialize_service<S: RoboTorqService>(
     }
 }
 
-/// Load `RoboTorqConfig` and initialize a service.
+/// Load `RoboTorqConfig`, wire persistence, and initialize a service.
 ///
-/// Centralizes config loading inside commons to keep callers clean.
+/// Centralizes config loading and best-effort persistence driver creation
+/// inside commons to keep service binaries lean. If driver creation fails,
+/// the service is initialized without persistence and a warning is logged.
+///
+/// # Arguments
+/// - `svc`: Mutable service implementing `RoboTorqService`.
+///
+/// # Returns
+/// - `Ok(RoboTorqConfig)` on success (also indicates initialization succeeded).
+/// - `Err(ServiceError)` if config loading or initialization fails.
+///
+/// # Errors
+/// - Returns `ServiceError` if config load fails or the service’s `initialize` fails.
+///
+/// # Panics
+/// - Not expected to panic.
+///
+/// # Examples
+/// ```no_run
+/// use commons::services::robotorq_service::{load_and_initialize_service, RoboTorqService};
+/// use commons::util::error::ServiceError;
+///
+/// struct MySvc; 
+/// impl commons::services::robotorq_service::ServiceLifecycle for MySvc {}
+/// impl commons::services::robotorq_service::HealthContributor for MySvc { fn health_status(&self) -> String { "OK".into() } }
+/// impl commons::services::robotorq_service::MetricsContributor for MySvc {}
+/// impl RoboTorqService for MySvc {
+///     fn export_metrics(&self) -> String { String::new() }
+///     fn health_check(&self) -> Result<String, ServiceError> { Ok("OK".into()) }
+///     async fn initialize(&mut self, _cfg: &commons::util::config::RoboTorqConfig) -> Result<(), ServiceError> { Ok(()) }
+///     async fn start(&self) -> Result<(), ServiceError> { Ok(()) }
+///     async fn stop(&self) -> Result<(), ServiceError> { Ok(()) }
+///     async fn shutdown(&self) -> Result<(), ServiceError> { Ok(()) }
+/// }
+/// # async fn demo() -> Result<(), ServiceError> {
+/// let mut svc = MySvc;
+/// let cfg = load_and_initialize_service(&mut svc).await?;
+/// assert!(cfg.http.port > 0);
+/// # Ok(()) }
+/// ```
 pub async fn load_and_initialize_service<S: RoboTorqService>(
     svc: &mut S,
 ) -> Result<RoboTorqConfig, ServiceError> {

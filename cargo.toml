@@ -1,8 +1,7 @@
 [workspace]
 members = [
 	"crates/commons",
-	"crates/examples",
-	"crates/cargo-robotorq-migrate"
+	"crates/examples"
 ]
 resolver = "2"
 

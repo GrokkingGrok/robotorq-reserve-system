@@ -1,4 +1,30 @@
-//! HTTP observability middleware: request counters, durations, in-flight gauge.
+//! HTTP observability middleware: request counters, durations, in‑flight gauge.
+//!
+//! Overview
+//! - Adds standardized HTTP metrics to any Axum service pipeline.
+//! - Captures totals, error totals, in‑flight requests, and request durations.
+//! - Works with any `MetricsRegistry` (Prometheus adapter provided by `commons`).
+//!
+//! Metrics and labels
+//! - `http_requests_total{service,component,version,method,status,path}`
+//! - `http_errors_total{service,component,version,method,status_class,path}`
+//! - `http_inflight_requests{service,component,version}` (gauge)
+//! - `http_request_duration_seconds{service,component,version,method,status,path}`
+//!
+//! Quick Start
+//! ```no_run
+//! use std::sync::Arc;
+//! use axum::{routing::get, Router};
+//! use commons::util::metrics::PrometheusRegistry;
+//! use commons::services::robotorq_service::middleware::HttpMetricsLayer;
+//!
+//! let registry = Arc::new(PrometheusRegistry::new("svc", "gateway", "v1"));
+//! let layer = HttpMetricsLayer::new(registry);
+//! let app: Router<()> = Router::new()
+//!     .route("/health", get(|| async { "ok" }))
+//!     .layer(layer);
+//! // axum::serve(listener, app).await?;
+//! ```
 use crate::util::metrics::{LabeledCounter, LabeledHistogram, MetricGauge, MetricsRegistry};
 use axum::extract::MatchedPath;
 use axum::http::Request;
@@ -21,18 +47,18 @@ use opentelemetry::trace::TraceContextExt;
 /// using a provided `MetricsRegistry` implementation.
 ///
 /// # Examples
-///
-/// ```rust,ignore
+/// ```no_run
 /// use std::sync::Arc;
-/// use axum::{Router, routing::get};
+/// use axum::{routing::get, Router};
 /// use commons::util::metrics::PrometheusRegistry;
 /// use commons::services::robotorq_service::middleware::HttpMetricsLayer;
 ///
 /// let registry = Arc::new(PrometheusRegistry::new("svc","component","v1"));
 /// let layer = HttpMetricsLayer::new(registry);
-/// let app = Router::new()
+/// let app: Router<()> = Router::new()
 ///     .route("/health", get(|| async { "ok" }))
 ///     .layer(layer);
+/// # let _ = app;
 /// ```
 #[derive(Clone)]
 pub struct HttpMetricsLayer {
@@ -82,6 +108,17 @@ impl HttpMetricsLayer {
     ///
     /// # Returns
     /// A new `HttpMetricsLayer` that can be applied to an Axum `Router` or `Service`.
+    ///
+    /// # Panics
+    /// - This constructor does not panic.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use commons::util::metrics::PrometheusRegistry;
+    /// use commons::services::robotorq_service::middleware::HttpMetricsLayer;
+    /// let layer = HttpMetricsLayer::new(Arc::new(PrometheusRegistry::new("svc","comp","v1")));
+    /// ```
     pub fn new(registry: Arc<dyn MetricsRegistry>) -> Self {
         Self { registry }
     }
