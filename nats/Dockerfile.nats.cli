@@ -3,7 +3,9 @@ FROM nats:2.10.20-alpine AS base
 
 # Use Go 1.24 to build CLI
 FROM golang:1.24-alpine AS builder
-RUN go install github.com/nats-io/natscli/nats@latest
+# Pin below the v0.4+ line: those releases need Go 1.25+, and v0.5.0 needs Go 1.26.
+# This image is golang:1.24 with GOTOOLCHAIN=local, so @latest no longer builds.
+RUN go install github.com/nats-io/natscli/nats@v0.3.1
 
 # Copy CLI into base image
 FROM base
