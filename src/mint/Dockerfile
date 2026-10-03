@@ -7,6 +7,8 @@ WORKDIR /app
 
 # Install liboqs for Falcon-1024 + SPHINCS+ signature verification (Phase 5)
 # Compile from source with minimal algorithms (faster build)
+# 0.15.0 is the last release that includes SPHINCS+-SHA2-128f-simple.
+# liboqs 0.16.0 removed SPHINCS+, and cloning main breaks Mint startup.
 RUN apk add --no-cache \
     git \
     cmake \
@@ -15,7 +17,7 @@ RUN apk add --no-cache \
     pkgconfig \
     openssl-dev \
     linux-headers \
-    && git clone --branch main --depth 1 https://github.com/open-quantum-safe/liboqs.git /tmp/liboqs \
+    && git clone --branch 0.15.0 --depth 1 https://github.com/open-quantum-safe/liboqs.git /tmp/liboqs \
     && cd /tmp/liboqs \
     && mkdir build && cd build \
     && cmake -GNinja \

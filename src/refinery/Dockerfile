@@ -15,7 +15,7 @@ RUN apk add --no-cache \
     pkgconfig \
     openssl-dev \
     linux-headers \
-    && git clone --branch main --depth 1 https://github.com/open-quantum-safe/liboqs.git /tmp/liboqs \
+    && git clone --branch 0.15.0 --depth 1 https://github.com/open-quantum-safe/liboqs.git /tmp/liboqs \
     && cd /tmp/liboqs \
     && mkdir build && cd build \
     && cmake -GNinja \
