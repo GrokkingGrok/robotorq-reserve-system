@@ -7,6 +7,7 @@ WORKDIR /app
 
 # Install liboqs for Falcon-1024 signature verification (Phase 5)
 # Compile from source with minimal algorithms (Falcon-1024 only = faster build)
+# Pin 0.15.0 so the Kyber/Falcon minimal-build ids in this Dockerfile stay valid.
 RUN apk add --no-cache \
     git \
     cmake \
